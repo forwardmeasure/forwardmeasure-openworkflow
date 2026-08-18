@@ -1,0 +1,34 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+releases:
+{{- range $framework := list "quarkus" "spring" "micronaut" }}
+  - name: openworkflow-studio-{{ $framework }}
+    namespace: {{ $.Values.openworkflowNamespace }}
+    chart: ../releases/openworkflow-studio
+    values:
+      - framework: {{ $framework }}
+        image:
+          repository: forwardmeasure/openworkflow-studio-{{ $framework }}
+          tag: {{ $.Values.studioVersion | quote }}
+          pullPolicy: {{ $.Values.imagePullPolicy }}
+        apiUpstream: http://openworkflow-definition-{{ $framework }}:8080
+        environmentName: Kind acceptance
+        replicas: {{ dig "replicas" "studio" 1 $.Values }}
+        networkPolicy:
+          enabled: {{ dig "hardening" "networkPolicyEnabled" false $.Values }}
+          {{- with (dig "networkPolicy" "externalEgressCidr" "" $.Values) }}
+          extraEgress:
+            - to: [{ipBlock: {cidr: {{ . | quote }}}}]
+          {{- end }}
+        telemetry:
+          otlpEndpoint: {{ dig "telemetry" "otlpEndpoint" "" $.Values | quote }}
+          injectJava: {{ dig "telemetry" "injectJava" false $.Values }}
+        ingress:
+          enabled: {{ $.Values.ingressEnabled }}
+          className: nginx
+          host: openworkflow-{{ $framework }}.local
+    labels:
+      checkpoint: K4
+      framework: {{ $framework }}
+{{- end }}

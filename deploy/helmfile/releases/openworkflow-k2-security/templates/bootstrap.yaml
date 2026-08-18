@@ -1,0 +1,133 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openworkflow-k2-security
+data:
+  bootstrap.sh: |
+    #!/bin/sh
+    set -eu
+    apk add --no-cache curl jq >/dev/null
+    base={{ .Values.keycloak.url }}
+    realm={{ .Values.keycloak.realm }}
+    client={{ .Values.keycloak.clientUuid }}
+    client_id={{ .Values.keycloak.clientId }}
+    tenant={{ .Values.keycloak.tenantAlias }}
+    test_password={{ .Values.keycloak.testPassword }}
+    token=$(curl -fsS -X POST "$base/realms/master/protocol/openid-connect/token" -d client_id=admin-cli -d "username=$ADMIN_USERNAME" -d "password=$ADMIN_PASSWORD" -d grant_type=password | jq -r .access_token)
+    auth="Authorization: Bearer $token"
+    json="Content-Type: application/json"
+    get() { curl -fsS -H "$auth" "$base/admin/realms/$realm/$1"; }
+    post() { curl -sS -o /tmp/response -w '%{http_code}' -X POST -H "$auth" -H "$json" "$base/admin/realms/$realm/$1" --data "$2"; }
+    put() { curl -fsS -o /dev/null -X PUT -H "$auth" -H "$json" "$base/admin/realms/$realm/$1" --data "${2:-}"; }
+    organization=$(get organizations | jq -r '.[]|select(.alias=="'"$tenant"'")|.id')
+    scopes=$(get "clients/$client/authz/resource-server/scope")
+    resources=$(get "clients/$client/authz/resource-server/resource")
+    settings=$(get "clients/$client/authz/resource-server/settings" | jq '.decisionStrategy="AFFIRMATIVE"')
+    put "clients/$client/authz/resource-server" "$settings"
+    operation_scope=$(printf '%s' "$scopes" | jq -r '.[]|select(.name=="operation:execute")|.id')
+    if [ -z "$operation_scope" ]; then
+      code=$(post "clients/$client/authz/resource-server/scope" '{"name":"operation:execute"}')
+      [ "$code" = 201 ] || [ "$code" = 409 ]
+      scopes=$(get "clients/$client/authz/resource-server/scope")
+      operation_scope=$(printf '%s' "$scopes" | jq -r '.[]|select(.name=="operation:execute")|.id')
+    fi
+    operation_resource=$(printf '%s' "$resources" | jq -r '.[]|select(.name=="operations")|._id')
+    if [ -z "$operation_resource" ]; then
+      code=$(post "clients/$client/authz/resource-server/resource" '{"name":"operations","type":"openworkflow-operation","scopes":[{"id":"'"$operation_scope"'","name":"operation:execute"}]}')
+      if [ "$code" != 201 ] && [ "$code" != 409 ]; then cat /tmp/response >&2; exit 1; fi
+      resources=$(get "clients/$client/authz/resource-server/resource")
+    fi
+    client_scope=$(get client-scopes | jq -r '.[]|select(.name=="organization")|.id')
+    mapper=$(get "client-scopes/$client_scope/protocol-mappers/models" | jq -r '.[]|select(.protocolMapper=="oidc-organization-membership-mapper")|.id')
+    put "client-scopes/$client_scope/protocol-mappers/models/$mapper" '{"id":"'"$mapper"'","name":"organization","protocol":"openid-connect","protocolMapper":"oidc-organization-membership-mapper","consentRequired":false,"config":{"id.token.claim":"true","introspection.token.claim":"true","access.token.claim":"true","claim.name":"organization","jsonType.label":"JSON","multivalued":"true","addOrganizationAttributes":"true","addOrganizationId":"true"}}'
+    code=$(post "client-scopes/$client_scope/protocol-mappers/models" '{"name":"organization-group-membership","protocol":"openid-connect","protocolMapper":"oidc-organization-group-membership-mapper","consentRequired":false,"config":{"id.token.claim":"true","introspection.token.claim":"true","access.token.claim":"true","claim.name":"organization","addGroupRoleMappings":"true"}}')
+    [ "$code" = 201 ] || [ "$code" = 409 ]
+    configure_identity() {
+      username=$1
+      role=$2
+      code=$(post "clients/$client/roles" '{"name":"'"$role"'"}')
+      [ "$code" = 201 ] || [ "$code" = 409 ]
+      user=$(get "users?username=$username&exact=true" | jq -r '.[0].id // empty')
+      if [ -z "$user" ]; then
+        code=$(post users '{"username":"'"$username"'","firstName":"K2","lastName":"Acceptance","email":"'"$username"'@example.test","emailVerified":true,"enabled":true,"credentials":[{"type":"password","value":"'"$test_password"'","temporary":false}]}')
+        [ "$code" = 201 ]
+        user=$(get "users?username=$username&exact=true" | jq -r '.[0].id')
+      fi
+      code=$(post "organizations/$organization/members" "$user")
+      [ "$code" = 201 ] || [ "$code" = 409 ]
+      group=$(get "organizations/$organization/groups?search=$role&exact=true" | jq -r '.[]|select(.name=="'"$role"'")|.id' | head -1)
+      if [ -z "$group" ]; then
+        code=$(post "organizations/$organization/groups" '{"name":"'"$role"'"}')
+        [ "$code" = 201 ]
+        group=$(get "organizations/$organization/groups?search=$role&exact=true" | jq -r '.[]|select(.name=="'"$role"'")|.id' | head -1)
+      fi
+      role_json=$(get "clients/$client/roles/$role")
+      code=$(post "organizations/$organization/groups/$group/role-mappings/clients/$client" "[$role_json]")
+      [ "$code" = 204 ] || [ "$code" = 409 ]
+      code=$(curl -sS -o /tmp/response -w '%{http_code}' -X PUT -H "$auth" "$base/admin/realms/$realm/organizations/$organization/groups/$group/members/$user")
+      [ "$code" = 204 ] || [ "$code" = 409 ]
+      code=$(post "clients/$client/authz/resource-server/policy/regex" '{"name":"organization-'"$role"'","type":"regex","logic":"POSITIVE","decisionStrategy":"UNANIMOUS","targetClaim":"organization_roles","pattern":".*'"$role"'.*","targetContextAttributes":false}')
+      if [ "$code" != 201 ] && [ "$code" != 409 ]; then cat /tmp/response >&2; exit 1; fi
+      [ "$code" = 201 ] || [ "$code" = 409 ]
+    }
+    grant() {
+      role=$1
+      scope_name=$2
+      resource_name=$3
+      policy=$(get "clients/$client/authz/resource-server/policy?name=organization-$role" | jq -r '.[0].id')
+      scope=$(printf '%s' "$scopes" | jq -r '.[]|select(.name=="'"$scope_name"'")|.id')
+      resource=$(printf '%s' "$resources" | jq -r '.[]|select(.name=="'"$resource_name"'")|._id')
+      code=$(post "clients/$client/authz/resource-server/permission/scope" '{"name":"organization-'"$role-$scope_name"'","type":"scope","logic":"POSITIVE","decisionStrategy":"UNANIMOUS","resources":["'"$resource"'"],"scopes":["'"$scope"'"],"policies":["'"$policy"'"]}')
+      if [ "$code" != 201 ] && [ "$code" != 409 ]; then cat /tmp/response >&2; exit 1; fi
+      [ "$code" = 201 ] || [ "$code" = 409 ]
+    }
+    configure_identity author workflow-author
+    configure_identity approver workflow-approver
+    configure_identity publisher workflow-publisher
+    configure_identity controller workflow-execution-controller
+    for scope in definition:create definition:read definition:list definition:update definition:delete definition:validate definition:submit definition:withdraw; do grant workflow-author "$scope" definitions; done
+    for scope in definition:read definition:list definition:validate definition:approve definition:reject; do grant workflow-approver "$scope" definitions; done
+    for scope in definition:read definition:list definition:publish definition:deprecate; do grant workflow-publisher "$scope" definitions; done
+    for scope in execution:start execution:read execution:list execution:pause execution:resume execution:cancel; do grant workflow-execution-controller "$scope" executions; done
+    grant workflow-execution-controller operation:execute operations
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: openworkflow-k2-security
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 5
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: bootstrap
+          image: alpine:3.22
+          command: ["sh", "/bootstrap/bootstrap.sh"]
+          env:
+            - {name: ADMIN_USERNAME, valueFrom: {secretKeyRef: {name: {{ .Values.credentialsSecretName }}, key: KC_BOOTSTRAP_ADMIN_USERNAME}}}
+            - {name: ADMIN_PASSWORD, valueFrom: {secretKeyRef: {name: {{ .Values.credentialsSecretName }}, key: KC_BOOTSTRAP_ADMIN_PASSWORD}}}
+          volumeMounts:
+            - {name: bootstrap, mountPath: /bootstrap}
+      volumes:
+        - name: bootstrap
+          configMap: {name: openworkflow-k2-security, defaultMode: 0555}

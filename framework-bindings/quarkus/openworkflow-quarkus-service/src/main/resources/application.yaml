@@ -1,0 +1,79 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with the License. You may obtain a
+# copy of the License at https://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+# law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+# BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+# for the specific language governing permissions and limitations under the License.
+quarkus:
+  application:
+    name: openworkflow-quarkus-service
+  arc:
+    exclude-types: com.forwardmeasure.jpa.quarkus.QuarkusTenantResolver
+  http:
+    host: 0.0.0.0
+  datasource:
+    db-kind: postgresql
+    jdbc:
+      url: ${OPENWORKFLOW_DATABASE_URL:jdbc:postgresql://localhost:5432/openworkflow}
+    username: ${OPENWORKFLOW_DATABASE_USERNAME:openworkflow}
+    password: ${OPENWORKFLOW_DATABASE_PASSWORD:openworkflow}
+  oidc:
+    auth-server-url: ${OPENWORKFLOW_KEYCLOAK_ISSUER:http://localhost:8080/realms/openworkflow}
+    application-type: service
+  hibernate-orm:
+    multitenant: SCHEMA
+    packages: com.forwardmeasure.jpa.identity.entity,com.forwardmeasure.openworkflow.definition.persistence
+    schema-management:
+      strategy: none
+openworkflow:
+  engine:
+    profile: ${OPENWORKFLOW_ENGINE_PROFILE:pekko}
+  kafka:
+    bootstrap-servers: ${OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    application-id: ${OPENWORKFLOW_KAFKA_APPLICATION_ID:openworkflow-kafka}
+    instance-id: ${OPENWORKFLOW_KAFKA_INSTANCE_ID:${HOSTNAME:local}}
+    topic-prefix: ${OPENWORKFLOW_KAFKA_TOPIC_PREFIX:openworkflow}
+    state-dir: ${OPENWORKFLOW_KAFKA_STATE_DIR:/tmp/openworkflow-kafka}
+  adapters:
+    consumer-group: ${OPENWORKFLOW_ADAPTER_CONSUMER_GROUP:openworkflow-kafka-operations}
+    secret-directory: ${OPENWORKFLOW_ADAPTER_SECRET_DIRECTORY:/var/run/secrets/openworkflow}
+    http-egress-allowlist: ${OPENWORKFLOW_ADAPTER_HTTP_EGRESS_ALLOWLIST:}
+  persistence:
+    profile: ${OPENWORKFLOW_PERSISTENCE_PROFILE:postgresql}
+    endpoint: ${OPENWORKFLOW_PERSISTENCE_ENDPOINT:${OPENWORKFLOW_DATABASE_URL:jdbc:postgresql://localhost:5432/openworkflow}}
+    username: ${OPENWORKFLOW_PERSISTENCE_USERNAME:${OPENWORKFLOW_DATABASE_USERNAME:openworkflow}}
+    password: ${OPENWORKFLOW_PERSISTENCE_PASSWORD:${OPENWORKFLOW_DATABASE_PASSWORD:openworkflow}}
+    local-datacenter: ${OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER:datacenter1}
+  cluster:
+    system-name: openworkflow-pekko
+    discovery-service: ${OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE:}
+    pod-ip: ${OPENWORKFLOW_POD_IP:}
+    artery-port: 25520
+    management-port: 8558
+    required-contact-points: ${OPENWORKFLOW_CLUSTER_REQUIRED_CONTACT_POINTS:1}
+    role: ${OPENWORKFLOW_CLUSTER_ROLE:operation-adapter}
+  operations:
+    http:
+      timeout-ms: ${OPENWORKFLOW_OPERATION_HTTP_TIMEOUT_MS:30000}
+    protocol:
+      timeout-ms: ${OPENWORKFLOW_OPERATION_PROTOCOL_TIMEOUT_MS:30000}
+    mcp-command-allowlist: ${OPENWORKFLOW_MCP_COMMAND_ALLOWLIST:}
+    run:
+      command-allowlist: ${OPENWORKFLOW_RUN_COMMAND_ALLOWLIST:}
+      interpreter-allowlist: ${OPENWORKFLOW_RUN_INTERPRETER_ALLOWLIST:}
+      image-allowlist: ${OPENWORKFLOW_RUN_IMAGE_ALLOWLIST:}
+      volume-allowlist: ${OPENWORKFLOW_RUN_VOLUME_ALLOWLIST:}
+      port-allowlist: ${OPENWORKFLOW_RUN_PORT_ALLOWLIST:}
+      oci-runtime: ${OPENWORKFLOW_RUN_OCI_RUNTIME:podman}
+  pekko:
+    ask-timeout-ms: 10000
+  authorization:
+    issuer: ${OPENWORKFLOW_KEYCLOAK_ISSUER:http://localhost:8080/realms/openworkflow}
+    client-id: forwardmeasure-openworkflow
+    client-secret: ${OPENWORKFLOW_CLIENT_SECRET}
+    request-timeout: 5S
+    decision-ttl: 5S
+    maximum-cache-entries: 10000
+    policy-version: v1

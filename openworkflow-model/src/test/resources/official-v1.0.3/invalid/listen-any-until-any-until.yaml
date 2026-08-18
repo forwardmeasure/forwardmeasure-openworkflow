@@ -1,0 +1,15 @@
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: listen-to-any
+  version: '0.1.0'
+do:
+do:
+  - callDoctor:
+      listen:
+        to:
+          any: []
+          until:
+            any: []
+            until: ${ ($context.events | length) == 3 }
+

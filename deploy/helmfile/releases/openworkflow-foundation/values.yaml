@@ -1,0 +1,62 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+namespace: forwardmeasure-openworkflow
+imagePullPolicy: IfNotPresent
+versions:
+  keycloak: "26.7.1"
+  postgres: "18.0"
+  cassandra: "5.0"
+  redpanda: "v25.1.9"
+  tenantProvisioning: "1.0.0-SNAPSHOT"
+  migrations: "1.0.0-SNAPSHOT"
+keycloak:
+  enabled: true
+  realm: openworkflow
+  sharedClientUuid: 00000000-0000-0000-0000-000000000001
+  adminUsername: admin
+  adminPassword: openworkflow-k1-admin
+  clientSecret: openworkflow-k1-client
+database:
+  name: openworkflow
+  username: openworkflow
+  password: openworkflow-k1-database
+  url: jdbc:postgresql://postgresql:5432/openworkflow
+postgresql:
+  enabled: true
+cassandra:
+  enabled: true
+redpanda:
+  enabled: true
+secrets:
+  create: true
+  name: openworkflow-foundation
+jobs:
+  tenantReconciliation:
+    enabled: true
+    keycloakUrl: http://keycloak:8080
+  migrations:
+    enabled: true
+capabilityPacks:
+  - openworkflow
+tenants:
+  - id: 11111111-1111-1111-1111-111111111111
+    alias: tenant-a
+    displayName: Tenant A
+  - id: 22222222-2222-2222-2222-222222222222
+    alias: tenant-b
+    displayName: Tenant B

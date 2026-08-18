@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements. See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License. You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.forwardmeasure.openworkflow</groupId>
+        <artifactId>forwardmeasure-openworkflow-parent</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>openworkflow-bom</artifactId>
+    <packaging>pom</packaging>
+    <name>ForwardMeasure OpenWorkflow BOM</name>
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>com.forwardmeasure.jpa</groupId>
+                <artifactId>forwardmeasure-jpa-bom</artifactId>
+                <version>${forwardmeasure.jpa.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-authorization-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-authorization-authzen</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-authorization-testkit</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-tenant-provisioning</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-migrations</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-application</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-jpa</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-models</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-client-apachehttp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-server-jaxrs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-jaxrs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-client-typescript</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-client-python</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-model</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-expression-jq</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-contract-tests</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-application</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-jpa</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-models</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-apachehttp</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-server-jaxrs</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-jaxrs</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-typescript</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-python</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-query-api</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-query-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-query-jpa</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-api</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-postgresql</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-cassandra</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-agent-protocols</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-amqp</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-cloud</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-jms</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-kafka</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-mqtt</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-nats</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-pulsar</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-redis</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-stomp</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-grpc</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-http</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-kafka</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-runner</artifactId><version>${project.version}</version></dependency>
+        </dependencies>
+    </dependencyManagement>
+</project>

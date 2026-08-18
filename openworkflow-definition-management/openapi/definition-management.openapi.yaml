@@ -1,0 +1,213 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with the License. You may obtain a
+# copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software distributed under the License
+# is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
+# or implied. See the License for the specific language governing permissions and limitations under
+# the License.
+openapi: 3.1.0
+info:
+  title: ForwardMeasure OpenWorkflow Definition Management API
+  version: 1.0.0
+  description: Governed, tenant-scoped Open Workflow 1.0.3 definition lifecycle.
+security:
+  - bearerAuth: []
+paths:
+  /v1/workflow-definitions:
+    get:
+      tags: [Definitions]
+      operationId: listDefinitions
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Tenant-scoped definitions and revisions
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DefinitionList'}
+    post:
+      tags: [Definitions]
+      operationId: createDefinition
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DefinitionWrite'}
+      responses:
+        '201':
+          description: Draft revision created
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DefinitionRevision'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/InvalidDefinition'}
+  /v1/workflow-definitions/validation:
+    post:
+      tags: [Definitions]
+      operationId: validateDefinition
+      parameters:
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/DefinitionValidationRequest'}
+      responses:
+        '200':
+          description: Valid immutable digest binding
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DefinitionValidation'}
+        '422': {$ref: '#/components/responses/InvalidDefinition'}
+  /v1/workflow-definitions/{definitionKey}/revisions:
+    post:
+      tags: [Definitions]
+      operationId: reviseDefinition
+      parameters:
+        - $ref: '#/components/parameters/DefinitionKey'
+        - $ref: '#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/RevisionWrite'}
+      responses:
+        '201':
+          description: New immutable draft revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DefinitionRevision'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/InvalidDefinition'}
+  /v1/workflow-definitions/{definitionKey}/revisions/{revisionNumber}:
+    get:
+      tags: [Definitions]
+      operationId: retrieveDefinition
+      parameters:
+        - $ref: '#/components/parameters/DefinitionKey'
+        - $ref: '#/components/parameters/RevisionNumber'
+        - $ref: '#/components/parameters/CorrelationId'
+      responses:
+        '200':
+          description: Exact immutable revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DefinitionRevision'}
+        '404': {$ref: '#/components/responses/NotFound'}
+  /v1/workflow-definitions/{definitionKey}/revisions/{revisionNumber}/{action}:
+    post:
+      tags: [Definitions]
+      operationId: transitionDefinition
+      parameters:
+        - $ref: '#/components/parameters/DefinitionKey'
+        - $ref: '#/components/parameters/RevisionNumber'
+        - $ref: '#/components/parameters/CorrelationId'
+        - name: action
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/LifecycleAction'
+      responses:
+        '200':
+          description: Transitioned revision
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DefinitionRevision'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+components:
+  securitySchemes:
+    bearerAuth: {type: http, scheme: bearer, bearerFormat: JWT}
+  parameters:
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      schema: {type: string, minLength: 1}
+    DefinitionKey:
+      name: definitionKey
+      in: path
+      required: true
+      schema: {type: string, minLength: 1, maxLength: 160}
+    RevisionNumber:
+      name: revisionNumber
+      in: path
+      required: true
+      schema: {type: integer, format: int32, minimum: 1}
+  responses:
+    NotFound: {description: Definition revision not found in the authenticated tenant}
+    Conflict: {description: 'Duplicate definition, invalid transition, or maker-checker violation'}
+    InvalidDefinition: {description: Source failed Open Workflow 1.0.3 validation}
+  schemas:
+    DefinitionWrite:
+      type: object
+      additionalProperties: false
+      required: [definitionKey, displayName, sourceDocument]
+      properties:
+        definitionKey: {type: string, minLength: 1, maxLength: 160}
+        displayName: {type: string, minLength: 1, maxLength: 320}
+        sourceDocument: {type: string, minLength: 1}
+    RevisionWrite:
+      type: object
+      additionalProperties: false
+      required: [displayName, sourceDocument]
+      properties:
+        displayName: {type: string, minLength: 1, maxLength: 320}
+        sourceDocument: {type: string, minLength: 1}
+    DefinitionValidationRequest:
+      type: object
+      additionalProperties: false
+      required: [definitionKey, sourceDocument]
+      properties:
+        definitionKey: {type: string, minLength: 1, maxLength: 160}
+        sourceDocument: {type: string, minLength: 1}
+    DefinitionValidation:
+      type: object
+      additionalProperties: false
+      required: [sourceDigest, resolvedDigest, specificationVersion, compilerProfile]
+      properties:
+        sourceDigest: {$ref: '#/components/schemas/Sha256'}
+        resolvedDigest: {$ref: '#/components/schemas/Sha256'}
+        specificationVersion: {type: string, const: '1.0.3'}
+        compilerProfile: {$ref: '#/components/schemas/Sha256'}
+    DefinitionRevision:
+      type: object
+      additionalProperties: false
+      required: [revisionId, definitionKey, displayName, revisionNumber, lifecycleState, sourceDocument, resolvedDocument, specificationVersion, compilerProfile, sourceDigest, resolvedDigest, authorActorId]
+      properties:
+        revisionId: {type: string, format: uuid}
+        definitionKey: {type: string}
+        displayName: {type: string}
+        revisionNumber: {type: integer, format: int32, minimum: 1}
+        lifecycleState: {$ref: '#/components/schemas/LifecycleState'}
+        sourceDocument: {type: string}
+        resolvedDocument: {type: string}
+        specificationVersion: {type: string, const: '1.0.3'}
+        compilerProfile: {$ref: '#/components/schemas/Sha256'}
+        sourceDigest: {$ref: '#/components/schemas/Sha256'}
+        resolvedDigest: {$ref: '#/components/schemas/Sha256'}
+        authorActorId: {type: string}
+    DefinitionList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/DefinitionRevision'}
+    LifecycleState:
+      type: string
+      enum: [DRAFT, IN_REVIEW, APPROVED, REJECTED, PUBLISHED, DEPRECATED]
+    LifecycleAction:
+      type: string
+      enum: [submit, withdraw, approve, reject, publish, deprecate]
+    Sha256:
+      type: string
+      pattern: '^[0-9a-f]{64}$'

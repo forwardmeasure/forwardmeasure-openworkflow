@@ -1,0 +1,52 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+{{- if .Values.keycloak.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openworkflow-keycloak-realm
+data:
+  openworkflow-realm.json: |
+    {
+      "realm": {{ .Values.keycloak.realm | quote }},
+      "enabled": true,
+      "organizationsEnabled": true,
+      "clients": [{
+        "id": {{ .Values.keycloak.sharedClientUuid | quote }},
+        "clientId": "forwardmeasure-openworkflow",
+        "name": "ForwardMeasure OpenWorkflow",
+        "enabled": true,
+        "clientAuthenticatorType": "client-secret",
+        "secret": {{ .Values.keycloak.clientSecret | quote }},
+        "serviceAccountsEnabled": true,
+        "authorizationServicesEnabled": true,
+        "publicClient": false,
+        "directAccessGrantsEnabled": true,
+        "authorizationSettings": {
+          "policyEnforcementMode": "ENFORCING",
+          "resources": [
+            {"name":"definitions","type":"openworkflow-definition","scopes":[{{- range $index, $scope := list "definition:create" "definition:read" "definition:list" "definition:update" "definition:delete" "definition:validate" "definition:submit" "definition:withdraw" "definition:approve" "definition:reject" "definition:publish" "definition:deprecate" }}{{ if $index }},{{ end }}{"name":{{ $scope | quote }}}{{- end }}]},
+            {"name":"executions","type":"openworkflow-execution","scopes":[{{- range $index, $scope := list "execution:start" "execution:read" "execution:list" "execution:pause" "execution:resume" "execution:cancel" }}{{ if $index }},{{ end }}{"name":{{ $scope | quote }}}{{- end }}]},
+            {"name":"operations","type":"openworkflow-operation","scopes":[{"name":"operation:execute"}]},
+            {"name":"audit","type":"openworkflow-audit","scopes":[{"name":"audit:read"},{"name":"audit:query"}]}
+          ],
+          "scopes": [{{- range $index, $scope := list "definition:create" "definition:read" "definition:list" "definition:update" "definition:delete" "definition:validate" "definition:submit" "definition:withdraw" "definition:approve" "definition:reject" "definition:publish" "definition:deprecate" "execution:start" "execution:read" "execution:list" "execution:pause" "execution:resume" "execution:cancel" "operation:execute" "audit:read" "audit:query" }}{{ if $index }},{{ end }}{"name":{{ $scope | quote }}}{{- end }}]
+        }
+      }]
+    }
+{{- end }}

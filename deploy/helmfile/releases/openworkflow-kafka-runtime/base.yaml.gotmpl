@@ -1,0 +1,37 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+image:
+  tag: {{ .Values.openworkflowVersion | quote }}
+  pullPolicy: {{ .Values.imagePullPolicy }}
+replicas: {{ dig "replicas" "runtime" 3 .Values }}
+database:
+  url: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" .Values | quote }}
+  username: {{ dig "database" "username" "openworkflow" .Values | quote }}
+keycloak:
+  issuer: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" .Values | quote }}
+credentialsSecretName: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
+kafka:
+  bootstrapServers: {{ dig "kafka" "bootstrapServers" "redpanda:9092" .Values | quote }}
+networkPolicy:
+  enabled: {{ dig "hardening" "networkPolicyEnabled" false .Values }}
+  {{- with (dig "networkPolicy" "externalEgressCidr" "" .Values) }}
+  extraEgress:
+    - to: [{ipBlock: {cidr: {{ . | quote }}}}]
+  {{- end }}
+telemetry:
+  otlpEndpoint: {{ dig "telemetry" "otlpEndpoint" "" .Values | quote }}
+  injectJava: {{ dig "telemetry" "injectJava" false .Values }}
+operations:
+  secretDirectory: /var/run/secrets/openworkflow
+  httpEgressAllowlist: {{ .Values.operations.httpEgressAllowlist | quote }}
+  protocolTimeoutMillis: 30000
+  mcpCommandAllowlist: ""
+  runCommandAllowlist: ""
+  runInterpreterAllowlist: ""
+  runImageAllowlist: ""
+  runVolumeAllowlist: ""
+  runPortAllowlist: ""
+  ociRuntime: podman
+definitionResources:
+  allowedHosts: {{ dig "definitionResources" "allowedHosts" "" .Values | quote }}

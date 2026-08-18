@@ -1,0 +1,119 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k7-event-sink
+data:
+  default.conf: |
+    server {
+      listen 8080;
+      access_log /dev/stdout combined;
+      location = /functions/normalize/1.2.3/function.yaml { default_type application/yaml; alias /srv/resources/function.yaml; }
+      location = /contracts/openapi.yaml { default_type application/yaml; alias /srv/resources/openapi.yaml; }
+      location = /contracts/asyncapi.yaml { default_type application/yaml; alias /srv/resources/asyncapi.yaml; }
+      location = /contracts/grpcbin.proto { default_type text/plain; alias /srv/resources/grpcbin.proto; }
+      location = /contracts/nats-asyncapi.yaml { default_type application/yaml; alias /srv/resources/nats-asyncapi.yaml; }
+      location = /.well-known/agent-card.json { default_type application/json; alias /srv/resources/agent-card.json; }
+      location = /a2a { default_type application/json; return 200 '{"jsonrpc":"2.0","id":"acceptance","result":{"protocol":"a2a","accepted":true}}'; }
+      location = /mcp { default_type application/json; add_header Mcp-Session-Id k7-acceptance-session always; return 200 '{"jsonrpc":"2.0","id":"acceptance","result":{"protocol":"mcp","accepted":true}}'; }
+      location = /stream { default_type text/event-stream; return 200 'id: event-1\ndata: {"value":1}\n\nid: event-2\ndata: {"value":2}\n\n'; }
+      location / { return 204; }
+    }
+  function.yaml: |
+    set:
+      normalized: remote-content-was-mutated
+      catalogRevision: remote-v2
+  openapi.yaml: |
+    openapi: 3.1.0
+    info: {title: K7 Echo, version: 1.0.0}
+    servers: [{url: http://k7-echo}]
+    paths:
+      /:
+        get:
+          operationId: readWelcome
+          responses:
+            '200': {description: echo response}
+  asyncapi.yaml: |
+    asyncapi: 3.0.0
+    info: {title: K7 Event Stream, version: 1.0.0}
+    servers:
+      acceptance: {host: k7-event-sink, protocol: http}
+    channels:
+      evidence: {address: stream}
+    operations:
+      receiveEvidence: {action: receive, channel: {$ref: '#/channels/evidence'}}
+  nats-asyncapi.yaml: |
+    asyncapi: 3.0.0
+    info:
+      title: K7 NATS evidence
+      version: 1.0.0
+    servers:
+      acceptance:
+        host: k7-nats:4222
+        protocol: nats
+    channels:
+      evidence:
+        address: k7.evidence
+    operations:
+      publishEvidence:
+        action: send
+        channel:
+          $ref: '#/channels/evidence'
+      receiveEvidence:
+        action: receive
+        channel:
+          $ref: '#/channels/evidence'
+  grpcbin.proto: |
+    syntax = "proto3";
+    package grpcbin;
+    service GRPCBin { rpc DummyUnary(DummyMessage) returns (DummyMessage); }
+    message DummyMessage { string f_string = 1; int32 f_int32 = 3; }
+  agent-card.json: |
+    {"name":"K7 acceptance agent","description":"Source-controlled A2A fixture for the K7 protocol canary","url":"http://k7-event-sink/a2a","version":"1.0.0","capabilities":{"streaming":false},"defaultInputModes":["application/json"],"defaultOutputModes":["application/json"],"skills":[]}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k7-event-sink
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: k7-event-sink}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: k7-event-sink}
+    spec:
+      containers:
+        - name: nginx
+          image: {{ .Values.images.nginx }}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /contracts/nats-asyncapi.yaml, port: http}, initialDelaySeconds: 1, periodSeconds: 2}
+          volumeMounts:
+            - {name: configuration, mountPath: /etc/nginx/conf.d/default.conf, subPath: default.conf, readOnly: true}
+            - {name: configuration, mountPath: /srv/resources, readOnly: true}
+      volumes:
+        - name: configuration
+          configMap: {name: k7-event-sink}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k7-event-sink
+spec:
+  selector: {app.kubernetes.io/name: k7-event-sink}
+  ports: [{name: http, port: 80, targetPort: http}]

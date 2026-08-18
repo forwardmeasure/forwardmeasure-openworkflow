@@ -1,0 +1,108 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openworkflow-studio-{{ .Values.framework }}
+  labels: {app: openworkflow-studio, framework: {{ .Values.framework }}}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+  minReadySeconds: 5
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels: {app: openworkflow-studio, framework: {{ .Values.framework }} }
+  template:
+    metadata:
+      labels: {app: openworkflow-studio, framework: {{ .Values.framework }} }
+      {{- if .Values.telemetry.injectJava }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
+      {{- end }}
+    spec:
+      serviceAccountName: {{ default (printf "openworkflow-studio-%s" .Values.framework) .Values.serviceAccount.name }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {app: openworkflow-studio, framework: {{ .Values.framework }}}
+      containers:
+        - name: studio
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec: {command: ["/bin/sh", "-c", "sleep 5"]}
+          env:
+            - {name: OPENWORKFLOW_STUDIO_API_UPSTREAM, value: {{ .Values.apiUpstream | quote }} }
+            - {name: OPENWORKFLOW_STUDIO_API_BASE_PATH, value: /api}
+            - {name: OPENWORKFLOW_STUDIO_ENVIRONMENT_NAME, value: {{ .Values.environmentName | quote }} }
+            - {name: OTEL_SERVICE_NAME, value: {{ default (printf "openworkflow-studio-%s" .Values.framework) .Values.telemetry.serviceName | quote }} }
+            - {name: OTEL_RESOURCE_ATTRIBUTES, value: {{ .Values.telemetry.resourceAttributes | quote }} }
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: {{ .Values.telemetry.protocol | quote }} }
+            - {name: OTEL_PROPAGATORS, value: {{ .Values.telemetry.propagators | quote }} }
+            - {name: OTEL_TRACES_EXPORTER, value: {{ .Values.telemetry.tracesExporter | quote }} }
+            - {name: OTEL_METRICS_EXPORTER, value: {{ .Values.telemetry.metricsExporter | quote }} }
+            - {name: OTEL_LOGS_EXPORTER, value: {{ .Values.telemetry.logsExporter | quote }} }
+            {{- if .Values.telemetry.otlpEndpoint }}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.telemetry.otlpEndpoint | quote }} }
+            {{- end }}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /studio/config.js, port: http}
+            initialDelaySeconds: 3
+            periodSeconds: 3
+          livenessProbe:
+            httpGet: {path: /studio/config.js, port: http}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet: {path: /studio/config.js, port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openworkflow-studio-{{ .Values.framework }}
+spec:
+  selector: {app: openworkflow-studio, framework: {{ .Values.framework }} }
+  ports:
+    - {name: http, port: 8080, targetPort: http}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: openworkflow-studio-{{ .Values.framework }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: openworkflow-studio-{{ .Values.framework }}
+                port: {name: http}
+{{- end }}

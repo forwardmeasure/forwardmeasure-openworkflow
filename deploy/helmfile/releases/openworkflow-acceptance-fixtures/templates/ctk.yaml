@@ -1,0 +1,83 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k7-ctk-fixture
+data:
+  nginx.conf: |
+    worker_processes auto;
+    pid /tmp/nginx.pid;
+    error_log /dev/stderr notice;
+    events { worker_connections 256; }
+    http {
+      access_log /dev/stdout;
+      server {
+        listen 8080;
+        default_type application/json;
+        location = /healthz { return 200 '{"status":"ready"}'; }
+        location = /v2/pet/findByStatus { return 200 '[{"id":1,"name":"Milou","status":"available"}]'; }
+        location = /v2/pet/1 { return 200 '{"id":1,"name":"Milou","status":"available"}'; }
+        location = /v2/pet/2 { return 200 '{"id":2,"name":"Snowy","status":"available"}'; }
+        location ~ ^/v2/pet/getPetByName/ { return 404 '{"code":404,"message":"Pet not found"}'; }
+        location = /basic-auth/serverless-workflow/conformance-test {
+          if ($http_authorization != "Basic c2VydmVybGVzcy13b3JrZmxvdzpjb25mb3JtYW5jZS10ZXN0") { return 401 '{"authenticated":false}'; }
+          return 200 '{"authenticated":true,"user":"serverless-workflow"}';
+        }
+        location = /v2/swagger.json { root /usr/share/nginx/html; try_files /swagger.json =404; }
+        location / { return 404 '{"code":404,"message":"Unknown deterministic CTK fixture route"}'; }
+      }
+    }
+  swagger.json: |
+    {"swagger":"2.0","info":{"title":"Deterministic CTK Petstore","version":"1.0.0"},"host":"k7-ctk-fixture:8080","basePath":"/v2","schemes":["http"],"produces":["application/json"],"paths":{"/pet/findByStatus":{"get":{"operationId":"findPetsByStatus","parameters":[{"name":"status","in":"query","required":true,"type":"string"}],"responses":{"200":{"description":"matching pets"}}}},"/pet/{petId}":{"get":{"operationId":"getPetById","parameters":[{"name":"petId","in":"path","required":true,"type":"integer","format":"int64"}],"responses":{"200":{"description":"pet"}}}}}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k7-ctk-fixture
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app.kubernetes.io/name: k7-ctk-fixture}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: k7-ctk-fixture}
+    spec:
+      securityContext: {runAsUser: 101, runAsGroup: 101, runAsNonRoot: true, seccompProfile: {type: RuntimeDefault}}
+      containers:
+        - name: fixture
+          image: {{ .Values.images.nginxUnprivileged }}
+          ports: [{name: http, containerPort: 8080}]
+          readinessProbe: {httpGet: {path: /healthz, port: http}, initialDelaySeconds: 1, periodSeconds: 2}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: ["ALL"]}}
+          volumeMounts:
+            - {name: config, mountPath: /etc/nginx/nginx.conf, subPath: nginx.conf, readOnly: true}
+            - {name: config, mountPath: /usr/share/nginx/html/swagger.json, subPath: swagger.json, readOnly: true}
+            - {name: tmp, mountPath: /tmp}
+            - {name: cache, mountPath: /var/cache/nginx}
+      volumes:
+        - {name: config, configMap: {name: k7-ctk-fixture}}
+        - {name: tmp, emptyDir: {}}
+        - {name: cache, emptyDir: {}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: k7-ctk-fixture
+spec:
+  selector: {app.kubernetes.io/name: k7-ctk-fixture}
+  ports: [{name: http, port: 8080, targetPort: http}]

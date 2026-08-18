@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forwardmeasure.com/openworkflow/migration/retirement-attestation-v1.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "product", "releaseCandidate", "consumerMigration", "definitionDigests", "executionDrain", "shadowComparison", "restoreTest", "rollbackWindow"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "product": {"enum": ["OKS", "OAE"]},
+    "releaseCandidate": {"type": "string", "minLength": 1},
+    "consumerMigration": {"enum": ["verified"]},
+    "definitionDigests": {"enum": ["verified", "not-applicable"]},
+    "executionDrain": {"enum": ["verified", "engine-retained"]},
+    "shadowComparison": {"enum": ["verified", "not-applicable-no-source-deployment"]},
+    "restoreTest": {"enum": ["verified"]},
+    "rollbackWindow": {
+      "type": "object",
+      "required": ["owner", "startsAt", "endsAt"],
+      "properties": {
+        "owner": {"type": "string", "minLength": 1},
+        "startsAt": {"type": "string", "format": "date-time"},
+        "endsAt": {"type": "string", "format": "date-time"}
+      }
+    }
+  }
+}

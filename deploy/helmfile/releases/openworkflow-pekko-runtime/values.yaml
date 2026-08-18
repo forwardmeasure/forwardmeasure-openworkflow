@@ -1,0 +1,66 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+name: openworkflow-pekko-postgresql
+replicas: 3
+image:
+  repository: forwardmeasure/openworkflow-definition-quarkus
+  tag: 1.0.0-SNAPSHOT
+  pullPolicy: IfNotPresent
+database:
+  url: jdbc:postgresql://postgresql:5432/openworkflow
+  username: openworkflow
+keycloak:
+  issuer: http://keycloak:8080/realms/openworkflow
+credentialsSecretName: openworkflow-foundation
+persistence:
+  profile: postgresql
+  endpoint: jdbc:postgresql://postgresql:5432/openworkflow?currentSchema=t_11111111111111111111111111111111
+  username: openworkflow
+  password: openworkflow-k1-database
+  localDatacenter: datacenter1
+cluster:
+  requiredContactPoints: 3
+  role: operation-adapter
+operations:
+  secretDirectory: /var/run/secrets/openworkflow
+  httpEgressAllowlist: ""
+  mcpCommandAllowlist: ""
+  runCommandAllowlist: ""
+  runInterpreterAllowlist: ""
+  runImageAllowlist: ""
+definitionResources:
+  allowedHosts: ""
+serviceAccount:
+  create: true
+  name: ""
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  fsGroup: 10001
+  seccompProfile: {type: RuntimeDefault}
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities: {drop: [ALL]}
+resources:
+  requests: {cpu: 100m, memory: 384Mi}
+  limits: {cpu: "2", memory: 1Gi}
+terminationGracePeriodSeconds: 90
+disruptionBudget:
+  enabled: true
+  minAvailable: 2
+networkPolicy:
+  enabled: false
+  extraEgress: []
+telemetry:
+  serviceName: ""
+  otlpEndpoint: ""
+  resourceAttributes: "service.namespace=forwardmeasure-openworkflow,openworkflow.engine=pekko"
+  injectJava: false
+  protocol: grpc
+  propagators: tracecontext,baggage
+  tracesExporter: otlp
+  metricsExporter: otlp
+  logsExporter: otlp

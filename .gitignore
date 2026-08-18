@@ -19,6 +19,16 @@
 *.tar.gz
 *.rar
 
+# Maven build output
+target/
+.flattened-pom.xml
+
+# Frontend dependencies and generated output
+node_modules/
+build/
+test-results/
+playwright-report/
+
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
 replay_pid*

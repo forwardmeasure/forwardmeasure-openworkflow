@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://forwardmeasure.com/openworkflow/migration/definition-import-manifest-v1.schema.json",
+  "title": "OpenWorkflow standalone definition import manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "source", "tenantId", "definitions"],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["product", "repository", "commit", "exportedAt"],
+      "properties": {
+        "product": {"enum": ["OKS", "OAE"]},
+        "repository": {"type": "string", "minLength": 1},
+        "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "exportedAt": {"type": "string", "format": "date-time"}
+      }
+    },
+    "tenantId": {"type": "string", "format": "uuid"},
+    "definitions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "revision", "sourcePath", "sourceDigest", "resolvedDigest", "lifecycleEvidence"],
+        "properties": {
+          "key": {"type": "string", "minLength": 1},
+          "revision": {"type": "integer", "minimum": 1},
+          "sourcePath": {"type": "string", "minLength": 1},
+          "sourceDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "resolvedDigest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "lifecycleEvidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["state", "actor", "occurredAt"],
+              "properties": {
+                "state": {"enum": ["DRAFT", "IN_REVIEW", "APPROVED", "REJECTED", "PUBLISHED", "DEPRECATED"]},
+                "actor": {"type": "string", "minLength": 1},
+                "occurredAt": {"type": "string", "format": "date-time"}
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

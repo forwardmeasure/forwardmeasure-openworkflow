@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "keycloakVersion": "26.7.1",
+  "clientId": "forwardmeasure-openworkflow",
+  "packId": "entity-intelligence",
+  "roles": [
+    "entity-intelligence-dossier-analyst",
+    "entity-intelligence-entity-analyst",
+    "entity-intelligence-evidence-curator",
+    "entity-intelligence-information-extraction-operator",
+    "entity-intelligence-ingestion-operator",
+    "entity-intelligence-investigator",
+    "entity-intelligence-resolution-analyst",
+    "entity-intelligence-screening-analyst",
+    "entity-intelligence-reference-population-submitter",
+    "entity-intelligence-reference-population-approver"
+  ],
+  "workloadIdentities": ["entity-intelligence-workflow-invoker"],
+  "resources": [
+    {"type": "entity-intelligence-dossier", "actions": ["read", "write"]},
+    {"type": "entity-intelligence-entity", "actions": ["read", "write"]},
+    {"type": "entity-intelligence-evidence", "actions": ["read", "write"]},
+    {"type": "entity-intelligence-information-extraction", "actions": ["read", "execute"]},
+    {"type": "entity-intelligence-ingestion", "actions": ["read", "execute"]},
+    {"type": "entity-intelligence-investigation", "actions": ["read", "write"]},
+    {"type": "entity-intelligence-resolution", "actions": ["read", "execute"]},
+    {"type": "entity-intelligence-screening", "actions": ["read", "execute"]},
+    {"type": "entity-intelligence-reference-population", "actions": ["read", "submit", "approve"]},
+    {"type": "openworkflow-execution", "actions": ["start"]}
+  ],
+  "roleGrants": {
+    "entity-intelligence-dossier-analyst": ["dossier:read", "dossier:write"],
+    "entity-intelligence-entity-analyst": ["entity:read", "entity:write"],
+    "entity-intelligence-evidence-curator": ["evidence:read", "evidence:write"],
+    "entity-intelligence-information-extraction-operator": ["information-extraction:read", "information-extraction:execute"],
+    "entity-intelligence-ingestion-operator": ["ingestion:read", "ingestion:execute"],
+    "entity-intelligence-investigator": ["investigation:read", "investigation:write", "dossier:read", "entity:read", "evidence:read"],
+    "entity-intelligence-resolution-analyst": ["resolution:read", "resolution:execute"],
+    "entity-intelligence-screening-analyst": ["screening:read", "screening:execute"],
+    "entity-intelligence-reference-population-submitter": ["reference-population:read", "reference-population:submit"],
+    "entity-intelligence-reference-population-approver": ["reference-population:read", "reference-population:approve"],
+    "entity-intelligence-workflow-invoker": ["execution:start"]
+  },
+  "constraints": {
+    "activeOrganizationRequired": true,
+    "organizationRolesOnly": true,
+    "memberRoleAssignmentOnPackInstall": false,
+    "referencePopulationMakerChecker": true,
+    "databaseSchemaSelectorInTokensForbidden": true,
+    "legacyWorkflowInternalForbidden": true,
+    "defaultDecision": "deny"
+  }
+}

@@ -1,0 +1,358 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #eaf3ef;
+  background: #0b1513;
+  font-synthesis: none;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background: radial-gradient(circle at 75% 0, #19352e 0, #0b1513 42%);
+}
+button,
+.button-label {
+  border: 0;
+  border-radius: 7px;
+  background: #8de0bd;
+  color: #10201d;
+  padding: 0.7rem 1rem;
+  font:
+    700 0.82rem Inter,
+    system-ui,
+    sans-serif;
+  cursor: pointer;
+}
+button:hover,
+.button-label:hover {
+  background: #b7efd7;
+}
+button:focus-visible,
+textarea:focus-visible,
+.button-label:focus-within {
+  outline: 3px solid #f3c677;
+  outline-offset: 2px;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+button.secondary,
+.button-label {
+  color: #dceae4;
+  background: #243a35;
+}
+button.quiet {
+  background: transparent;
+  color: #a7bbb4;
+}
+button.danger {
+  color: #fff2ee;
+  background: #9e463e;
+}
+.app-shell {
+  max-width: 1500px;
+  margin: auto;
+  padding: 1.2rem 2rem 3rem;
+}
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  min-height: 92px;
+}
+h1,
+h2,
+h3,
+p {
+  margin-top: 0;
+}
+h1 {
+  font-size: clamp(1.45rem, 2.5vw, 2.1rem);
+  margin-bottom: 0;
+  letter-spacing: -0.04em;
+}
+h2 {
+  font-size: 1.15rem;
+  margin-bottom: 0.3rem;
+}
+h3 {
+  font-size: 0.92rem;
+  margin: 1.5rem 0 0.7rem;
+}
+.eyebrow {
+  margin: 0 0 0.25rem;
+  color: #79b89f;
+  font:
+    500 0.68rem ui-monospace,
+    monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+nav,
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+nav button {
+  color: #b8cbc4;
+  background: transparent;
+}
+nav button.active {
+  color: #10201d;
+  background: #8de0bd;
+}
+.status {
+  min-height: 2.7rem;
+  margin: 0.6rem 0 1rem;
+  padding: 0.7rem 1rem;
+  border-left: 3px solid #e5bb69;
+  color: #d5e1dd;
+  background: #13221f;
+  font:
+    0.78rem ui-monospace,
+    monospace;
+}
+.author-grid,
+.execution-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(300px, 0.8fr);
+  gap: 1rem;
+}
+.execution-grid {
+  grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.6fr);
+}
+.panel {
+  min-width: 0;
+  border: 1px solid #29403a;
+  border-radius: 11px;
+  background: rgba(17, 31, 28, 0.92);
+  padding: 1rem;
+  box-shadow: 0 18px 60px #0004;
+}
+.panel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.8rem;
+}
+.editor-panel {
+  min-height: 70vh;
+  display: flex;
+  flex-direction: column;
+}
+.editor {
+  flex: 1;
+  width: 100%;
+  resize: vertical;
+  border: 1px solid #304b44;
+  border-radius: 7px;
+  background: #07100e;
+  color: #d8ebe3;
+  padding: 1.1rem;
+  font:
+    14px/1.65 ui-monospace,
+    monospace;
+  tab-size: 2;
+}
+.diagram ol,
+.history {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+}
+.diagram li {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin: 0.55rem 0;
+  padding: 0.7rem;
+  border-left: 1px solid #4d7969;
+  background: #182a26;
+}
+.diagram li span,
+.history li span {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #294a40;
+  color: #a9e5cc;
+  font:
+    0.7rem ui-monospace,
+    monospace;
+}
+.muted,
+small {
+  display: block;
+  color: #91a69f;
+  font-size: 0.78rem;
+}
+.definition {
+  margin-top: 0.7rem;
+  border-top: 1px solid #29403a;
+  padding-top: 0.9rem;
+}
+.definition label {
+  display: block;
+  margin: 0.8rem 0;
+  color: #a7bbb4;
+  font-size: 0.75rem;
+}
+.definition textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.3rem;
+  padding: 0.5rem;
+  color: #d8ebe3;
+  background: #07100e;
+  border: 1px solid #304b44;
+}
+.execution-row {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.7rem;
+  margin: 0.5rem 0;
+  text-align: left;
+  color: #eaf3ef;
+  background: #182a26;
+}
+.execution-row:hover {
+  background: #253d37;
+}
+.execution-row small {
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+mark {
+  border-radius: 999px;
+  padding: 0.25rem 0.55rem;
+  color: #10201d;
+  background: #e5bb69;
+  font:
+    600 0.68rem ui-monospace,
+    monospace;
+}
+mark[data-status="COMPLETED"] {
+  background: #83d1b0;
+}
+mark[data-status="CANCELLED"],
+mark[data-status="FAILED"] {
+  color: white;
+  background: #a8534b;
+}
+code,
+pre {
+  display: block;
+  max-width: 100%;
+  overflow: auto;
+  border-radius: 6px;
+  padding: 0.8rem;
+  color: #bce5d4;
+  background: #07100e;
+  font:
+    0.78rem/1.5 ui-monospace,
+    monospace;
+}
+.history li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.7rem;
+  border-bottom: 1px solid #29403a;
+  padding: 0.55rem 0;
+}
+.history time {
+  color: #91a69f;
+  font-size: 0.7rem;
+}
+.failure {
+  color: #ffb8af;
+}
+.login-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+}
+.login-card {
+  width: min(540px, 100%);
+  border: 1px solid #345148;
+  border-radius: 12px;
+  padding: 2rem;
+  background: #10201d;
+  box-shadow: 0 25px 100px #0009;
+}
+.login-card label {
+  display: block;
+  margin: 1.5rem 0 0.4rem;
+  font-size: 0.8rem;
+}
+.login-card textarea {
+  width: 100%;
+  margin-bottom: 1rem;
+  resize: vertical;
+  color: #d8ebe3;
+  background: #07100e;
+  border: 1px solid #416058;
+  padding: 0.7rem;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+@media (max-width: 850px) {
+  .app-shell {
+    padding: 0.8rem;
+  }
+  header {
+    align-items: flex-start;
+    flex-direction: column;
+    padding-bottom: 1rem;
+  }
+  .author-grid,
+  .execution-grid {
+    grid-template-columns: 1fr;
+  }
+  .editor-panel {
+    min-height: 60vh;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .panel {
+    animation: rise 0.35s ease-out;
+  }
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+  }
+}
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information regarding
+ * copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with the License. You may obtain a
+ * copy of the License at https://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+ * law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+ * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+ * for the specific language governing permissions and limitations under the License.
+ */
+

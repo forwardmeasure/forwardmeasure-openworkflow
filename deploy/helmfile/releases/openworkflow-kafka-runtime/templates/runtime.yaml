@@ -1,0 +1,111 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.name }}
+  labels: {app: {{ .Values.name }}, engine: kafka-streams}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 0, maxUnavailable: 1}
+  selector:
+    matchLabels: {app: {{ .Values.name }} }
+  template:
+    metadata:
+      labels: {app: {{ .Values.name }}, engine: kafka-streams}
+      {{- if .Values.telemetry.injectJava }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
+      {{- end }}
+    spec:
+      serviceAccountName: {{ default .Values.name .Values.serviceAccount.name }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels: {app: {{ .Values.name }} }
+      containers:
+        - name: runtime
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec: {command: ["/bin/sh", "-c", "sleep 10"]}
+          env:
+            - {name: OPENWORKFLOW_ENGINE_PROFILE, value: kafka-streams}
+            - {name: OPENWORKFLOW_DATABASE_URL, value: {{ .Values.database.url | quote }} }
+            - {name: OPENWORKFLOW_DATABASE_USERNAME, value: {{ .Values.database.username | quote }} }
+            - {name: OPENWORKFLOW_DATABASE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ .Values.credentialsSecretName }}, key: KC_DB_PASSWORD}}}
+            - {name: OPENWORKFLOW_KEYCLOAK_ISSUER, value: {{ .Values.keycloak.issuer | quote }} }
+            - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ .Values.credentialsSecretName }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
+            - {name: OPENWORKFLOW_DEFINITION_RESOURCE_ALLOWED_HOSTS, value: {{ .Values.definitionResources.allowedHosts | quote }} }
+            - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ .Values.kafka.bootstrapServers | quote }} }
+            - {name: OPENWORKFLOW_KAFKA_APPLICATION_ID, value: {{ .Values.kafka.applicationId | quote }} }
+            - {name: OPENWORKFLOW_KAFKA_TOPIC_PREFIX, value: {{ .Values.kafka.topicPrefix | quote }} }
+            - {name: OPENWORKFLOW_KAFKA_STATE_DIR, value: /var/lib/openworkflow-kafka}
+            - {name: OPENWORKFLOW_ADAPTER_SECRET_DIRECTORY, value: {{ .Values.operations.secretDirectory | quote }} }
+            - {name: OPENWORKFLOW_ADAPTER_HTTP_EGRESS_ALLOWLIST, value: {{ .Values.operations.httpEgressAllowlist | quote }} }
+            - {name: OPENWORKFLOW_OPERATION_PROTOCOL_TIMEOUT_MS, value: {{ .Values.operations.protocolTimeoutMillis | quote }} }
+            - {name: OPENWORKFLOW_MCP_COMMAND_ALLOWLIST, value: {{ .Values.operations.mcpCommandAllowlist | quote }} }
+            - {name: OPENWORKFLOW_RUN_COMMAND_ALLOWLIST, value: {{ .Values.operations.runCommandAllowlist | quote }} }
+            - {name: OPENWORKFLOW_RUN_INTERPRETER_ALLOWLIST, value: {{ .Values.operations.runInterpreterAllowlist | quote }} }
+            - {name: OPENWORKFLOW_RUN_IMAGE_ALLOWLIST, value: {{ .Values.operations.runImageAllowlist | quote }} }
+            - {name: OPENWORKFLOW_RUN_VOLUME_ALLOWLIST, value: {{ .Values.operations.runVolumeAllowlist | quote }} }
+            - {name: OPENWORKFLOW_RUN_PORT_ALLOWLIST, value: {{ .Values.operations.runPortAllowlist | quote }} }
+            - {name: OPENWORKFLOW_RUN_OCI_RUNTIME, value: {{ .Values.operations.ociRuntime | quote }} }
+            - {name: OTEL_SERVICE_NAME, value: {{ .Values.telemetry.serviceName | quote }} }
+            - {name: OTEL_RESOURCE_ATTRIBUTES, value: {{ .Values.telemetry.resourceAttributes | quote }} }
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: {{ .Values.telemetry.protocol | quote }} }
+            - {name: OTEL_PROPAGATORS, value: {{ .Values.telemetry.propagators | quote }} }
+            - {name: OTEL_TRACES_EXPORTER, value: {{ .Values.telemetry.tracesExporter | quote }} }
+            - {name: OTEL_METRICS_EXPORTER, value: {{ .Values.telemetry.metricsExporter | quote }} }
+            - {name: OTEL_LOGS_EXPORTER, value: {{ .Values.telemetry.logsExporter | quote }} }
+            {{- if .Values.telemetry.otlpEndpoint }}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.telemetry.otlpEndpoint | quote }} }
+            {{- end }}
+            - name: OPENWORKFLOW_KAFKA_INSTANCE_ID
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            httpGet: {path: /q/health/ready, port: http}
+            initialDelaySeconds: 10
+            periodSeconds: 3
+          livenessProbe:
+            httpGet: {path: /q/health/live, port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            httpGet: {path: /q/health/started, port: http}
+            periodSeconds: 2
+            failureThreshold: 90
+          volumeMounts:
+            - {name: kafka-state, mountPath: /var/lib/openworkflow-kafka}
+            - {name: tmp, mountPath: /tmp}
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+        - name: kafka-state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.name }}
+spec:
+  selector: {app: {{ .Values.name }} }
+  ports:
+    - {name: http, port: 8080, targetPort: http}

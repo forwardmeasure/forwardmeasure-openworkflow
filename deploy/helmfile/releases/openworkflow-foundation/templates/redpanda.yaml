@@ -1,0 +1,56 @@
+# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+# agreements. See the NOTICE file distributed with this work for additional information regarding
+# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+{{- if .Values.redpanda.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: redpanda
+spec:
+  selector: {app: redpanda}
+  ports:
+    - {name: kafka, port: 9092, targetPort: kafka}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redpanda
+spec:
+  serviceName: redpanda
+  replicas: 1
+  selector:
+    matchLabels: {app: redpanda}
+  template:
+    metadata:
+      labels: {app: redpanda}
+    spec:
+      containers:
+        - name: redpanda
+          image: docker.redpanda.com/redpandadata/redpanda:{{ .Values.versions.redpanda }}
+          imagePullPolicy: IfNotPresent
+          command: ["/entrypoint.sh"]
+          args:
+            - redpanda
+            - start
+            - --overprovisioned
+            - --smp=1
+            - --memory=1G
+            - --reserve-memory=0M
+            - --node-id=0
+            - --kafka-addr=internal://0.0.0.0:9092
+            - --advertise-kafka-addr=internal://redpanda:9092
+            - --rpc-addr=0.0.0.0:33145
+            - --advertise-rpc-addr=redpanda:33145
+          ports:
+            - {name: kafka, containerPort: 9092}
+          readinessProbe:
+            exec:
+              command:
+                ["rpk", "cluster", "health", "--exit-when-healthy", "-X", "brokers=127.0.0.1:9092"]
+            initialDelaySeconds: 5
+            timeoutSeconds: 5
+            periodSeconds: 3
+          resources:
+            requests: {cpu: 100m, memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+{{- end }}

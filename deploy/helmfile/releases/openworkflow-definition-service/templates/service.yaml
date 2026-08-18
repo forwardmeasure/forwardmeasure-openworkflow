@@ -1,0 +1,118 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openworkflow-definition-{{ .Values.framework }}
+  labels: {app: openworkflow-definition, framework: {{ .Values.framework }}}
+spec:
+  replicas: {{ .Values.replicas }}
+  revisionHistoryLimit: 5
+  minReadySeconds: 5
+  progressDeadlineSeconds: 600
+  strategy:
+    type: RollingUpdate
+    rollingUpdate: {maxSurge: 1, maxUnavailable: 0}
+  selector:
+    matchLabels: {app: openworkflow-definition, framework: {{ .Values.framework }}}
+  template:
+    metadata:
+      labels: {app: openworkflow-definition, framework: {{ .Values.framework }}}
+      {{- if .Values.telemetry.injectJava }}
+      annotations:
+        instrumentation.opentelemetry.io/inject-java: "true"
+      {{- end }}
+    spec:
+      serviceAccountName: {{ default (printf "openworkflow-definition-%s" .Values.framework) .Values.serviceAccount.name }}
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: {app: openworkflow-definition, framework: {{ .Values.framework }}}
+      containers:
+        - name: service
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext: {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+          lifecycle:
+            preStop:
+              exec: {command: ["/bin/sh", "-c", "sleep 5"]}
+          env:
+            - {name: OPENWORKFLOW_DATABASE_URL, value: {{ .Values.database.url | quote }}}
+            - {name: OPENWORKFLOW_DATABASE_USERNAME, value: {{ .Values.database.username | quote }}}
+            - {name: OPENWORKFLOW_DATABASE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ .Values.credentialsSecretName }}, key: KC_DB_PASSWORD}}}
+            - {name: OPENWORKFLOW_KEYCLOAK_ISSUER, value: {{ .Values.keycloak.issuer | quote }}}
+            - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ .Values.credentialsSecretName }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
+            - {name: OPENWORKFLOW_DEFINITION_RESOURCE_ALLOWED_HOSTS, value: {{ .Values.definitionResources.allowedHosts | quote }}}
+            - {name: OPENWORKFLOW_ADAPTER_HTTP_EGRESS_ALLOWLIST, value: {{ .Values.operations.httpEgressAllowlist | quote }}}
+            - {name: OPENWORKFLOW_ENGINE_PROFILE, value: kafka-streams}
+            - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ .Values.kafka.bootstrapServers | quote }}}
+            - {name: OPENWORKFLOW_KAFKA_APPLICATION_ID, value: {{ .Values.kafka.applicationId | quote }}}
+            - {name: OPENWORKFLOW_KAFKA_TOPIC_PREFIX, value: {{ .Values.kafka.topicPrefix | quote }}}
+            - {name: OPENWORKFLOW_KAFKA_STATE_DIR, value: /var/lib/openworkflow-kafka}
+            - {name: OTEL_SERVICE_NAME, value: {{ default (printf "openworkflow-definition-%s" .Values.framework) .Values.telemetry.serviceName | quote }}}
+            - {name: OTEL_RESOURCE_ATTRIBUTES, value: {{ .Values.telemetry.resourceAttributes | quote }}}
+            - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: {{ .Values.telemetry.protocol | quote }}}
+            - {name: OTEL_PROPAGATORS, value: {{ .Values.telemetry.propagators | quote }}}
+            - {name: OTEL_TRACES_EXPORTER, value: {{ .Values.telemetry.tracesExporter | quote }}}
+            - {name: OTEL_METRICS_EXPORTER, value: {{ .Values.telemetry.metricsExporter | quote }}}
+            - {name: OTEL_LOGS_EXPORTER, value: {{ .Values.telemetry.logsExporter | quote }}}
+            {{- if .Values.telemetry.otlpEndpoint }}
+            - {name: OTEL_EXPORTER_OTLP_ENDPOINT, value: {{ .Values.telemetry.otlpEndpoint | quote }}}
+            {{- end }}
+            - name: OPENWORKFLOW_KAFKA_INSTANCE_ID
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+          ports:
+            - {name: http, containerPort: 8080}
+          readinessProbe:
+            tcpSocket: {port: http}
+            initialDelaySeconds: 5
+            periodSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket: {port: http}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 3
+          startupProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 2
+            failureThreshold: 60
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - {name: kafka-state, mountPath: /var/lib/openworkflow-kafka}
+            - {name: tmp, mountPath: /tmp}
+      volumes:
+        - name: kafka-state
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: openworkflow-definition-{{ .Values.framework }}
+spec:
+  selector: {app: openworkflow-definition, framework: {{ .Values.framework }}}
+  ports:
+    - {name: http, port: 8080, targetPort: http}

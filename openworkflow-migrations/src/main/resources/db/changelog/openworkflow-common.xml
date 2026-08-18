@@ -1,0 +1,374 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Licensed to the Apache Software Foundation (ASF) under one or more
+    contributor license agreements. See the NOTICE file distributed with
+    this work for additional information regarding copyright ownership.
+    The ASF licenses this file to You under the Apache License, Version 2.0
+    (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        https://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<!-- Licensed to the Apache Software Foundation (ASF) under the Apache License, Version 2.0. -->
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="openworkflow-100-definition-plane-sequences" author="forwardmeasure">
+        <createSequence sequenceName="workflow_definition_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="workflow_revision_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="workflow_validation_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="workflow_review_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="workflow_publication_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="workflow_lifecycle_history_id_seq" startValue="1" incrementBy="50"/>
+    </changeSet>
+
+    <changeSet id="openworkflow-110-workflow-definition" author="forwardmeasure">
+        <createTable tableName="workflow_definition">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_definition_id_seq">
+                <constraints primaryKey="true" nullable="false"/>
+            </column>
+            <column name="uuid" type="UUID"><constraints nullable="false" unique="true"/></column>
+            <column name="version" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="definition_key" type="VARCHAR(160)"><constraints nullable="false" unique="true"/></column>
+            <column name="display_name" type="VARCHAR(320)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="openworkflow-120-workflow-revision" author="forwardmeasure">
+        <createTable tableName="workflow_revision">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_revision_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="uuid" type="UUID"><constraints nullable="false" unique="true"/></column>
+            <column name="version" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="definition_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_revision_definition" references="workflow_definition(id)"/></column>
+            <column name="revision_number" type="INTEGER"><constraints nullable="false"/></column>
+            <column name="lifecycle_state" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="source_document" type="TEXT"><constraints nullable="false"/></column>
+            <column name="resolved_document" type="TEXT"><constraints nullable="false"/></column>
+            <column name="specification_version" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="compiler_profile" type="VARCHAR(80)"><constraints nullable="false"/></column>
+            <column name="source_digest" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="resolved_digest" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="author_actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_revision_author" references="actor(id)"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="workflow_revision" columnNames="definition_id,revision_number" constraintName="uk_revision_number"/>
+        <addUniqueConstraint tableName="workflow_revision" columnNames="definition_id,source_digest" constraintName="uk_revision_source_digest"/>
+        <createIndex tableName="workflow_revision" indexName="ix_revision_definition_state">
+            <column name="definition_id"/><column name="lifecycle_state"/>
+        </createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-121-immutable-workflow-revision" author="forwardmeasure" dbms="postgresql">
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION prevent_workflow_revision_content_update()
+            RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.definition_id IS DISTINCT FROM OLD.definition_id
+                   OR NEW.revision_number IS DISTINCT FROM OLD.revision_number
+                   OR NEW.source_document IS DISTINCT FROM OLD.source_document
+                   OR NEW.resolved_document IS DISTINCT FROM OLD.resolved_document
+                   OR NEW.specification_version IS DISTINCT FROM OLD.specification_version
+                   OR NEW.compiler_profile IS DISTINCT FROM OLD.compiler_profile
+                   OR NEW.source_digest IS DISTINCT FROM OLD.source_digest
+                   OR NEW.resolved_digest IS DISTINCT FROM OLD.resolved_digest
+                   OR NEW.author_actor_id IS DISTINCT FROM OLD.author_actor_id THEN
+                    RAISE EXCEPTION 'workflow revision content is immutable';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+            CREATE TRIGGER workflow_revision_content_immutable
+            BEFORE UPDATE ON workflow_revision
+            FOR EACH ROW EXECUTE FUNCTION prevent_workflow_revision_content_update();
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="openworkflow-130-workflow-validation" author="forwardmeasure">
+        <createTable tableName="workflow_validation">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_validation_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="revision_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_validation_revision" references="workflow_revision(id)"/></column>
+            <column name="valid" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="findings" type="JSONB"><constraints nullable="false"/></column>
+            <column name="validator_profile" type="VARCHAR(80)"><constraints nullable="false"/></column>
+            <column name="validated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="workflow_validation" indexName="ix_validation_revision"><column name="revision_id"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-140-workflow-review" author="forwardmeasure">
+        <createTable tableName="workflow_review">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_review_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="revision_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_review_revision" references="workflow_revision(id)"/></column>
+            <column name="review_action" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_review_actor" references="actor(id)"/></column>
+            <column name="revision_digest" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(2000)"/>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="workflow_review" indexName="ix_review_revision"><column name="revision_id"/><column name="created_at"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-150-workflow-publication" author="forwardmeasure">
+        <createTable tableName="workflow_publication">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_publication_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="revision_id" type="BIGINT"><constraints nullable="false" unique="true" foreignKeyName="fk_publication_revision" references="workflow_revision(id)"/></column>
+            <column name="actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_publication_actor" references="actor(id)"/></column>
+            <column name="revision_digest" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+            <column name="deprecated_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="openworkflow-160-workflow-lifecycle-history" author="forwardmeasure">
+        <createTable tableName="workflow_lifecycle_history">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_lifecycle_history_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="revision_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_history_revision" references="workflow_revision(id)"/></column>
+            <column name="from_state" type="VARCHAR(32)"/>
+            <column name="to_state" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_history_actor" references="actor(id)"/></column>
+            <column name="correlation_id" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="workflow_lifecycle_history" indexName="ix_history_revision"><column name="revision_id"/><column name="created_at"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-170-align-pooled-id-sequences" author="forwardmeasure" dbms="postgresql">
+        <comment>Align sequence high values with Hibernate's allocationSize=50 across multiple service JVMs.</comment>
+        <sql splitStatements="false"><![CDATA[
+            DO $$
+            DECLARE
+                sequence_table text;
+                maximum_id bigint;
+                next_high bigint;
+            BEGIN
+                FOREACH sequence_table IN ARRAY ARRAY[
+                    'workflow_definition',
+                    'workflow_revision',
+                    'workflow_validation',
+                    'workflow_review',
+                    'workflow_publication',
+                    'workflow_lifecycle_history'
+                ] LOOP
+                    EXECUTE format('SELECT coalesce(max(id), 0) FROM %I', sequence_table)
+                        INTO maximum_id;
+                    IF maximum_id = 0 THEN
+                        next_high := 50;
+                    ELSE
+                        next_high := ((maximum_id / 50) + 2) * 50;
+                    END IF;
+                    PERFORM setval(sequence_table || '_id_seq', next_high, false);
+                END LOOP;
+            END;
+            $$;
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="openworkflow-180-execution-plane-sequences" author="forwardmeasure">
+        <createSequence sequenceName="workflow_execution_id_seq" startValue="50" incrementBy="50"/>
+        <createSequence sequenceName="workflow_execution_history_id_seq" startValue="50" incrementBy="50"/>
+        <createSequence sequenceName="workflow_command_receipt_id_seq" startValue="50" incrementBy="50"/>
+        <createSequence sequenceName="workflow_authorization_audit_id_seq" startValue="50" incrementBy="50"/>
+    </changeSet>
+
+    <changeSet id="openworkflow-190-workflow-execution" author="forwardmeasure">
+        <createTable tableName="workflow_execution">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_execution_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="uuid" type="UUID"><constraints nullable="false" unique="true"/></column>
+            <column name="version" type="BIGINT" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="revision_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_execution_revision" references="workflow_revision(id)"/></column>
+            <column name="revision_digest" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="engine_id" type="VARCHAR(80)"><constraints nullable="false"/></column>
+            <column name="lifecycle_state" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="correlation_id" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="idempotency_key" type="VARCHAR(160)"><constraints nullable="false" unique="true"/></column>
+            <column name="started_by_actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_execution_actor" references="actor(id)"/></column>
+            <column name="input" type="JSONB"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+            <column name="completed_at" type="TIMESTAMP WITH TIME ZONE"/>
+        </createTable>
+        <createIndex tableName="workflow_execution" indexName="ix_execution_revision"><column name="revision_id"/><column name="created_at"/></createIndex>
+        <createIndex tableName="workflow_execution" indexName="ix_execution_state_engine"><column name="lifecycle_state"/><column name="engine_id"/><column name="created_at"/></createIndex>
+        <addUniqueConstraint tableName="workflow_execution" columnNames="correlation_id" constraintName="uk_execution_correlation"/>
+    </changeSet>
+
+    <changeSet id="openworkflow-200-workflow-execution-projection" author="forwardmeasure">
+        <createTable tableName="workflow_execution_projection">
+            <column name="execution_id" type="BIGINT"><constraints primaryKey="true" nullable="false" foreignKeyName="fk_projection_execution" references="workflow_execution(id)"/></column>
+            <column name="last_event_id" type="UUID"/>
+            <column name="last_sequence" type="BIGINT" defaultValueNumeric="-1"><constraints nullable="false"/></column>
+            <column name="lifecycle_state" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="output" type="JSONB"/>
+            <column name="error" type="JSONB"/>
+            <column name="effects" type="JSONB" defaultValueComputed="'[]'::jsonb"><constraints nullable="false"/></column>
+            <column name="timers" type="JSONB" defaultValueComputed="'[]'::jsonb"><constraints nullable="false"/></column>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="openworkflow-210-workflow-execution-history" author="forwardmeasure">
+        <createTable tableName="workflow_execution_history">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_execution_history_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="execution_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_execution_history_execution" references="workflow_execution(id)"/></column>
+            <column name="event_id" type="UUID"><constraints nullable="false" unique="true"/></column>
+            <column name="sequence_number" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="event_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="lifecycle_state" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="task_path" type="VARCHAR(1000)"/>
+            <column name="event_data" type="JSONB"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="workflow_execution_history" columnNames="execution_id,sequence_number" constraintName="uk_execution_history_sequence"/>
+        <createIndex tableName="workflow_execution_history" indexName="ix_execution_history_timeline"><column name="execution_id"/><column name="sequence_number"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-220-workflow-command-receipt" author="forwardmeasure">
+        <createTable tableName="workflow_command_receipt">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_command_receipt_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="command_id" type="UUID"><constraints nullable="false" unique="true"/></column>
+            <column name="execution_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_command_receipt_execution" references="workflow_execution(id)"/></column>
+            <column name="command_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="expected_version" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="accepted" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="reason" type="VARCHAR(1000)"/>
+            <column name="actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_command_receipt_actor" references="actor(id)"/></column>
+            <column name="correlation_id" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE" defaultValueComputed="CURRENT_TIMESTAMP"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="workflow_command_receipt" indexName="ix_command_receipt_execution"><column name="execution_id"/><column name="created_at"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-230-workflow-authorization-audit" author="forwardmeasure">
+        <createTable tableName="workflow_authorization_audit">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="workflow_authorization_audit_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="decision_id" type="VARCHAR(160)"><constraints nullable="false" unique="true"/></column>
+            <column name="actor_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_authorization_audit_actor" references="actor(id)"/></column>
+            <column name="action" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="resource_type" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="resource_id" type="VARCHAR(320)"><constraints nullable="false"/></column>
+            <column name="allowed" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="correlation_id" type="VARCHAR(160)"><constraints nullable="false"/></column>
+            <column name="decided_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="workflow_authorization_audit" indexName="ix_authorization_audit_resource"><column name="resource_type"/><column name="resource_id"/><column name="decided_at"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-240-pekko-postgresql-persistence" author="forwardmeasure" dbms="postgresql">
+        <comment>Pekko journal and snapshots are created inside each tenant schema.</comment>
+        <sql splitStatements="true"><![CDATA[
+            CREATE TABLE event_journal (
+              ordering BIGSERIAL,
+              persistence_id VARCHAR(255) NOT NULL,
+              sequence_number BIGINT NOT NULL,
+              deleted BOOLEAN DEFAULT FALSE NOT NULL,
+              writer VARCHAR(255) NOT NULL,
+              write_timestamp BIGINT,
+              adapter_manifest VARCHAR(255),
+              event_ser_id INTEGER NOT NULL,
+              event_ser_manifest VARCHAR(255) NOT NULL,
+              event_payload BYTEA NOT NULL,
+              meta_ser_id INTEGER,
+              meta_ser_manifest VARCHAR(255),
+              meta_payload BYTEA,
+              PRIMARY KEY (persistence_id, sequence_number)
+            );
+            CREATE UNIQUE INDEX event_journal_ordering_idx ON event_journal(ordering);
+            CREATE TABLE event_tag (
+              event_id BIGINT NOT NULL,
+              tag VARCHAR(256) NOT NULL,
+              PRIMARY KEY (event_id, tag),
+              CONSTRAINT fk_pekko_event_journal FOREIGN KEY (event_id)
+                REFERENCES event_journal(ordering) ON DELETE CASCADE
+            );
+            CREATE TABLE snapshot (
+              persistence_id VARCHAR(255) NOT NULL,
+              sequence_number BIGINT NOT NULL,
+              created BIGINT NOT NULL,
+              snapshot_ser_id INTEGER NOT NULL,
+              snapshot_ser_manifest VARCHAR(255) NOT NULL,
+              snapshot_payload BYTEA NOT NULL,
+              meta_ser_id INTEGER,
+              meta_ser_manifest VARCHAR(255),
+              meta_payload BYTEA,
+              PRIMARY KEY (persistence_id, sequence_number)
+            );
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="openworkflow-250-portable-definition-sequences" author="forwardmeasure">
+        <comment>Issue definition-plane identifiers directly from the database so mixed framework hosts cannot overlap pooled ranges.</comment>
+        <alterSequence sequenceName="workflow_definition_id_seq" incrementBy="1"/>
+        <alterSequence sequenceName="workflow_revision_id_seq" incrementBy="1"/>
+    </changeSet>
+
+    <changeSet id="openworkflow-251-advance-definition-sequences" author="forwardmeasure" dbms="postgresql">
+        <comment>Advance upgraded tenant sequences beyond identifiers allocated by earlier pooled generators.</comment>
+        <sql splitStatements="true"><![CDATA[
+            SELECT setval('workflow_definition_id_seq',
+              GREATEST(COALESCE((SELECT MAX(id) FROM workflow_definition), 0) + 1, 1), false);
+            SELECT setval('workflow_revision_id_seq',
+              GREATEST(COALESCE((SELECT MAX(id) FROM workflow_revision), 0) + 1, 1), false);
+        ]]></sql>
+    </changeSet>
+
+    <changeSet id="openworkflow-260-pekko-projection-offset-store" author="forwardmeasure" dbms="postgresql">
+        <comment>Pekko JDBC projections require tenant-local durable offsets and management state.</comment>
+        <createTable tableName="pekko_projection_offset_store">
+            <column name="projection_name" type="VARCHAR(255)"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_pekko_projection_offset"/></column>
+            <column name="projection_key" type="VARCHAR(255)"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_pekko_projection_offset"/></column>
+            <column name="current_offset" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="manifest" type="VARCHAR(4)"><constraints nullable="false"/></column>
+            <column name="mergeable" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="last_updated" type="BIGINT"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="pekko_projection_offset_store" indexName="projection_name_index">
+            <column name="projection_name"/>
+        </createIndex>
+        <createTable tableName="pekko_projection_management">
+            <column name="projection_name" type="VARCHAR(255)"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_pekko_projection_management"/></column>
+            <column name="projection_key" type="VARCHAR(255)"><constraints nullable="false" primaryKey="true" primaryKeyName="pk_pekko_projection_management"/></column>
+            <column name="paused" type="BOOLEAN"><constraints nullable="false"/></column>
+            <column name="last_updated" type="BIGINT"><constraints nullable="false"/></column>
+        </createTable>
+    </changeSet>
+
+    <changeSet id="openworkflow-270-immutable-definition-resource-bundle" author="forwardmeasure" dbms="postgresql">
+        <comment>Retain the exact publication-time external resource bytes required for deterministic execution and recovery.</comment>
+        <addColumn tableName="workflow_revision">
+            <column name="resolved_resources" type="TEXT" defaultValue="[]"><constraints nullable="false"/></column>
+        </addColumn>
+        <dropDefaultValue tableName="workflow_revision" columnName="resolved_resources"/>
+        <sql splitStatements="false"><![CDATA[
+            CREATE OR REPLACE FUNCTION prevent_workflow_revision_content_update()
+            RETURNS trigger LANGUAGE plpgsql AS $$
+            BEGIN
+                IF NEW.definition_id IS DISTINCT FROM OLD.definition_id
+                   OR NEW.revision_number IS DISTINCT FROM OLD.revision_number
+                   OR NEW.source_document IS DISTINCT FROM OLD.source_document
+                   OR NEW.resolved_document IS DISTINCT FROM OLD.resolved_document
+                   OR NEW.resolved_resources IS DISTINCT FROM OLD.resolved_resources
+                   OR NEW.specification_version IS DISTINCT FROM OLD.specification_version
+                   OR NEW.compiler_profile IS DISTINCT FROM OLD.compiler_profile
+                   OR NEW.source_digest IS DISTINCT FROM OLD.source_digest
+                   OR NEW.resolved_digest IS DISTINCT FROM OLD.resolved_digest
+                   OR NEW.author_actor_id IS DISTINCT FROM OLD.author_actor_id THEN
+                    RAISE EXCEPTION 'workflow revision content is immutable';
+                END IF;
+                RETURN NEW;
+            END;
+            $$;
+        ]]></sql>
+    </changeSet>
+</databaseChangeLog>
