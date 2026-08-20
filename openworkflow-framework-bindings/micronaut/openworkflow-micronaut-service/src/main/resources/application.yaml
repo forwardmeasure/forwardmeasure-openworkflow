@@ -32,7 +32,7 @@ jpa:
       - META-INF/openworkflow-orm.xml
     packages-to-scan:
       - com.forwardmeasure.jpa.identity.entity
-      - com.forwardmeasure.openworkflow.definition.persistence
+      - com.forwardmeasure.openworkflow.definition.domain.entity
     properties:
       hibernate:
         hbm2ddl:
@@ -41,7 +41,7 @@ jpa:
       enabled: true
       packages:
         - com.forwardmeasure.jpa.identity.entity
-        - com.forwardmeasure.openworkflow.definition.persistence
+        - com.forwardmeasure.openworkflow.definition.domain.entity
 openworkflow:
   engine:
     profile: ${OPENWORKFLOW_ENGINE_PROFILE:kafka-streams}

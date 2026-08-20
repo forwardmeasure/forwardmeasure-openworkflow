@@ -24,7 +24,7 @@ quarkus:
     application-type: service
   hibernate-orm:
     multitenant: SCHEMA
-    packages: com.forwardmeasure.jpa.identity.entity,com.forwardmeasure.openworkflow.definition.persistence
+    packages: com.forwardmeasure.jpa.identity.entity,com.forwardmeasure.openworkflow.definition.domain.entity
     schema-management:
       strategy: none
 openworkflow:

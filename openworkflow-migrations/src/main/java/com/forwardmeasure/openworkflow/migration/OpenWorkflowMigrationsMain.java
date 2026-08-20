@@ -10,7 +10,6 @@
  */
 package com.forwardmeasure.openworkflow.migration;
 
-import com.datastax.oss.driver.api.core.CqlSession;
 import com.forwardmeasure.jpa.tenancy.TenantId;
 import java.io.PrintWriter;
 import java.net.InetSocketAddress;
@@ -20,6 +19,8 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.SQLFeatureNotSupportedException;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 import java.util.logging.Logger;
 import javax.sql.DataSource;
 
@@ -46,14 +47,13 @@ public final class OpenWorkflowMigrationsMain {
     if (contactPoints == null) {
       return;
     }
-    var builder =
-        CqlSession.builder()
-            .withLocalDatacenter(required("OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER"));
-    Arrays.stream(contactPoints.split(","))
-        .map(String::trim)
-        .filter(value -> !value.isEmpty())
-        .map(OpenWorkflowMigrationsMain::contactPoint)
-        .forEach(builder::addContactPoint);
+    String localDatacenter = required("OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER");
+    List<InetSocketAddress> endpoints =
+        Arrays.stream(contactPoints.split(","))
+            .map(String::trim)
+            .filter(value -> !value.isEmpty())
+            .map(OpenWorkflowMigrationsMain::contactPoint)
+            .toList();
     String username = optional("OPENWORKFLOW_CASSANDRA_USERNAME");
     String password = optional("OPENWORKFLOW_CASSANDRA_PASSWORD");
     if ((username == null) != (password == null)) {
@@ -61,17 +61,24 @@ public final class OpenWorkflowMigrationsMain {
           "OPENWORKFLOW_CASSANDRA_USERNAME and OPENWORKFLOW_CASSANDRA_PASSWORD must be supplied"
               + " together");
     }
-    if (username != null) {
-      builder.withAuthCredentials(username, password);
-    }
-    try (CqlSession session = builder.build()) {
-      String applicationKeyspace = optional("OPENWORKFLOW_CASSANDRA_APPLICATION_KEYSPACE");
-      OpenWorkflowCassandraMigrator.migrate(
-          session,
-          applicationKeyspace == null
-              ? OpenWorkflowCassandraMigrator.DEFAULT_APPLICATION_KEYSPACE
-              : applicationKeyspace);
-    }
+    String applicationKeyspace = optional("OPENWORKFLOW_CASSANDRA_APPLICATION_KEYSPACE");
+    String migrationKeyspace = optional("OPENWORKFLOW_CASSANDRA_MIGRATION_KEYSPACE");
+    String configuredReplicationFactor = optional("OPENWORKFLOW_CASSANDRA_REPLICATION_FACTOR");
+    int replicationFactor =
+        configuredReplicationFactor == null ? 1 : Integer.parseInt(configuredReplicationFactor);
+    OpenWorkflowCassandraMigrator.migrate(
+        new CassandraMigrationTarget(
+            endpoints,
+            localDatacenter,
+            Optional.ofNullable(username),
+            Optional.ofNullable(password),
+            migrationKeyspace == null
+                ? OpenWorkflowCassandraMigrator.DEFAULT_MIGRATION_KEYSPACE
+                : migrationKeyspace,
+            applicationKeyspace == null
+                ? OpenWorkflowCassandraMigrator.DEFAULT_APPLICATION_KEYSPACE
+                : applicationKeyspace,
+            replicationFactor));
   }
 
   static InetSocketAddress contactPoint(String value) {
@@ -80,7 +87,11 @@ public final class OpenWorkflowMigrationsMain {
       throw new IllegalArgumentException(
           "Cassandra contact point must use host:port syntax: " + value);
     }
-    return new InetSocketAddress(endpoint.getHost(), endpoint.getPort());
+    String host = endpoint.getHost();
+    if (host.startsWith("[") && host.endsWith("]")) {
+      host = host.substring(1, host.length() - 1);
+    }
+    return InetSocketAddress.createUnresolved(host, endpoint.getPort());
   }
 
   private static String required(String name) {

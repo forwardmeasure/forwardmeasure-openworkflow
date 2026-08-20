@@ -20,12 +20,15 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.forwardmeasure.jpa.tenancy.TenantId;
 import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
+import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
+import com.forwardmeasure.openworkflow.definition.WorkflowResourceBundleCodec;
 import com.forwardmeasure.openworkflow.engine.api.ActorId;
 import com.forwardmeasure.openworkflow.engine.api.CommandAcknowledgement;
 import com.forwardmeasure.openworkflow.engine.api.DefinitionRevision;
 import com.forwardmeasure.openworkflow.engine.api.EngineId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionLifecycleState;
+import com.forwardmeasure.openworkflow.engine.api.TenantActorContext;
 import com.forwardmeasure.openworkflow.execution.management.CanonicalExecution;
 import com.forwardmeasure.openworkflow.execution.management.CommandReceipt;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementException;
@@ -68,7 +71,7 @@ class JpaExecutionRepositoryTest {
     migrator.provisionAndMigrate(TENANT_A);
     migrator.provisionAndMigrate(TENANT_B);
     var plan = new OpenWorkflowCompiler().compile(SOURCE.getBytes(StandardCharsets.UTF_8));
-    seedPublishedRevision(database, TENANT_A, plan.definitionSha256());
+    seedPublishedRevision(database, TENANT_A, plan);
 
     try (SessionFactory factory = sessionFactory(database, TENANT_A);
         EntityManager entityManager = factory.createEntityManager()) {
@@ -115,6 +118,50 @@ class JpaExecutionRepositoryTest {
     }
   }
 
+  @Test
+  void resolvesOnlyAnActiveDigestConsistentPublishedRevision(PostgreSqlTestContainer database)
+      throws Exception {
+    new OpenWorkflowTenantMigrator(database.dataSource()).provisionAndMigrate(TENANT_A);
+    var plan = new OpenWorkflowCompiler().compile(SOURCE.getBytes(StandardCharsets.UTF_8));
+    seedPublishedRevision(database, TENANT_A, plan);
+
+    try (SessionFactory factory = sessionFactory(database, TENANT_A);
+        EntityManager entityManager = factory.createEntityManager()) {
+      var resolver = new JpaPublishedWorkflowResolver(TENANT_A, entityManager);
+      var context =
+          new TenantActorContext(
+              engineTenant(TENANT_A), "organization", new ActorId("execution-controller"));
+
+      var publication =
+          resolver.resolveAuthorizedPublished(context, REVISION, "resolve-correlation");
+      assertEquals(REVISION, publication.revision().revisionId());
+      assertEquals(plan.definitionSha256(), publication.revision().definitionSha256());
+      assertEquals(SOURCE, publication.sourceDocument());
+
+      var otherTenantContext =
+          new TenantActorContext(
+              engineTenant(TENANT_B), "organization", new ActorId("execution-controller"));
+      assertThrows(
+          ExecutionManagementException.class,
+          () ->
+              resolver.resolveAuthorizedPublished(
+                  otherTenantContext, REVISION, "cross-tenant-correlation"));
+
+      entityManager.getTransaction().begin();
+      entityManager
+          .createNativeQuery(
+              "update "
+                  + TenantSchema.forTenant(TENANT_A).value()
+                  + ".workflow_publication set definition_digest=?1")
+          .setParameter(1, "c".repeat(64))
+          .executeUpdate();
+      entityManager.getTransaction().commit();
+      assertThrows(
+          ExecutionManagementException.class,
+          () -> resolver.resolveAuthorizedPublished(context, REVISION, "corrupt-publication"));
+    }
+  }
+
   private static CanonicalExecution candidate(
       com.forwardmeasure.openworkflow.definition.WorkflowPlan plan) {
     var tenant = engineTenant(TENANT_A);
@@ -137,10 +184,26 @@ class JpaExecutionRepositoryTest {
   }
 
   private static void seedPublishedRevision(
-      PostgreSqlTestContainer database, TenantId tenantId, String digest) throws SQLException {
+      PostgreSqlTestContainer database, TenantId tenantId, WorkflowPlan plan) throws SQLException {
     String schema = TenantSchema.forTenant(tenantId).value();
     try (var connection = database.dataSource().getConnection();
         var statement = connection.createStatement()) {
+      statement.execute(
+          "truncate table "
+              + schema
+              + ".workflow_execution,"
+              + schema
+              + ".workflow_publication,"
+              + schema
+              + ".workflow_review,"
+              + schema
+              + ".workflow_lifecycle_history,"
+              + schema
+              + ".workflow_definition,"
+              + schema
+              + ".workflow,"
+              + schema
+              + ".actor cascade");
       statement.executeUpdate(
           "insert into "
               + schema
@@ -150,31 +213,40 @@ class JpaExecutionRepositoryTest {
       statement.executeUpdate(
           "insert into "
               + schema
-              + ".workflow_definition (id,uuid,definition_key,display_name) values"
-              + " (1,'20000000-0000-0000-0000-000000000001','persisted','Persisted')");
+              + ".workflow (id,uuid,version,name,title,owner_id) values"
+              + " (1,'20000000-0000-0000-0000-000000000001',0,'persisted','Persisted',1)");
       statement.executeUpdate(
           "insert into "
               + schema
-              + ".workflow_revision"
-              + " (id,uuid,definition_id,revision_number,lifecycle_state,source_document,"
-              + "resolved_document,resolved_resources,specification_version,compiler_profile,source_digest,resolved_digest,author_actor_id)"
+              + ".workflow_definition"
+              + " (id,uuid,version,workflow_id,revision_number,lifecycle_state,source_document,"
+              + "resolved_document,resolved_resources,namespace,document_version,"
+              + "specification_version,compiler_profile,source_digest,resolved_digest,author_actor_id)"
               + " values (1,'"
               + REVISION
-              + "',1,1,'PUBLISHED',$workflow$"
+              + "',0,1,1,'PUBLISHED',$workflow$"
               + SOURCE
               + "$workflow$,$workflow$"
-              + SOURCE
-              + "$workflow$,'[]','1.0.3','default','"
-              + digest
+              + plan.definition()
+              + "$workflow$,$resources$"
+              + WorkflowResourceBundleCodec.encode(plan.resources())
+              + "$resources$,'"
+              + plan.coordinates().namespace()
               + "','"
-              + digest
+              + plan.coordinates().version()
+              + "','"
+              + plan.coordinates().dsl()
+              + "','default','"
+              + plan.sourceSha256()
+              + "','"
+              + plan.definitionSha256()
               + "',1)");
       statement.executeUpdate(
           "insert into "
               + schema
-              + ".workflow_publication (id,revision_id,actor_id,revision_digest) values"
-              + " (1,1,1,'"
-              + digest
+              + ".workflow_publication (id,version,definition_id,actor_id,definition_digest) values"
+              + " (1,0,1,1,'"
+              + plan.definitionSha256()
               + "')");
     }
   }

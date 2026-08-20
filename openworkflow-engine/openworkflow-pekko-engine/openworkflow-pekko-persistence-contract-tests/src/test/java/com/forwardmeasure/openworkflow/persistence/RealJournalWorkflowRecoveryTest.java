@@ -22,6 +22,7 @@ import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.engine.api.ActorIdentity;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionStatus;
+import com.forwardmeasure.openworkflow.migration.CassandraMigrationTarget;
 import com.forwardmeasure.openworkflow.migration.OpenWorkflowCassandraMigrator;
 import com.forwardmeasure.openworkflow.migration.OpenWorkflowTenantMigrator;
 import com.typesafe.config.Config;
@@ -88,7 +89,8 @@ class RealJournalWorkflowRecoveryTest {
               .addContactPoint(address)
               .withLocalDatacenter(cassandra.getLocalDatacenter())
               .build()) {
-        OpenWorkflowCassandraMigrator.migrate(session);
+        OpenWorkflowCassandraMigrator.migrate(
+            CassandraMigrationTarget.unauthenticated(address, cassandra.getLocalDatacenter()));
       }
       String endpoint = address.getHostString() + ':' + address.getPort();
       Config config =

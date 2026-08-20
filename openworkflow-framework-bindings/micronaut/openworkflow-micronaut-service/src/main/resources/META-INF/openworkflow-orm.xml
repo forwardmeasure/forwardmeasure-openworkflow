@@ -14,6 +14,9 @@
     xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence/orm https://jakarta.ee/xml/ns/persistence/orm/orm_3_2.xsd"
     version="3.2">
   <entity class="com.forwardmeasure.jpa.identity.entity.Actor"/>
-  <entity class="com.forwardmeasure.openworkflow.definition.persistence.WorkflowDefinitionEntity"/>
-  <entity class="com.forwardmeasure.openworkflow.definition.persistence.WorkflowRevisionEntity"/>
+  <entity class="com.forwardmeasure.openworkflow.definition.domain.entity.Workflow"/>
+  <entity class="com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowDefinition"/>
+  <entity class="com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowLifecycleHistory"/>
+  <entity class="com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowPublication"/>
+  <entity class="com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowReview"/>
 </entity-mappings>

@@ -38,6 +38,16 @@
             <artifactId>java-driver-core</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.liquibase.ext</groupId>
+            <artifactId>liquibase-cassandra</artifactId>
+        </dependency>
+        <!-- The JDBC wrapper references this type while inspecting ordinary Cassandra metadata,
+        even when Secrets Manager is not configured. Keep it explicit and platform-managed. -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>secretsmanager</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.forwardmeasure.jpa</groupId>
             <artifactId>forwardmeasure-jpa-liquibase</artifactId>
         </dependency>
@@ -63,10 +73,15 @@
                 <groupId>com.google.cloud.tools</groupId>
                 <artifactId>jib-maven-plugin</artifactId>
                 <configuration>
-                    <from><image>eclipse-temurin:25-jre</image></from>
-                    <to><image>forwardmeasure/openworkflow-migrations:1.0.0-SNAPSHOT</image></to>
+                    <from>
+                        <image>eclipse-temurin:25-jre</image>
+                    </from>
+                    <to>
+                        <image>forwardmeasure/openworkflow-migrations:1.0.0-SNAPSHOT</image>
+                    </to>
                     <container>
-                        <mainClass>com.forwardmeasure.openworkflow.migration.OpenWorkflowMigrationsMain</mainClass>
+                        <mainClass>
+                            com.forwardmeasure.openworkflow.migration.OpenWorkflowMigrationsMain</mainClass>
                         <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
                     </container>
                 </configuration>

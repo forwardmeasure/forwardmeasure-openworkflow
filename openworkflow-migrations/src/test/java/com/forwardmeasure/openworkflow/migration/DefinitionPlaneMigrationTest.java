@@ -75,7 +75,8 @@ class DefinitionPlaneMigrationTest {
         var statement =
             connection.prepareStatement(
                 "select table_name from information_schema.tables where table_schema = ? and"
-                    + " (table_name = 'workflow' or table_name like 'workflow\\_%' escape '\\' or"
+                    + " (table_name = 'openworkflow_event_subscription' or table_name = 'workflow'"
+                    + " or table_name like 'workflow\\_%' escape '\\' or"
                     + " table_name like 'pekko_projection_%') order by table_name")) {
       statement.setString(1, schema);
       try (var result = statement.executeQuery()) {

@@ -138,18 +138,19 @@ class JpaExecutionProjectionStoreTest {
       statement.executeUpdate(
           "insert into "
               + schema
-              + ".workflow_definition (id,uuid,definition_key,display_name) values"
-              + " (1,'20000000-0000-0000-0000-000000000001','projection','Projection')");
+              + ".workflow (id,version,uuid,name,title,owner_id) values"
+              + " (1,0,'20000000-0000-0000-0000-000000000001','projection','Projection',1)");
       statement.executeUpdate(
           "insert into "
               + schema
-              + ".workflow_revision (id,uuid,definition_id,revision_number,lifecycle_state,"
-              + "source_document,resolved_document,resolved_resources,specification_version,compiler_profile,source_digest,resolved_digest,author_actor_id)"
-              + " values (1,'30000000-0000-0000-0000-000000000001',1,1,'PUBLISHED',$workflow$"
+              + ".workflow_definition (id,version,uuid,workflow_id,revision_number,lifecycle_state,"
+              + "source_document,resolved_document,resolved_resources,namespace,document_version,"
+              + "specification_version,compiler_profile,source_digest,resolved_digest,author_actor_id)"
+              + " values (1,0,'30000000-0000-0000-0000-000000000001',1,1,'PUBLISHED',$workflow$"
               + SOURCE
               + "$workflow$,$workflow$"
               + SOURCE
-              + "$workflow$,'[]','1.0.3','default','"
+              + "$workflow$,'[]','wp4','1.0.0','1.0.3','default','"
               + plan.sourceSha256()
               + "','"
               + plan.definitionSha256()

@@ -54,6 +54,16 @@
     <dependency>
       <groupId>com.forwardmeasure.jpa</groupId>
       <artifactId>forwardmeasure-jpa-spring</artifactId>
+      <exclusions>
+        <exclusion>
+          <groupId>com.forwardmeasure.jpa</groupId>
+          <artifactId>forwardmeasure-jpa-async-task</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.forwardmeasure.jpa</groupId>
+          <artifactId>forwardmeasure-jpa-locking</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

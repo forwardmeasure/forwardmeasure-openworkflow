@@ -8,21 +8,29 @@
  * BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
  * for the specific language governing permissions and limitations under the License.
  */
-package com.forwardmeasure.openworkflow.service.spring;
+package com.forwardmeasure.openworkflow.migration;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.boot.persistence.autoconfigure.EntityScan;
+import java.net.InetSocketAddress;
+import java.util.List;
+import java.util.Optional;
 
-/** Spring Boot definition-plane host. */
-@SpringBootApplication(scanBasePackages = "com.forwardmeasure.openworkflow")
-@EntityScan(
-    basePackages = {
-      "com.forwardmeasure.jpa.identity.entity",
-      "com.forwardmeasure.openworkflow.definition.domain.entity"
-    })
-public class OpenWorkflowSpringApplication {
+/** Process boundary used to reproduce two independent Kubernetes migration Jobs. */
+public final class CassandraMigrationProcessMain {
+  private CassandraMigrationProcessMain() {}
+
   public static void main(String[] arguments) {
-    SpringApplication.run(OpenWorkflowSpringApplication.class, arguments);
+    if (arguments.length != 5) {
+      throw new IllegalArgumentException(
+          "Expected host, port, local datacenter, migration keyspace and application keyspace");
+    }
+    OpenWorkflowCassandraMigrator.migrate(
+        new CassandraMigrationTarget(
+            List.of(new InetSocketAddress(arguments[0], Integer.parseInt(arguments[1]))),
+            arguments[2],
+            Optional.empty(),
+            Optional.empty(),
+            arguments[3],
+            arguments[4],
+            1));
   }
 }

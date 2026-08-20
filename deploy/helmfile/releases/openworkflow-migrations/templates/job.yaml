@@ -60,8 +60,12 @@ spec:
               value: {{ required "cassandra.contactPoints is required when Cassandra is enabled" .Values.cassandra.contactPoints | quote }}
             - name: OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER
               value: {{ required "cassandra.localDatacenter is required when Cassandra is enabled" .Values.cassandra.localDatacenter | quote }}
+            - name: OPENWORKFLOW_CASSANDRA_MIGRATION_KEYSPACE
+              value: {{ required "cassandra.migrationKeyspace is required when Cassandra is enabled" .Values.cassandra.migrationKeyspace | quote }}
             - name: OPENWORKFLOW_CASSANDRA_APPLICATION_KEYSPACE
               value: {{ required "cassandra.applicationKeyspace is required when Cassandra is enabled" .Values.cassandra.applicationKeyspace | quote }}
+            - name: OPENWORKFLOW_CASSANDRA_REPLICATION_FACTOR
+              value: {{ required "cassandra.replicationFactor is required when Cassandra is enabled" .Values.cassandra.replicationFactor | quote }}
             - name: OPENWORKFLOW_CASSANDRA_USERNAME
               valueFrom:
                 secretKeyRef:

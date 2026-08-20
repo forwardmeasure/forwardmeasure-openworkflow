@@ -77,13 +77,14 @@ public final class JpaExecutionRepository implements ExecutionRepository {
                     + "correlation_id,idempotency_key,started_by_actor_id,input,created_at,updated_at)"
                     + " select ?1,?2,r.id,?3,?4,?5,?6,?7,a.id,cast(?8 as jsonb),?9,?9 from "
                     + schema
-                    + ".workflow_revision r join "
+                    + ".workflow_definition r join "
                     + schema
-                    + ".workflow_publication p on p.revision_id=r.id join "
+                    + ".workflow_publication p on p.definition_id=r.id join "
                     + schema
                     + ".actor a on a.subject_identifier=?10"
                     + " where r.uuid=?11 and r.lifecycle_state='PUBLISHED'"
-                    + " and r.resolved_digest=?3 and p.deprecated_at is null"
+                    + " and r.resolved_digest=?3 and p.definition_digest=?3"
+                    + " and p.deprecated_at is null"
                     + " on conflict (idempotency_key) do nothing")
             .setParameter(1, candidate.executionId().value())
             .setParameter(2, candidate.version())

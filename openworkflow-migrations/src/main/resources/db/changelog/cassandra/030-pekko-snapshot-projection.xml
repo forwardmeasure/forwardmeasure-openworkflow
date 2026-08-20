@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+
+    Licensed to the Apache Software Foundation (ASF) under one or more
+    contributor license agreements. See the NOTICE file distributed with
+    this work for additional information regarding copyright ownership.
+    The ASF licenses this file to You under the Apache License, Version 2.0
+    (the "License"); you may not use this file except in compliance with
+    the License. You may obtain a copy of the License at
+
+        https://www.apache.org/licenses/LICENSE-2.0
+
+    Unless required by applicable law or agreed to in writing, software
+    distributed under the License is distributed on an "AS IS" BASIS,
+    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    See the License for the specific language governing permissions and
+    limitations under the License.
+
+-->
+<databaseChangeLog
+    xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+    <changeSet id="openworkflow-cassandra-030-snapshots" author="forwardmeasure" dbms="cassandra">
+        <sql splitStatements="false">CREATE TABLE IF NOT EXISTS openworkflow_snapshot.snapshots (persistence_id text, sequence_nr bigint, timestamp bigint, ser_id int, ser_manifest text, snapshot_data blob, snapshot blob, meta_ser_id int, meta_ser_manifest text, meta blob, PRIMARY KEY (persistence_id, sequence_nr)) WITH CLUSTERING ORDER BY (sequence_nr DESC) AND gc_grace_seconds = 864000 AND compaction = {'class': 'SizeTieredCompactionStrategy'}</sql>
+    </changeSet>
+    <changeSet id="openworkflow-cassandra-031-projection-offset-store" author="forwardmeasure" dbms="cassandra">
+        <sql splitStatements="false">CREATE TABLE IF NOT EXISTS openworkflow_projection.offset_store (projection_name text, partition int, projection_key text, offset text, manifest text, last_updated timestamp, PRIMARY KEY ((projection_name, partition), projection_key))</sql>
+    </changeSet>
+    <changeSet id="openworkflow-cassandra-032-projection-management" author="forwardmeasure" dbms="cassandra">
+        <sql splitStatements="false">CREATE TABLE IF NOT EXISTS openworkflow_projection.projection_management (projection_name text, partition int, projection_key text, paused boolean, last_updated timestamp, PRIMARY KEY ((projection_name, partition), projection_key))</sql>
+    </changeSet>
+</databaseChangeLog>

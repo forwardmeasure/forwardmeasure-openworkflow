@@ -131,7 +131,7 @@ class WorkflowDefinitionDraftMutabilityTest {
         connection.prepareStatement(
             "insert into "
                 + schema
-                + ".workflow (id, uuid, version, name, title, owner_actor_id) values"
+                + ".workflow (id, uuid, version, name, title, owner_id) values"
                 + " (nextval('"
                 + schema
                 + ".workflow_id_seq'), ?, 0, ?, 'Draft mutability test', ?) returning id")) {

@@ -60,9 +60,15 @@
         <archunit.version>1.4.1</archunit.version>
         <jackson.jq.version>1.6.2</jackson.jq.version>
         <json.schema.validator.version>2.0.4</json.schema.validator.version>
+        <liquibase.cassandra.version>5.0.3</liquibase.cassandra.version>
         <!-- Product-specific quality plugins not owned by the shared Java parent. -->
         <apache.rat.version>0.17</apache.rat.version>
         <duplicate.finder.version>2.0.1</duplicate.finder.version>
+
+        <!-- Product-wide aggregate coverage contract. -->
+        <jacoco.minimum.line.coverage>0.85</jacoco.minimum.line.coverage>
+        <jacoco.minimum.branch.coverage>0.75</jacoco.minimum.branch.coverage>
+        <jacoco.maximum.missed.classes>0</jacoco.maximum.missed.classes>
     </properties>
 
     <!-- The product reactor aggregates capabilities; each capability owns its leaf modules. -->
@@ -82,6 +88,7 @@
         <module>openworkflow-studio</module>
         <module>openworkflow-framework-bindings</module>
         <module>openworkflow-architecture-tests</module>
+        <module>openworkflow-coverage</module>
     </modules>
 
     <dependencyManagement>
@@ -130,6 +137,24 @@
                 <groupId>com.networknt</groupId>
                 <artifactId>json-schema-validator</artifactId>
                 <version>${json.schema.validator.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.liquibase.ext</groupId>
+                <artifactId>liquibase-cassandra</artifactId>
+                <version>${liquibase.cassandra.version}</version>
+                <exclusions>
+                    <!-- Optional cloud-provider integrations are published as mandatory transitives
+                    by the Cassandra JDBC wrapper. OKS uses ordinary Cassandra credentials here;
+                    provider-specific authentication belongs in a separate deployment binding. -->
+                    <exclusion>
+                        <groupId>software.aws.mcs</groupId>
+                        <artifactId>aws-sigv4-auth-cassandra-java-driver-plugin</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>secretsmanager</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
@@ -459,6 +484,71 @@
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-operation-adapter-runner</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-quarkus</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-spring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-definition-management-micronaut</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-quarkus-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-quarkus-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-spring-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-spring-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-micronaut-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-micronaut-service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-studio-quarkus</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-studio-spring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-studio-micronaut</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-studio-webapp</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>

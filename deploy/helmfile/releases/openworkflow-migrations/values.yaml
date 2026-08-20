@@ -33,7 +33,9 @@ cassandra:
   enabled: true
   contactPoints: cassandra:9042
   localDatacenter: datacenter1
+  migrationKeyspace: openworkflow_migrations
   applicationKeyspace: openworkflow_application
+  replicationFactor: 1
   credentialsSecret:
     name: openworkflow-foundation
     usernameKey: OPENWORKFLOW_CASSANDRA_USERNAME

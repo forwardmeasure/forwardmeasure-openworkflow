@@ -35,6 +35,8 @@ kafka:
 pekko:
   cassandraEndpoint: {{ requiredEnv "OPENWORKFLOW_PEKKO_CASSANDRA_ENDPOINT" | quote }}
   cassandraLocalDatacenter: {{ requiredEnv "OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER" | quote }}
+  cassandraMigrationKeyspace: {{ env "OPENWORKFLOW_CASSANDRA_MIGRATION_KEYSPACE" | default "openworkflow_migrations" | quote }}
+  cassandraReplicationFactor: {{ requiredEnv "OPENWORKFLOW_CASSANDRA_REPLICATION_FACTOR" }}
 operations:
   httpEgressAllowlist: {{ requiredEnv "OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST" | quote }}
 definitionResources:

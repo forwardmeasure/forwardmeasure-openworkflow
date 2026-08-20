@@ -21,10 +21,14 @@ import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.openworkflow.definition.domain.entity.Workflow;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowDefinition;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowLifecycleHistory;
+import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowLifecycleState;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowPublication;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowReview;
 import com.forwardmeasure.openworkflow.definition.management.domain.repository.jpa.JpaWorkflowDefinitionRepository;
+import com.forwardmeasure.openworkflow.definition.management.domain.repository.jpa.JpaWorkflowLifecycleHistoryRepository;
+import com.forwardmeasure.openworkflow.definition.management.domain.repository.jpa.JpaWorkflowPublicationRepository;
 import com.forwardmeasure.openworkflow.definition.management.domain.repository.jpa.JpaWorkflowRepository;
+import com.forwardmeasure.openworkflow.definition.management.domain.repository.jpa.JpaWorkflowReviewRepository;
 import com.forwardmeasure.openworkflow.migration.OpenWorkflowTenantMigrator;
 import com.forwardmeasure.testcontainers.junit.postgresql.WithPostgreSqlContainer;
 import com.forwardmeasure.testcontainers.postgresql.PostgreSqlTestContainer;
@@ -66,6 +70,89 @@ class WorkflowDefinitionRepositoryTest {
         assertTrue(workflows.findById(workflowId).isEmpty());
       }
     }
+  }
+
+  @Test
+  void persistsTheCompleteGovernanceHistoryAndOneImmutablePublication(
+      PostgreSqlTestContainer database) {
+    new OpenWorkflowTenantMigrator(database.dataSource()).provisionAndMigrate(TENANT_A);
+
+    try (SessionFactory factory = sessionFactory(database, TENANT_A);
+        EntityManager entityManager = factory.createEntityManager()) {
+      entityManager.getTransaction().begin();
+      var workflows = new JpaWorkflowRepository(entityManager);
+      var definitions = new JpaWorkflowDefinitionRepository(entityManager);
+      var reviews = new JpaWorkflowReviewRepository(entityManager);
+      var publications = new JpaWorkflowPublicationRepository(entityManager);
+      var history = new JpaWorkflowLifecycleHistoryRepository(entityManager);
+      Workflow workflow =
+          workflows.create("author", "governed-flow", "Governed flow", "Governance test");
+      WorkflowDefinition definition =
+          definitions.create(
+              workflow,
+              definitions.nextRevisionNumber(workflow),
+              "author",
+              "document: source",
+              "document: resolved",
+              "[]",
+              "tests",
+              "1.0.0",
+              "1.0.3",
+              "default",
+              "a".repeat(64),
+              "b".repeat(64));
+      history.record(
+          definition, null, WorkflowLifecycleState.DRAFT, "author", "create-correlation");
+      definition.transitionTo(WorkflowLifecycleState.IN_REVIEW);
+      history.record(
+          definition,
+          WorkflowLifecycleState.DRAFT,
+          WorkflowLifecycleState.IN_REVIEW,
+          "author",
+          "submit-correlation");
+      reviews.record(definition, "APPROVED", "reviewer", definition.getResolvedDigest(), "safe");
+      definition.transitionTo(WorkflowLifecycleState.APPROVED);
+      history.record(
+          definition,
+          WorkflowLifecycleState.IN_REVIEW,
+          WorkflowLifecycleState.APPROVED,
+          "reviewer",
+          "approve-correlation");
+      definition.transitionTo(WorkflowLifecycleState.PUBLISHED);
+      publications.publish(definition, "publisher", definition.getResolvedDigest());
+      history.record(
+          definition,
+          WorkflowLifecycleState.APPROVED,
+          WorkflowLifecycleState.PUBLISHED,
+          "publisher",
+          "publish-correlation");
+      UUID workflowId = workflow.getUuid();
+      UUID definitionId = definition.getUuid();
+      entityManager.getTransaction().commit();
+
+      entityManager.clear();
+      Workflow reloadedWorkflow = workflows.findById(workflowId).orElseThrow();
+      WorkflowDefinition reloaded =
+          definitions.findByWorkflowAndUuid(reloadedWorkflow, definitionId).orElseThrow();
+      assertEquals(WorkflowLifecycleState.PUBLISHED, reloaded.getLifecycleState());
+      assertEquals("author", reloaded.getAuthor().getSubjectIdentifier());
+      assertEquals("publisher", reloaded.getPublication().getActor().getSubjectIdentifier());
+      assertEquals(1, definitions.search(WorkflowLifecycleState.PUBLISHED, 0, 20).totalItems());
+      assertEquals(1L, count(entityManager, WorkflowReview.class));
+      assertEquals(1L, count(entityManager, WorkflowPublication.class));
+      assertEquals(4L, count(entityManager, WorkflowLifecycleHistory.class));
+
+      entityManager.getTransaction().begin();
+      reloaded.getPublication().deprecate();
+      entityManager.getTransaction().commit();
+      assertTrue(reloaded.getPublication().getDeprecatedAt() != null);
+    }
+  }
+
+  private static long count(EntityManager entityManager, Class<?> type) {
+    return entityManager
+        .createQuery("select count(entity) from " + type.getSimpleName() + " entity", Long.class)
+        .getSingleResult();
   }
 
   private static UUID persistWorkflowAndDefinition(SessionFactory factory) {

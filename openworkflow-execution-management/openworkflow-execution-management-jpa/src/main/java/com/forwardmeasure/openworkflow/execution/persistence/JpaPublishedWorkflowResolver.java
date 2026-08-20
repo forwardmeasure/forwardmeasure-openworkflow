@@ -51,12 +51,12 @@ public final class JpaPublishedWorkflowResolver implements PublishedWorkflowReso
         entityManager
             .createNativeQuery(
                 "select"
-                    + " r.source_document,r.resolved_document,r.resolved_resources,r.resolved_digest,p.revision_digest,w.uuid"
+                    + " r.source_document,r.resolved_document,r.resolved_resources,r.resolved_digest,p.definition_digest,w.uuid"
                     + " from "
                     + schema
                     + ".workflow_definition r join "
                     + schema
-                    + ".workflow_publication p on p.revision_id=r.id join "
+                    + ".workflow_publication p on p.definition_id=r.id join "
                     + schema
                     + ".workflow w on w.id=r.workflow_id"
                     + " where r.uuid=?1 and r.lifecycle_state='PUBLISHED'"
