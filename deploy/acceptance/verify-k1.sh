@@ -19,18 +19,20 @@
 set -euo pipefail
 
 namespace=forwardmeasure-openworkflow
+identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
+identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 local_port=${OPENWORKFLOW_K1_KEYCLOAK_PORT:-18080}
 keycloak_url="http://127.0.0.1:${local_port}"
 tenant_a=11111111-1111-1111-1111-111111111111
 tenant_b=22222222-2222-2222-2222-222222222222
 
 kubectl -n "$namespace" rollout status deployment/postgresql --timeout=120s
-kubectl -n "$namespace" rollout status deployment/keycloak --timeout=180s
+kubectl -n "$identity_namespace" rollout status statefulset/"$identity_service" --timeout=180s
 kubectl -n "$namespace" wait --for=condition=complete job/openworkflow-tenant-reconciliation --timeout=120s
 kubectl -n "$namespace" wait --for=condition=complete job/openworkflow-migrations --timeout=120s
 
 port_forward_log=$(mktemp)
-kubectl -n "$namespace" port-forward service/keycloak "${local_port}:8080" >"$port_forward_log" 2>&1 &
+kubectl -n "$identity_namespace" port-forward service/"$identity_service" "${local_port}:8080" >"$port_forward_log" 2>&1 &
 port_forward_pid=$!
 trap 'kill "$port_forward_pid" 2>/dev/null || true; rm -f "$port_forward_log"' EXIT
 

@@ -8,6 +8,8 @@
 set -euo pipefail
 
 namespace=forwardmeasure-openworkflow
+identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
+identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 runtime=${OPENWORKFLOW_K3A_RUNTIME:-openworkflow-pekko-postgresql}
 service=${OPENWORKFLOW_ACCEPTANCE_SERVICE:-$runtime}
 disruption_runtime=${OPENWORKFLOW_ACCEPTANCE_DISRUPTION_RUNTIME:-$runtime}
@@ -27,7 +29,7 @@ trap cleanup EXIT
 kubectl -n "$namespace" rollout status deployment/"$runtime" --timeout=180s
 gateway=$(kubectl -n "$namespace" get pods -l "$runtime_selector" \
   -o jsonpath='{.items[0].metadata.name}')
-kubectl -n "$namespace" port-forward service/keycloak "${keycloak_port}:8080" >"$work/keycloak.log" 2>&1 &
+kubectl -n "$identity_namespace" port-forward service/"$identity_service" "${keycloak_port}:8080" >"$work/keycloak.log" 2>&1 &
 keycloak_pid=$!
 service_target="service/$service"
 if [[ "$service" == "$runtime" ]]; then

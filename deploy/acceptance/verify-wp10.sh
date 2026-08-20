@@ -17,11 +17,13 @@
 set -euo pipefail
 
 namespace=${OPENWORKFLOW_NAMESPACE:-forwardmeasure-openworkflow}
+identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
+identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 local_port=${OPENWORKFLOW_KEYCLOAK_PORT:-18081}
 base="http://127.0.0.1:${local_port}"
 policy=${OPENWORKFLOW_ENTITY_POLICY:-config/keycloak/entity-intelligence-capability-pack-v1.json}
 
-kubectl -n "$namespace" port-forward svc/keycloak "${local_port}:8080" >/tmp/openworkflow-wp10-port-forward.log 2>&1 &
+kubectl -n "$identity_namespace" port-forward svc/"$identity_service" "${local_port}:8080" >/tmp/openworkflow-wp10-port-forward.log 2>&1 &
 forward_pid=$!
 trap 'kill "$forward_pid" 2>/dev/null || true' EXIT
 for _ in $(seq 1 30); do

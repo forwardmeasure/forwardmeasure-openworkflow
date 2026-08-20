@@ -23,7 +23,12 @@ releases:
       - keycloak:
           url: {{ dig "keycloak" "url" "http://keycloak:8080" .Values | quote }}
         credentialsSecretName: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
+        image:
+          repository: {{ .Values.imageVersions.alpine.repository | quote }}
+          tag: {{ .Values.imageVersions.alpine.tag | quote }}
+          digest: {{ .Values.imageVersions.alpine.digest | quote }}
     labels:
+      stage: definitions
       checkpoint: k2
       component: security
 {{- range $framework := list "quarkus" "spring" "micronaut" }}
@@ -38,9 +43,12 @@ releases:
       - ../releases/openworkflow-definition-service/base.yaml.gotmpl
       - framework: {{ $framework }}
         image:
-          repository: forwardmeasure/openworkflow-definition-{{ $framework }}
-          tag: {{ $.Values.openworkflowVersion | quote }}
+          repository: {{ index $.Values.imageVersions.definition.repositories $framework | quote }}
+          tag: {{ $.Values.imageVersions.definition.tag | quote }}
+          digest: {{ index $.Values.imageVersions.definition.digests $framework | quote }}
+          pullPolicy: {{ $.Values.imagePullPolicy }}
     labels:
+      stage: definitions
       checkpoint: K3B
       framework: {{ $framework }}
 {{- end }}

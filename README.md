@@ -5,6 +5,10 @@ Workflow Specification. It provides a common definition, governance, security,
 API, query, Studio, and deployment plane with selectable Apache Kafka Streams
 and Apache Pekko execution engines.
 
+Keycloak is shared platform infrastructure. This repository consumes its URL,
+issuer, realm, client, and projected credentials, but does not deploy or own the
+Keycloak workload.
+
 The [project manifesto](PROJECT_MANIFESTO.md) defines the governing product and
 architecture decisions. The [unification and enhancement
 plan](IMPLEMENTATION_PLAN.md) defines their delivery order and acceptance

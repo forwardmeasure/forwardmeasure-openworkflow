@@ -34,6 +34,10 @@
             <scope>runtime</scope>
         </dependency>
         <dependency>
+            <groupId>org.apache.cassandra</groupId>
+            <artifactId>java-driver-core</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.forwardmeasure.jpa</groupId>
             <artifactId>forwardmeasure-jpa-liquibase</artifactId>
         </dependency>
@@ -45,6 +49,11 @@
         <dependency>
             <groupId>com.forwardmeasure.testcontainers</groupId>
             <artifactId>forwardmeasure-testcontainers-junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-cassandra</artifactId>
             <scope>test</scope>
         </dependency>
     </dependencies>

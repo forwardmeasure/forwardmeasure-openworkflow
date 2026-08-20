@@ -2,7 +2,9 @@
 # agreements. See the NOTICE file distributed with this work for additional information regarding
 # copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
 image:
-  tag: {{ .Values.openworkflowVersion | quote }}
+  repository: {{ .Values.imageVersions.kafkaRuntime.repository | quote }}
+  tag: {{ .Values.imageVersions.kafkaRuntime.tag | quote }}
+  digest: {{ .Values.imageVersions.kafkaRuntime.digest | quote }}
   pullPolicy: {{ .Values.imagePullPolicy }}
 replicas: {{ dig "replicas" "runtime" 3 .Values }}
 database:

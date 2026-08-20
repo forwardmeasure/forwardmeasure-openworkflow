@@ -142,10 +142,291 @@ substantive changes, and passing focused test to the adoption log at the end of 
 | OAE/OKS migration behavior as requirements input; published `forwardmeasure-jpa-liquibase:1.0.0` | `openworkflow-migrations/**` | Newly authored deployment-owned tenant schema runner. Schema identifiers come only from `forwardmeasure-jpa` `TenantSchema`; the composed Liquibase changelog includes the published JPA foundation and the OpenWorkflow common changelog. | `./mvnw -Pfocused -pl openworkflow-migrations -am test` |
 | OAE/OKS definition-management persistence behavior as requirements input; published `forwardmeasure-jpa-core:1.0.0` and `forwardmeasure-testcontainers` BOM | `openworkflow-definition-management/openworkflow-definition-management-jpa/**`, `openworkflow-migrations/src/main/resources/db/changelog/openworkflow-common.xml` | Newly authored tenant-schema JPA definitions/revisions and repositories plus validation, review, publication, lifecycle-history tables. Revision content is protected by an immutable SHA-256 identity and a PostgreSQL update-rejection trigger; actor references use the common per-tenant actor table. | `./mvnw -Pfocused clean verify` (120 tests, including real PostgreSQL migration idempotency, tenant isolation, lifecycle-state update, and immutable-content rejection) |
 | OKS `oks-operation-adapter/oks-operation-adapter-api/src/**` and `oks-operation-adapter/oks-operation-adapter-http/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-api/src/**` and `openworkflow-operation-adapter/openworkflow-operation-adapter-http/src/**` | Retained reviewed HTTP/OpenAPI request construction, parameter serialization, digest authentication, endpoint policy, and response/error behavior as a temporary Kafka compatibility edge; migrated Jackson 2.22 APIs and Java 25 serialization warnings. The API's old OKS runtime coupling is not treated as the common product boundary. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-http -am test` (19 adapter tests) |
-| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-core/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-core/src/**` | Refactored portable HTTP, authentication, egress, secret, timeout, AsyncAPI HTTP/WebSocket/SSE, protocol-routing, and durable outbox behavior onto the common engine identities/descriptors; adapted legacy DID fixtures to canonical UUID tenant identity and migrated Jackson 2.22 iteration APIs. Pekko projection version ownership moved to `forwardmeasure-java-parent`. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-core -am test` (19 adapter tests; 208 upstream tests) |
-| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-grpc/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-grpc/src/**` | Retained dynamic transport from the persisted pinned proto, all four gRPC interaction modes, durable observation/backpressure, owned cancellation, egress enforcement, and expression/secret-backed authentication. Centralized the coherent gRPC/protobuf/Guava/Gson/Error Prone stack in `forwardmeasure-java-parent`; no protocol version is owned by the product module. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-grpc -am test` |
-| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-{amqp,cloud,jms,kafka,mqtt,nats,pulsar,redis,stomp}/src/**` | Matching `openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-*/src/**` modules | Retained specification-backed publish/subscribe transports, durable observation acknowledgements, owned cancellation, protocol authentication, and egress policy. Migrated Jackson, Kafka 4.3, NATS, and Lettuce APIs under the Java 25 warning gate; centralized every client-stack version and convergence override in `forwardmeasure-java-parent`. | Focused `-pl` reactor tests for all nine AsyncAPI transport modules with `-am test` |
-| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-{postgresql,cassandra}/src/**` | Matching unified persistence-specific operation-outbox modules | Retained the durable-offset Pekko HTTP and protocol projections, combined duplicate launch code, added mandatory AuthZEN decorators, and composed the complete protocol routing table in the Quarkus Pekko host. Projection artifact versions are centralized in `forwardmeasure-java-parent`. | Persistence outbox compile gate, operation authorization tests, Pekko wire golden, Quarkus affected-reactor and architecture tests |
+| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-core/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-core/src/**` | Refactored portable HTTP, authentication, egress, secret, timeout, AsyncAPI HTTP/WebSocket/SSE, protocol-routing, and durable outbox behavior onto the common engine identities/descriptors; adapted legacy DID fixtures to canonical UUID tenant identity and migrated Jackson 2.22 iteration APIs. Pekko projection version ownership moved to `forwardmeasure-platform`. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-core -am test` (19 adapter tests; 208 upstream tests) |
+| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-grpc/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-grpc/src/**` | Retained dynamic transport from the persisted pinned proto, all four gRPC interaction modes, durable observation/backpressure, owned cancellation, egress enforcement, and expression/secret-backed authentication. Centralized the coherent gRPC/protobuf/Guava/Gson/Error Prone stack in `forwardmeasure-platform`; no protocol version is owned by the product module. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-grpc -am test` |
+| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-{amqp,cloud,jms,kafka,mqtt,nats,pulsar,redis,stomp}/src/**` | Matching `openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-*/src/**` modules | Retained specification-backed publish/subscribe transports, durable observation acknowledgements, owned cancellation, protocol authentication, and egress policy. Migrated Jackson, Kafka 4.3, NATS, and Lettuce APIs under the Java 25 warning gate; centralized every client-stack version and convergence override in `forwardmeasure-platform`. | Focused `-pl` reactor tests for all nine AsyncAPI transport modules with `-am test` |
+| OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-{postgresql,cassandra}/src/**` | Matching unified persistence-specific operation-outbox modules | Retained the durable-offset Pekko HTTP and protocol projections, combined duplicate launch code, added mandatory AuthZEN decorators, and composed the complete protocol routing table in the Quarkus Pekko host. Projection artifact versions are centralized in `forwardmeasure-platform`. | Persistence outbox compile gate, operation authorization tests, Pekko wire golden, Quarkus affected-reactor and architecture tests |
 | OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-agent-protocols/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-agent-protocols/src/**` | Retained A2A agent-card security negotiation, JSON-RPC HTTP, MCP HTTP session initialization, and policy-allowlisted MCP stdio; adapted canonical UUID tenant headers and current Jackson/resource-consumption APIs. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-agent-protocols -am test` |
 | OAE `openworkflow-operation-adapter/openworkflow-operation-adapter-runner/src/**` | `openworkflow-operation-adapter/openworkflow-operation-adapter-runner/src/**` | Retained policy-constrained local-process and digest-pinned OCI run semantics, detached/await modes, bounded output, environment/volume/port controls, cancellation, and durable observations; adapted canonical UUID tenant propagation and current Jackson iteration APIs. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-runner -am test` |
 | OKS `oks-operation-adapter/oks-operation-adapter-kafka/src/main/**` and the committed-effect HTTP integration scenario | `openworkflow-operation-adapter/openworkflow-operation-adapter-kafka/**` | Retained the external, asynchronous Kafka dispatcher with committed-effect consumption, definition-resource cache, checkpoints, bounded in-flight work, correlated durable observation commands, stable idempotency, dead letters, and offset-after-observation semantics. Replaced the discarded permissive security SPI with newly authored mandatory AuthZEN operation authorization, trusted Organization/role propagation, mounted tenant-secret resolution, fail-closed HTTP egress, ephemeral credential destruction, and a host-neutral lifecycle wired into all three Kafka hosts without importing Pekko. | `./mvnw -s .mvn/central-settings.xml -pl openworkflow-operation-adapter/openworkflow-operation-adapter-kafka -am test` (focused security/wire tests plus real Redpanda and real HTTP target) |
+
+## Correction decisions — definition/execution/query rework (2026-08-18)
+
+The row above ("OAE/OKS definition-management persistence behavior... Newly authored
+tenant-schema JPA definitions/revisions and repositories plus validation, review,
+publication, lifecycle-history tables") overstates what was actually delivered: the
+`workflow_validation`/`workflow_review`/`workflow_publication`/`workflow_lifecycle_history`
+tables it names have no `@Entity` classes at all — `JpaDefinitionRepository` writes
+them through hand-built `EntityManager.createNativeQuery(...)` string SQL (8 call
+sites), including a raw `actor` table upsert that duplicates published
+`forwardmeasure-jpa-identity` `ActorRepository`/`ActorService` behavior instead of
+using it. The same defect was independently confirmed in
+`openworkflow-execution-management-jpa` (`JpaExecutionRepository`) and
+`openworkflow-execution-query-jpa` (`JpaExecutionQueryRepository`/
+`JpaExecutionProjectionStore`/`JpaTenantRoutingExecutionStore`) — a systemic pattern
+across all three capability modules with real code, not an isolated regression. A
+correction plan for all three (`/home/pn/.claude/plans/sorted-wondering-hoare.md`)
+was reviewed and approved by the product owner on 2026-08-18. Decisions recorded here
+so a later session does not re-litigate them:
+
+- **Do not port OKS's JPA entity classes for definition-management.** OKS's own
+  `WorkflowEntity` maps to table `workflow`; its `WorkflowDefinitionEntity` maps to
+  table `workflow_definition` meaning "one row per version." The unified repo's own
+  already-migrated `workflow_definition` table means "stable container" (with
+  `workflow_revision` as the version table) — same table name, incompatible shape.
+  Porting OKS's classes verbatim would corrupt the already-correct, already-applied
+  schema. OKS contributes HTTP addressing (`workflowId`/`definitionId`) and the
+  lifecycle-operation contract shape only.
+- **`ManagedWorkflowRevision` (definition-management's hand-written domain record) is
+  removed**, not preserved. New rule (also proposed as a `PROJECT_MANIFESTO.md` §3.6
+  amendment): a canonical/domain type distinct from both the JPA entity and the
+  generated API DTO is introduced only when the same object must cross a boundary a
+  direct entity-to-DTO MapStruct mapping cannot serve (used by code that must not
+  depend on JPA at all, such as an `ExecutionEngineProvider` implementation;
+  constructed before a durable row exists; or serialized onto a non-JPA transport).
+  `ManagedWorkflowRevision` fails this test (grepped: consumed only inside
+  `openworkflow-definition-management`'s own jpa/application/jaxrs code) and is
+  replaced by a MapStruct mapper going directly from `WorkflowRevisionEntity`/
+  `WorkflowDefinitionEntity` to the generated DTOs, matching the established pattern
+  already in production at `/home/pn/Documents/code/forwardmeasure/entity-intelligence`
+  (`EvidenceApiMapper`). `CanonicalExecution` (execution-management) passes the test
+  — it is dispatched to `ExecutionEngineProvider.submit(...)`, whose Pekko/Kafka
+  Streams implementations have no JPA dependency — and is kept.
+- **`prevent_workflow_revision_content_update()` (the Postgres immutability trigger)
+  is relaxed, not left as-is.** It previously blocked content changes at every
+  lifecycle state, including DRAFT. OKS's `updateWorkflowDefinition` operation
+  (`UpdateWorkflowDefinitionRequest{source}`, "Update a draft workflow definition")
+  is kept and requires DRAFT-state content mutation to be legal; the trigger now
+  allows content changes only while `OLD.lifecycle_state = 'DRAFT'`, raising once a
+  revision has left DRAFT. Identity (`definition_id`, `revision_number`) and
+  authorship (`author_actor_id`) remain unconditionally immutable at every lifecycle
+  state, including DRAFT — only the content columns gained the DRAFT exception.
+  Manifesto §3.5's "editing or rejection produces a new revision" governs post-review
+  integrity, not an unsubmitted draft. Since no environment runs this schema yet, the
+  fix is folded directly into the existing changesets (`openworkflow-130` through
+  `-160` gained their `version` column inline in the original `createTable`;
+  `openworkflow-270`'s existing trigger redefinition carries the final DRAFT-aware
+  logic directly) rather than appended as new additive/ALTER-style changesets — there
+  is no deployed state to preserve compatibility with. Verified with a new
+  `WorkflowRevisionDraftMutabilityTest` (real PostgreSQL via Testcontainers) proving
+  DRAFT content edits succeed, non-DRAFT content edits raise, and identity/authorship
+  edits raise regardless of state; `DefinitionPlaneMigrationTest`'s changeset-count
+  assertion stays at 25 (unchanged) since nothing was appended.
+- **No execution-management/execution-query contract split.** Considered (following
+  OAE's precedent of separate control/query contracts) and rejected: manifesto §3.13
+  assigns query *persistence/projection code* ownership to
+  `openworkflow-execution-query`, not a separate public contract file, and OAE is a
+  weak precedent given the rest of its API design was independently rejected this
+  session for being under-scoped. `openworkflow-execution-management/openapi/
+  execution.openapi.yaml` stays one file covering both control and query operations.
+- **Consumer grep re-run 2026-08-18**, confirming no new coupling since WP0
+  inventory: outside `openworkflow-definition-management/`, only the three
+  framework-binding composition roots reference its types —
+  `openworkflow-framework-bindings/quarkus/openworkflow-quarkus-binding/.../
+  {OpenWorkflowQuarkusBinding,QuarkusDefinitionManagementResource,
+  QuarkusDefinitionManagementOperations}.java`;
+  `openworkflow-framework-bindings/spring/openworkflow-spring-binding/.../
+  OpenWorkflowSpringBinding.java`; `openworkflow-framework-bindings/micronaut/
+  openworkflow-micronaut-binding/.../{OpenWorkflowMicronautBinding,
+  OpenWorkflowMicronautSerde,MicronautDefinitionManagementController,
+  MicronautDefinitionManagementOperations}.java`. Also found and not previously
+  recorded: `openworkflow-framework-bindings/micronaut/openworkflow-micronaut-service/
+  src/main/resources/META-INF/openworkflow-orm.xml` explicitly enumerates
+  `WorkflowDefinitionEntity`/`WorkflowRevisionEntity` by fully-qualified class name
+  for Micronaut's Hibernate ORM scanning — the four new entities
+  (`WorkflowValidationEntity`, `WorkflowReviewEntity`, `WorkflowPublicationEntity`,
+  `WorkflowLifecycleHistoryEntity`) must be added to this file or Micronaut will not
+  see them, with no compile-time signal if forgotten.
+
+## OpenAPI 3.1.x resolved (2026-08-18): generator-version bump plus a template patch
+
+Manifesto §3.8 requires OpenAPI 3.1.x. The pinned `openapi-generator-maven-plugin`
+(7.21.0, in `forwardmeasure-platform`) generates broken Java for any schema with
+`additionalProperties: false` under a `3.1.x`-declared document: the `jaxrs-spec`
+generator's `additional_properties.mustache` partial unconditionally emits
+`putAdditionalProperty`/`getAdditionalProperties`/`getAdditionalProperty` methods
+that call `this.put()`/`this.get()`/`return this;` as if the class implemented `Map`,
+gated only on the generator's internal `additionalProperties` truthiness flag — with
+no check that the class declaration was also given `extends HashMap<...>` (a separate
+computation, gated on `parent`). Under OpenAPI 3.1's JSON-Schema-aligned semantics,
+the `additionalProperties` flag is truthy even when the schema says `false`, while
+`parent` correctly stays unset — the two computations disagree, and the result
+doesn't compile. This is a bug in openapi-generator's Java-side `CodegenModel`
+construction, not something a template conditional alone can fix, and it reproduces
+identically on 7.24.0 (the newest version cached locally) — confirmed by an actual
+compile, not just template inspection.
+
+Two changes, both verified end to end with real `mvn clean compile` runs (not
+standalone plugin invocations, which gave false-positive results earlier in this
+investigation because CLI `-D` overrides for the plugin's `configOptions` map
+parameter silently don't apply — trust only real reactor builds for this generator):
+
+1. **`openapi-generator.version` bumped 7.21.0 → 7.24.0** in `forwardmeasure-platform`
+   (root aggregator pom, artifactId `forwardmeasure-platform`). Confirmed
+   safe for every other consumer that actually invokes the plugin without a local
+   override: `forwardmeasure-agents`, `forwardmeasure-nlp`, `forwardmeasure-platform`
+   all rebuild clean (real `mvn clean compile` per repo, not just spec validation).
+   `entity-intelligence` pins its own copy of the property independently and is
+   unaffected either way. This is a shared cross-repo change with real blast radius —
+   product-owner approved before applying it, and each affected sibling repo was
+   individually rebuilt to confirm, not assumed safe.
+2. **A targeted template override**, mirroring the precedent already established in
+   `data-fabric-api-specifications/oas-generator-templates` (that project's own
+   custom `pojo.mustache` also omits `additionalProperties` handling entirely, for
+   the same reason: every schema there is `additionalProperties: false` too, so the
+   accessor methods are never wanted). New file:
+   `openworkflow-api-specifications/oas-generator-templates/additional_properties.mustache`,
+   intentionally emitting nothing, overriding the stock `JavaJaxRS/spec/additional_properties.mustache`
+   partial. Wired into `openworkflow-definition-management-models`'s
+   `openapi-generator-maven-plugin` execution via `<templateDirectory>`. Only the
+   `-models` module needs it — `-server-jaxrs` doesn't generate models,
+   `-client-apachehttp` reuses `-models`'s output, and the TypeScript/Python
+   generators are unrelated toolchains never exposed to this bug. Apply the same
+   `<templateDirectory>` entry to every future capability's `-models` module (or
+   equivalent) rather than rediscovering this.
+
+Both `definition-management.openapi.yaml` and (from this point forward)
+`execution-management.openapi.yaml` are `openapi: 3.1.0`, matching manifesto §3.8
+without any contract-shape compromise.
+
+## execution-management contract centralized and corrected (2026-08-18)
+
+Same treatment as definition-management, contract-and-codegen work only (persistence
+layer is Phase 3, sequenced after definition-management's per the plan). Moved
+`openworkflow-execution-management/openapi/execution.openapi.yaml` to
+`openworkflow-api-specifications/openworkflow-services-api-spec/execution-management.openapi.yaml`
+(21 KB → full contract, `openapi: 3.1.0` from the start, using the already-fixed
+`<templateDirectory>` override) and relocated its five generator modules
+(`openworkflow-execution-{models,server-jaxrs,client-apachehttp,client-typescript,client-python}`)
+under `openworkflow-api-language-bindings/{java,typescript,python}/
+workflow-execution-management-service/...`, mirroring definition-management's move.
+Two real fixes applied, matching the plan and verified by a real `mvn clean compile`
+of all five modules:
+
+- Split the single generic `POST /api/v1/executions/{executionId}/{operation}`
+  (`operation: enum[pause,resume,cancel]`) into three distinct operationIds —
+  `pauseExecution`, `resumeExecution`, `cancelExecution` — each its own path
+  (`/pause`, `/resume`, `/cancel`), matching OKS's precedent of distinct operations
+  rather than a generic action route.
+- Added `Execution.workflowId` (readOnly UUID) alongside the existing `revisionId` so
+  Studio/list views don't need a second lookup to show which workflow an execution
+  belongs to. `revisionId` itself was deliberately *not* renamed to `definitionId`
+  (which would have matched definition-management's new public terminology more
+  closely) — that's real Java/persistence churn belonging to Phase 3's rewrite, not
+  this contract-only pass.
+
+Also brought up to the same completeness bar as definition-management, none of which
+existed in the original: a top-level `security: [BearerAuth]` declaration (the
+original contract had no security scheme at all), consistent `application/problem+json`
+error responses (400/401/403/404/409/412/500) via `common-definitions.yaml` on every
+operation (the original had only bare `404`/`409` with no schema), the shared
+`If-Match` parameter (was previously a bare `integer`, not a quoted-string ETag —
+inconsistent with HTTP's ETag semantics and with definition-management's own
+convention), and a proper `ExecutionHistoryPage{items, next_after_sequence}` wrapper
+replacing a bare unbounded array that had cursor-style query parameters
+(`afterSequence`/`limit`) but no way for a caller to know if more pages existed.
+
+`deploy/acceptance/verify-wp11.sh` and `docs/migration/standalone-migration-map.md`
+both had hardcoded references to the old `openworkflow-{definition,execution}-management/
+openapi/*.yaml` paths (the acceptance script's checks would have started failing
+silently-until-run) — both updated to the new centralized paths; `verify-wp11.sh`
+re-run and confirmed passing.
+
+## Definition-management persistence rebuilt (2026-08-18): steps 5+6 landed together
+
+Plan steps 5 ("new entities and repositories") and 6 (`JpaDefinitionRepository`
+rebuild) landed as one change — Maven compiles `openworkflow-definition-management-jpa`
+as a single unit, so there was no useful intermediate state to commit between them.
+`ManagedWorkflowRevision` removal (the second half of step 6) is **not** included
+here; it is still deferred to its own later pass along with the addressing change
+(step 8), per the plan. `JpaDefinitionRepository`'s external shape (still keyed by
+`(definitionKey, revisionNumber)`, still producing/consuming `ManagedWorkflowRevision`)
+is deliberately unchanged in this pass — only its internals moved off raw SQL.
+
+**Four new entities**, all `extends AbstractBaseEntity<Long>` (version-only optimistic
+lock, no audit/uuid — matching the plan's table), each with its own
+`@SequenceGenerator(allocationSize = 50)` matching the already-migrated pooled
+sequences:
+
+- `WorkflowValidationEntity` (`workflow_validation`) — `@ManyToOne WorkflowRevisionEntity
+  revision`, `valid`, `findings` (`@JdbcTypeCode(SqlTypes.JSON)` over
+  `List<String>`/`jsonb`, matching `data-fabric`'s `Investigation.java` convention),
+  `validatorProfile`, `validatedAt`.
+- `WorkflowReviewEntity` (`workflow_review`) — `revision`, `reviewAction`, `actor`
+  (`@ManyToOne Actor`), `revisionDigest`, nullable `reason`, `createdAt`. Populates the
+  `reason` column that was previously left NULL by the raw-SQL path.
+- `WorkflowPublicationEntity` (`workflow_publication`) — `@OneToOne revision` (unique,
+  matching the existing constraint), `actor`, `revisionDigest`, `publishedAt`, nullable
+  `deprecatedAt`; a `deprecate()` method throws `IllegalStateException` if already
+  deprecated.
+- `WorkflowLifecycleHistoryEntity` (`workflow_lifecycle_history`) — `revision`,
+  nullable `fromState`/`toState` (`WorkflowLifecycleState` enums), `actor`,
+  `correlationId`, `createdAt`.
+
+Matching minimal repositories (`WorkflowValidationRepository`, `WorkflowReviewRepository`,
+`WorkflowLifecycleHistoryRepository` — just `extends AbstractBaseRepository<T,Long>`;
+`WorkflowPublicationRepository` adds `findByRevision(WorkflowRevisionEntity)` used by
+the deprecate path). `WorkflowDefinitionRepository`/`WorkflowRevisionRepository` were
+upgraded from `AbstractBaseRepository` to `AbstractAuditedEntityRepository` per the
+plan (adds `findByUuid`, not yet used outside tests but required before step 8's
+addressing change can land).
+
+**`version` columns**: per the user's explicit "treat all changesets as brand new, no
+ALTER TABLE, no one is using the system" direction, these were folded directly into
+the original `createTable` blocks of changesets `openworkflow-130` through `-160`
+rather than added as new additive changesets — see the migration-consolidation note
+above/below for the full rationale. Total changeset count is unchanged at 20 in
+`openworkflow-common.xml` (25 across the full tenant migration), confirming true
+consolidation, not addition.
+
+**`WorkflowRevisionEntity.authorActorId` (raw `long`) replaced with `Actor author`**
+(`@ManyToOne(fetch = LAZY, optional = false) @JoinColumn(name = "author_actor_id")`) —
+column and FK already existed from the original migration; this was a pure Java-side
+change. The constructor's last parameter changed from `long authorActorId` to
+`Actor author` (null-checked), and `getAuthorActorId()` was replaced with `getAuthor()`.
+
+**`WorkflowActorResolver`** (new) replaces the raw-SQL `on conflict ... do nothing`
+actor upsert with `ActorRepository.findByIdentity("keycloak", subjectIdentifier)
+.orElseGet(() -> provision(...))`. Deliberately does **not** implement the plan's
+originally-sketched "catch-unique-violation-and-reread" fallback for the
+first-request race — documented inline in its Javadoc that a JPA flush failure can
+leave the persistence context unusable for same-transaction recovery, so a
+catch-and-retry there would be unsound, not just unnecessary. This is a considered
+simplification, not an oversight; revisit only if the race is observed in practice.
+Built in `openworkflow-definition-management-jpa` as planned, so Phase 3
+(execution-management) can reuse it via the compile dependency it already needs on
+this module's entities.
+
+**`JpaDefinitionRepository` rewrite** — constructor now builds and binds all six
+repositories plus a `WorkflowActorResolver`, replacing the old direct `EntityManager`
+native-query calls entirely. `save()` resolves the author `Actor` before constructing
+`WorkflowRevisionEntity`; `recordValidation()`/`recordTransition()`/`recordHistory()`
+persist through the typed repositories; `map()` reads
+`entity.getAuthor().getSubjectIdentifier()` to reconstruct the domain
+`authorActorId` string for `ManagedWorkflowRevision`.
+
+**Real bugs found and fixed in the pre-existing `WorkflowDefinitionRepositoryTest`**,
+surfaced by wiring the new entities into its manually-built Hibernate `SessionFactory`:
+its `seedActor()` helper used `identity_type = 'USER'` (not a valid `IdentityType`
+enum value — only `HUMAN`/`SERVICE` exist), left `identity_provider` NULL (would never
+match `WorkflowActorResolver`'s `"keycloak"` lookup), and hardcoded `id = 1` (risking a
+PK collision with the sequence). Removed `seedActor()` and its two call sites entirely,
+letting the new auto-provisioning path in `WorkflowActorResolver` be exercised
+directly instead. `Actor.class` plus the four new entity classes were added to the
+test's manual `addAnnotatedClass(...)` registration chain (a raw
+`org.hibernate.cfg.Configuration`, not a managed persistence unit, so registration
+doesn't happen automatically).
+
+**Two build fixes surfaced along the way**: `forwardmeasure-jpa-identity` was missing
+from `openworkflow-definition-management-jpa/pom.xml` (needed for `Actor`); `hibernate-core`
+was test-scoped, which broke compilation of `WorkflowValidationEntity`'s main-source
+`@JdbcTypeCode`/`SqlTypes` usage — moved to compile scope. Separately,
+`WorkflowValidationEntity.findings` (`List<String>`) triggered a `-Werror` `[serial]`
+lint warning; used `@SuppressWarnings("serial")` with an inline comment rather than
+`transient`, since `transient` would silently stop the field from persisting under
+JPA's field-access strategy.
+
+Verified against real PostgreSQL via Testcontainers:
+`WorkflowDefinitionRepositoryTest` (Tests run: 1, Failures: 0, Errors: 0) and a full
+`mvn test` of the module (exit 0), plus the standing
+`WorkflowRevisionDraftMutabilityTest` from the migration-consolidation step above.

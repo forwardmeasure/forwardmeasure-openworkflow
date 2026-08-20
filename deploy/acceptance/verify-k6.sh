@@ -23,6 +23,8 @@ fi
 
 context=${OPENWORKFLOW_ACCEPTANCE_CONTEXT:-kind-openworkflow-acceptance}
 namespace=${OPENWORKFLOW_ACCEPTANCE_NAMESPACE:-forwardmeasure-openworkflow}
+identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
+identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 service=${OPENWORKFLOW_K6_SERVICE:-openworkflow-definition-quarkus}
 expected_engine=${OPENWORKFLOW_K6_ENGINE:-kafka-streams}
 keycloak_port=$((18100 + RANDOM % 300))
@@ -39,7 +41,7 @@ for fixture in k7-echo k7-event-sink k7-grpcbin k7-nats k7-ctk-fixture; do
   kubectl --context "$context" -n "$namespace" rollout status "deployment/$fixture" --timeout=180s >/dev/null
 done
 kubectl --context "$context" -n "$namespace" rollout status "deployment/$service" --timeout=240s >/dev/null
-kubectl --context "$context" -n "$namespace" port-forward service/keycloak "$keycloak_port:8080" >"$work/keycloak.log" 2>&1 &
+kubectl --context "$context" -n "$identity_namespace" port-forward service/"$identity_service" "$keycloak_port:8080" >"$work/keycloak.log" 2>&1 &
 keycloak_pid=$!
 kubectl --context "$context" -n "$namespace" port-forward "service/$service" "$service_port:8080" >"$work/service.log" 2>&1 &
 service_pid=$!

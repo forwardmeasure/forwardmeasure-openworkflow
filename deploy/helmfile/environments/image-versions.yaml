@@ -1,0 +1,106 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+# Container image coordinates are independent of Helm chart versions. Environment
+# overlays may replace tags or add immutable digests without changing chart versions.
+imageVersions:
+  definition:
+    repositories:
+      quarkus: forwardmeasure/openworkflow-definition-quarkus
+      spring: forwardmeasure/openworkflow-definition-spring
+      micronaut: forwardmeasure/openworkflow-definition-micronaut
+    tag: "1.0.0-SNAPSHOT"
+    digests:
+      quarkus: ""
+      spring: ""
+      micronaut: ""
+
+  studio:
+    repositories:
+      quarkus: forwardmeasure/openworkflow-studio-quarkus
+      spring: forwardmeasure/openworkflow-studio-spring
+      micronaut: forwardmeasure/openworkflow-studio-micronaut
+    tag: "1.0.0-SNAPSHOT"
+    digests:
+      quarkus: ""
+      spring: ""
+      micronaut: ""
+
+  pekkoRuntime:
+    repository: forwardmeasure/openworkflow-definition-quarkus
+    tag: "1.0.0-SNAPSHOT"
+    digest: ""
+
+  kafkaRuntime:
+    repository: forwardmeasure/openworkflow-definition-quarkus
+    tag: "1.0.0-SNAPSHOT"
+    digest: ""
+
+  tenantProvisioning:
+    repository: forwardmeasure/openworkflow-tenant-provisioning
+    tag: "1.0.0-SNAPSHOT"
+    digest: ""
+
+  migrations:
+    repository: forwardmeasure/openworkflow-migrations
+    tag: "1.0.0-SNAPSHOT"
+    digest: ""
+
+  postgresql:
+    repository: postgres
+    tag: "18.0"
+    digest: ""
+
+  cassandra:
+    repository: cassandra
+    tag: "5.0"
+    digest: ""
+
+  redpanda:
+    repository: docker.redpanda.com/redpandadata/redpanda
+    tag: "v25.1.9"
+    digest: ""
+
+  curl:
+    repository: curlimages/curl
+    tag: "8.16.0"
+    digest: ""
+
+  alpine:
+    repository: alpine
+    tag: "3.22"
+    digest: ""
+
+  nginx:
+    repository: nginx
+    tag: "1.29-alpine"
+    digest: ""
+
+  nginxUnprivileged:
+    repository: nginxinc/nginx-unprivileged
+    tag: ""
+    digest: sha256:334d92979f15aaecd5dd50af5105e1230e2bb70765d45b1e2f964e7c5eda81c3
+
+  grpcbin:
+    repository: moul/grpcbin
+    tag: ""
+    digest: sha256:bd8f2ffdd02d0849fad2d1c754eff4402c867e7a3e0552b8992f4590f5687d20
+
+  nats:
+    repository: nats
+    tag: ""
+    digest: sha256:e4bf19f15fd3218814a4e3c9e0064e1334bd8aa20d5984b9f1a0afd084f8cc00

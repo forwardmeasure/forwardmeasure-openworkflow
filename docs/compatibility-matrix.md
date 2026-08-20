@@ -6,8 +6,8 @@
 
 Both Pekko persistence profiles and Kafka Streams implement the same public execution contract.
 Quarkus, Spring Boot and Micronaut expose the generated common APIs; Studio assets are shared across
-all three hosts. Maven and runtime dependency versions are owned by
-`forwardmeasure-java-parent`, never overridden by this product reactor.
+all three hosts. Shared Maven and runtime dependency versions are owned by
+`forwardmeasure-platform`; product-specific versions remain in this product reactor.
 
 Upgrade compatibility is forward-only within a migration step. A prior binary may be used for
 rollback only when release notes explicitly confirm it can read all durable records and schema

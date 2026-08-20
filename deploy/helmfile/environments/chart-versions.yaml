@@ -15,10 +15,7 @@
 # limitations under the License.
 #
 
-versions:
-  keycloak: "26.7.1"
-  postgres: "18.0"
-  cassandra: "5.0"
-  redpanda: "v25.1.9"
-  tenantProvisioning: "1.0.0-SNAPSHOT"
-  migrations: "1.0.0-SNAPSHOT"
+# All OpenWorkflow charts are currently repository-local. Their Chart.yaml files are
+# authoritative, so this inventory remains intentionally empty until a repository
+# chart is introduced.
+chartVersions: {}

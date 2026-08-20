@@ -16,16 +16,12 @@
 #
 namespace: {{ .Values.openworkflowNamespace }}
 imagePullPolicy: {{ .Values.imagePullPolicy }}
-versions:
-  keycloak: {{ .Values.versions.keycloak | quote }}
-  postgres: {{ .Values.versions.postgres | quote }}
-  cassandra: {{ .Values.versions.cassandra | quote }}
-  redpanda: {{ .Values.versions.redpanda | quote }}
-  tenantProvisioning: {{ .Values.versions.tenantProvisioning | quote }}
-  migrations: {{ .Values.versions.migrations | quote }}
+images:
+{{ toYaml .Values.imageVersions | indent 2 }}
 keycloak:
   realm: {{ .Values.keycloakRealm }}
-  sharedClientUuid: {{ .Values.keycloakSharedClientUuid }}
+  sharedClientId: {{ .Values.keycloakSharedClientId }}
+identityCredentialsSecretName: {{ .Values.identityCredentialsSecretName | quote }}
 capabilityPacks:
 {{ toYaml .Values.capabilityPacks | indent 2 }}
 tenants:
@@ -35,3 +31,6 @@ tenants:
   - id: {{ .Values.tenantBId }}
     alias: tenant-b
     displayName: Tenant B
+jobs:
+  tenantReconciliation:
+    keycloakUrl: {{ .Values.keycloak.url | quote }}

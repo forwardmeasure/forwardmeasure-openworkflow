@@ -1,6 +1,9 @@
 import {
+  AuthorizationApi,
   Configuration as DefinitionConfiguration,
-  DefinitionsApi,
+  WorkflowDefinitionGovernanceApi,
+  WorkflowDefinitionsApi,
+  WorkflowsApi,
 } from "@forwardmeasure/openworkflow-definition-management-client";
 import {
   Configuration as ExecutionConfiguration,
@@ -13,7 +16,12 @@ export function clients(
 ) {
   const auth = { basePath, accessToken: token };
   return {
-    definitions: new DefinitionsApi(new DefinitionConfiguration(auth)),
+    authorization: new AuthorizationApi(new DefinitionConfiguration(auth)),
+    definitions: new WorkflowDefinitionsApi(new DefinitionConfiguration(auth)),
+    governance: new WorkflowDefinitionGovernanceApi(
+      new DefinitionConfiguration(auth),
+    ),
+    workflows: new WorkflowsApi(new DefinitionConfiguration(auth)),
     executions: new ExecutionsApi(new ExecutionConfiguration(auth)),
   };
 }
@@ -28,27 +36,18 @@ export async function authorizationDecisions(
   resourceType: string,
   resourceId: string,
 ): Promise<Record<string, boolean>> {
-  const basePath = window.__OPENWORKFLOW_STUDIO_CONFIG__?.apiBasePath ?? "/api";
-  const response = await fetch(`${basePath}/api/v1/authorizations`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-      "X-Correlation-ID": correlationId(),
+  const response = await clients(
+    token,
+  ).authorization.batchEvaluateAuthorizations({
+    xCorrelationID: correlationId(),
+    batchAuthorizationRequest: {
+      resourceType,
+      resourceId,
+      properties: {},
+      actions,
     },
-    body: JSON.stringify({ resourceType, resourceId, properties: {}, actions }),
   });
-  if (!response.ok) throw new Error(`Authorization evaluation failed with HTTP ${response.status}`);
-  return (await response.json() as { decisions: Record<string, boolean> }).decisions;
-}
-
-export async function listDefinitionRevisions(token: string): Promise<unknown[]> {
-  const basePath = window.__OPENWORKFLOW_STUDIO_CONFIG__?.apiBasePath ?? "/api";
-  const response = await fetch(`${basePath}/v1/workflow-definitions`, {
-    headers: { Authorization: `Bearer ${token}`, "X-Correlation-ID": correlationId() },
-  });
-  if (!response.ok) throw new Error(`Definition listing failed with HTTP ${response.status}`);
-  return (await response.json() as { items: unknown[] }).items;
+  return response.decisions;
 }
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license

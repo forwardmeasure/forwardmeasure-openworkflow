@@ -125,6 +125,23 @@
                 <artifactId>openworkflow-engine-contract-tests</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-runtime</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-jaxrs</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-postgresql</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-cassandra</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-persistence-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-persistence-postgresql</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-persistence-cassandra</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-durable-processing-api</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-durable-processing-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-durable-processing-kafka-streams</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-kafka-streams-runtime-api</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-kafka-streams-runtime-core</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-kafka-streams-engine</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-quarkus-binding</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-spring-binding</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-micronaut-binding</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-application</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-jpa</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-models</artifactId><version>${project.version}</version></dependency>
@@ -133,9 +150,6 @@
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-jaxrs</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-typescript</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-python</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-query-api</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-query-core</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-query-jpa</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-api</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-core</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-postgresql</artifactId><version>${project.version}</version></dependency>
@@ -156,4 +170,15 @@
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-runner</artifactId><version>${project.version}</version></dependency>
         </dependencies>
     </dependencyManagement>
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>flatten-maven-plugin</artifactId>
+                <configuration>
+                    <flattenMode>bom</flattenMode>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
 </project>

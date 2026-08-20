@@ -1,0 +1,39 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+image:
+  repository: {{ .Values.imageVersions.migrations.repository | quote }}
+  tag: {{ .Values.imageVersions.migrations.tag | quote }}
+  digest: {{ .Values.imageVersions.migrations.digest | quote }}
+  pullPolicy: {{ .Values.imagePullPolicy }}
+tenantIds:
+  - {{ .Values.tenantAId | quote }}
+  - {{ .Values.tenantBId | quote }}
+database:
+  url: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" .Values | quote }}
+  username: {{ dig "database" "username" "openworkflow" .Values | quote }}
+  passwordSecret:
+    name: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
+    key: KC_DB_PASSWORD
+cassandra:
+  enabled: {{ dig "engines" "pekkoCassandra" true .Values }}
+  contactPoints: {{ dig "pekko" "cassandraEndpoint" "cassandra:9042" .Values | quote }}
+  localDatacenter: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" .Values | quote }}
+  applicationKeyspace: openworkflow_application
+  credentialsSecret:
+    name: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
+    usernameKey: OPENWORKFLOW_CASSANDRA_USERNAME
+    passwordKey: OPENWORKFLOW_CASSANDRA_PASSWORD

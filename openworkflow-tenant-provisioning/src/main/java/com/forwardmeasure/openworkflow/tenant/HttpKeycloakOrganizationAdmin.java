@@ -40,6 +40,7 @@ public final class HttpKeycloakOrganizationAdmin implements KeycloakOrganization
   private final KeycloakAdminTokenSupplier tokens;
   private final KeycloakAdminConfiguration configuration;
   private final URI adminBase;
+  private volatile String sharedClientUuid;
 
   public HttpKeycloakOrganizationAdmin(
       HttpClient client,
@@ -57,11 +58,7 @@ public final class HttpKeycloakOrganizationAdmin implements KeycloakOrganization
   @Override
   public Set<String> sharedClientRoles() {
     JsonNode roles =
-        send(
-                "GET",
-                adminBase.resolve("clients/" + configuration.sharedClientUuid() + "/roles"),
-                null,
-                200)
+        send("GET", adminBase.resolve("clients/" + sharedClientUuid() + "/roles"), null, 200)
             .body();
     Set<String> names = new TreeSet<>();
     roles.forEach(role -> names.add(requiredText(role, "name")));
@@ -72,7 +69,7 @@ public final class HttpKeycloakOrganizationAdmin implements KeycloakOrganization
   public void createSharedClientRole(String role) {
     send(
         "POST",
-        adminBase.resolve("clients/" + configuration.sharedClientUuid() + "/roles"),
+        adminBase.resolve("clients/" + sharedClientUuid() + "/roles"),
         Map.of("name", role),
         201,
         204);
@@ -162,6 +159,41 @@ public final class HttpKeycloakOrganizationAdmin implements KeycloakOrganization
         201,
         204,
         409);
+  }
+
+  private String sharedClientUuid() {
+    String resolved = sharedClientUuid;
+    if (resolved != null) {
+      return resolved;
+    }
+    synchronized (this) {
+      if (sharedClientUuid == null) {
+        String clientId = configuration.sharedClientId();
+        String query = URLEncoder.encode(clientId, StandardCharsets.UTF_8);
+        JsonNode clients =
+            send(
+                    "GET",
+                    URI.create(adminBase.resolve("clients").toString() + "?clientId=" + query),
+                    null,
+                    200)
+                .body();
+        JsonNode match = null;
+        for (JsonNode candidate : clients) {
+          if (clientId.equals(candidate.path("clientId").asText())) {
+            if (match != null) {
+              throw new KeycloakAdminException("Keycloak returned duplicate shared clients");
+            }
+            match = candidate;
+          }
+        }
+        if (match == null) {
+          throw new KeycloakAdminException("Keycloak shared client was not found");
+        }
+        sharedClientUuid =
+            KeycloakAdminConfiguration.validateSegment(requiredText(match, "id"), "client.id");
+      }
+      return sharedClientUuid;
+    }
   }
 
   private Response send(String method, URI uri, Object body, int... expectedStatuses) {

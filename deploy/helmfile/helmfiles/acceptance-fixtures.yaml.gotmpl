@@ -19,5 +19,12 @@ releases:
     namespace: {{ .Values.openworkflowNamespace }}
     chart: ../releases/openworkflow-acceptance-fixtures
     installed: {{ dig "acceptanceFixtures" "enabled" true .Values }}
+    values:
+      - images:
+          nginx: {{ printf "%s:%s" .Values.imageVersions.nginx.repository .Values.imageVersions.nginx.tag | quote }}
+          nginxUnprivileged: {{ printf "%s@%s" .Values.imageVersions.nginxUnprivileged.repository .Values.imageVersions.nginxUnprivileged.digest | quote }}
+          grpcbin: {{ printf "%s@%s" .Values.imageVersions.grpcbin.repository .Values.imageVersions.grpcbin.digest | quote }}
+          nats: {{ printf "%s@%s" .Values.imageVersions.nats.repository .Values.imageVersions.nats.digest | quote }}
     labels:
+      stage: acceptance
       checkpoint: K6

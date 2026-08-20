@@ -5,7 +5,7 @@
   <artifactId>openworkflow-studio</artifactId>
   <packaging>pom</packaging>
   <name>ForwardMeasure OpenWorkflow :: Studio</name>
-  <modules><module>webapp</module></modules>
+  <modules><module>webapp</module><module>framework-bindings</module></modules>
 </project>
 <!--
 

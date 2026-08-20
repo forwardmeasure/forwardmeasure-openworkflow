@@ -4,14 +4,18 @@ This runbook is the operational authority for the `1.0.x` unified platform. Comm
 Helmfile profiles under `deploy/helmfile`; production values are deliberately supplied through
 environment-backed secret and endpoint inputs and are never committed.
 
+Identity is an external platform dependency in every profile. OpenWorkflow
+never installs or upgrades Keycloak; ensure the shared platform identity
+service and credential projection are healthy before synchronizing releases.
+
 ## Deployment profiles
 
 | Profile | Purpose | Dependencies |
 |---|---|---|
-| `local` | Single-workstation development | Bundled PostgreSQL, Keycloak, Cassandra and Redpanda |
-| `development` | Shared development | Bundled dependencies, ingress and optional OTLP collector |
-| `ci` | Ephemeral validation | Bundled dependencies with network policies enabled |
-| `kind` | Deterministic acceptance | Four-node Kind cluster and K1-K7 fixtures |
+| `local` | Single-workstation development | Bundled PostgreSQL, Cassandra and Redpanda; shared Keycloak |
+| `development` | Shared development | Bundled data dependencies, shared Keycloak, ingress and optional OTLP collector |
+| `ci` | Ephemeral validation | Bundled data dependencies, shared Keycloak and network policies |
+| `kind` | Deterministic acceptance | Four-node Kind cluster, platform-owned Keycloak and K1-K7 fixtures |
 | `production-postgresql` | Production with Pekko/PostgreSQL and Kafka Streams | External PostgreSQL, Keycloak, Kafka, OTLP and an existing credentials Secret |
 | `production-cassandra` | Production with Pekko/Cassandra and Kafka Streams | External PostgreSQL product plane, Cassandra, Keycloak, Kafka, OTLP and an existing credentials Secret |
 

@@ -30,7 +30,7 @@ spec:
     spec:
       containers:
         - name: postgresql
-          image: postgres:{{ .Values.versions.postgres }}
+          image: {{ .Values.images.postgresql.repository }}{{ if .Values.images.postgresql.digest }}@{{ .Values.images.postgresql.digest }}{{ else }}:{{ .Values.images.postgresql.tag }}{{ end }}
           imagePullPolicy: {{ .Values.imagePullPolicy }}
           env:
             - {name: POSTGRES_DB, value: {{ .Values.database.name | quote }}}

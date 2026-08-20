@@ -16,12 +16,11 @@ releases:
     values:
       - ../releases/openworkflow-pekko-runtime/base.yaml.gotmpl
       - name: openworkflow-pekko-postgresql
-        image:
-          tag: {{ .Values.openworkflowVersion | quote }}
         persistence:
           profile: postgresql
           endpoint: {{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow?currentSchema=t_11111111111111111111111111111111" .Values | quote }}
     labels:
+      stage: execution
       checkpoint: K3A
       persistence: postgresql
   - name: openworkflow-pekko-cassandra
@@ -31,8 +30,6 @@ releases:
     values:
       - ../releases/openworkflow-pekko-runtime/base.yaml.gotmpl
       - name: openworkflow-pekko-cassandra
-        image:
-          tag: {{ .Values.openworkflowVersion | quote }}
         persistence:
           profile: cassandra
           endpoint: {{ dig "pekko" "cassandraEndpoint" "cassandra:9042" .Values | quote }}
@@ -40,6 +37,7 @@ releases:
           password: ""
           localDatacenter: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" .Values | quote }}
     labels:
+      stage: execution
       checkpoint: K3A
       persistence: cassandra
   - name: openworkflow-kafka
@@ -48,8 +46,7 @@ releases:
     installed: {{ dig "engines" "kafkaStreams" true .Values }}
     values:
       - ../releases/openworkflow-kafka-runtime/base.yaml.gotmpl
-      - image:
-          tag: {{ .Values.openworkflowVersion | quote }}
     labels:
+      stage: execution
       checkpoint: K3B
       engine: kafka-streams

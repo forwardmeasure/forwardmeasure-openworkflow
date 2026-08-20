@@ -118,6 +118,7 @@ class PortableContractSerializationTest {
     var definition =
         new DefinitionRevision(
             UUID.randomUUID(),
+            null,
             new WorkflowCoordinates("example", "flow", "1.0.0", "1.0.3"),
             digest,
             digest);

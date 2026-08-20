@@ -16,6 +16,7 @@ done
 
 for profile in local development ci kind; do
   helmfile -f "$helmfile_path" -e "$profile" template >"$work/$profile.yaml"
+  test "$(yq eval-all '[select((.kind == "Deployment" or .kind == "StatefulSet") and .metadata.name == "keycloak")] | length' "$work/$profile.yaml")" -eq 0
 done
 
 production_env=(

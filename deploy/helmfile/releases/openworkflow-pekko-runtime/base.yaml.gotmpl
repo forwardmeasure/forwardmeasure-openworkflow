@@ -9,7 +9,9 @@
 # for the specific language governing permissions and limitations under the License.
 #
 image:
-  tag: {{ .Values.openworkflowVersion | quote }}
+  repository: {{ .Values.imageVersions.pekkoRuntime.repository | quote }}
+  tag: {{ .Values.imageVersions.pekkoRuntime.tag | quote }}
+  digest: {{ .Values.imageVersions.pekkoRuntime.digest | quote }}
   pullPolicy: {{ .Values.imagePullPolicy }}
 replicas: {{ dig "replicas" "runtime" 3 .Values }}
 database:

@@ -6,14 +6,14 @@
   The ASF licenses this file to You under the Apache License, Version 2.0.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent>
-        <groupId>com.forwardmeasure.build</groupId>
-        <artifactId>forwardmeasure-java-parent</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
-        <relativePath/>
+        <groupId>com.forwardmeasure.platform</groupId>
+        <artifactId>forwardmeasure-platform</artifactId>
+        <version>1.0.0</version>
+        <relativePath>../forwardmeasure-platform/pom.xml</relativePath>
     </parent>
 
     <groupId>com.forwardmeasure.openworkflow</groupId>
@@ -51,9 +51,10 @@
         <!-- Locked product-foundation versions. -->
         <openworkflow.specification.version>1.0.3</openworkflow.specification.version>
         <serverlessworkflow.sdk.version>7.29.0.Final</serverlessworkflow.sdk.version>
-        <serverlessworkflow.schema.sha256>e0cfa77227a9b537be7519041683508151e21dc80aa991dfbf6362dfc36b2331</serverlessworkflow.schema.sha256>
+        <serverlessworkflow.schema.sha256>
+            e0cfa77227a9b537be7519041683508151e21dc80aa991dfbf6362dfc36b2331</serverlessworkflow.schema.sha256>
         <forwardmeasure.jpa.version>1.0.0</forwardmeasure.jpa.version>
-        <keycloak.version>26.7.1</keycloak.version>
+        <forwardmeasure.testcontainers.version>1.0.0</forwardmeasure.testcontainers.version>
 
         <!-- Shared library versions. -->
         <archunit.version>1.4.1</archunit.version>
@@ -64,80 +65,33 @@
         <duplicate.finder.version>2.0.1</duplicate.finder.version>
     </properties>
 
-    <!-- WP0 creates only the modules needed to establish the WP1 boundary. -->
+    <!-- The product reactor aggregates capabilities; each capability owns its leaf modules. -->
     <modules>
         <module>openworkflow-bom</module>
         <module>openworkflow-model</module>
         <module>openworkflow-expression-jq</module>
         <module>openworkflow-definition</module>
-        <module>openworkflow-authorization/openworkflow-authorization-api</module>
-        <module>openworkflow-authorization/openworkflow-authorization-authzen</module>
-        <module>openworkflow-authorization/openworkflow-authorization-testkit</module>
+        <module>openworkflow-authorization</module>
         <module>openworkflow-tenant-provisioning</module>
         <module>openworkflow-migrations</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-application</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-jpa</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-models</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-client-apachehttp</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-server-jaxrs</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-jaxrs</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-client-typescript</module>
-        <module>openworkflow-definition-management/openworkflow-definition-management-client-python</module>
-        <module>framework-bindings/quarkus/openworkflow-quarkus-binding</module>
-        <module>framework-bindings/quarkus/openworkflow-quarkus-service</module>
-        <module>framework-bindings/spring/openworkflow-spring-binding</module>
-        <module>framework-bindings/spring/openworkflow-spring-service</module>
-        <module>framework-bindings/micronaut/openworkflow-micronaut-binding</module>
-        <module>framework-bindings/micronaut/openworkflow-micronaut-service</module>
-        <module>openworkflow-engine/openworkflow-engine-api</module>
-        <module>openworkflow-engine/openworkflow-engine-contract-tests</module>
-        <module>openworkflow-engine/openworkflow-actor-runtime</module>
-        <module>openworkflow-engine/oks-durable-processing</module>
-        <module>openworkflow-engine/oks-workflow-runtime</module>
-        <module>openworkflow-persistence</module>
-        <module>openworkflow-execution-management/openworkflow-execution-management-application</module>
-        <module>openworkflow-execution-management/openworkflow-execution-management-jpa</module>
-        <module>openworkflow-execution-management/openworkflow-execution-models</module>
-        <module>openworkflow-execution-management/openworkflow-execution-client-apachehttp</module>
-        <module>openworkflow-execution-management/openworkflow-execution-server-jaxrs</module>
-        <module>openworkflow-execution-management/openworkflow-execution-jaxrs</module>
-        <module>openworkflow-execution-management/openworkflow-execution-client-typescript</module>
-        <module>openworkflow-execution-management/openworkflow-execution-client-python</module>
-        <module>openworkflow-execution-query/openworkflow-execution-query-api</module>
-        <module>openworkflow-execution-query/openworkflow-execution-query-core</module>
-        <module>openworkflow-execution-query/openworkflow-execution-query-jpa</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-api</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-core</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-postgresql</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-cassandra</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-agent-protocols</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-amqp</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-cloud</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-jms</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-kafka</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-mqtt</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-nats</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-pulsar</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-redis</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-asyncapi-stomp</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-grpc</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-http</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-kafka</module>
-        <module>openworkflow-operation-adapter/openworkflow-operation-adapter-runner</module>
+        <module>openworkflow-definition-management</module>
+        <module>openworkflow-api-language-bindings</module>
+        <module>openworkflow-engine</module>
+        <module>openworkflow-execution-management</module>
+        <module>openworkflow-operation-adapter</module>
         <module>openworkflow-studio</module>
-        <module>framework-bindings/quarkus/openworkflow-studio-quarkus</module>
-        <module>framework-bindings/spring/openworkflow-studio-spring</module>
-        <module>framework-bindings/micronaut/openworkflow-studio-micronaut</module>
+        <module>openworkflow-framework-bindings</module>
         <module>openworkflow-architecture-tests</module>
     </modules>
 
     <dependencyManagement>
         <dependencies>
-            <!-- Re-import the central core BOM at product depth so later specification BOMs cannot skew it. -->
+            <!-- Re-import the central core BOM at product depth so later specification BOMs cannot
+            skew it. -->
             <dependency>
-                <groupId>com.forwardmeasure.build</groupId>
-                <artifactId>forwardmeasure-java-core-bom</artifactId>
-                <version>${forwardmeasure.java-platform.version}</version>
+                <groupId>com.forwardmeasure.platform</groupId>
+                <artifactId>forwardmeasure-platform-core-bom</artifactId>
+                <version>${forwardmeasure.platform.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -145,6 +99,13 @@
                 <groupId>com.forwardmeasure.jpa</groupId>
                 <artifactId>forwardmeasure-jpa-bom</artifactId>
                 <version>${forwardmeasure.jpa.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.testcontainers</groupId>
+                <artifactId>forwardmeasure-testcontainers-bom</artifactId>
+                <version>${forwardmeasure.testcontainers.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -212,6 +173,41 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-common-models</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-quarkus-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-spring-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-micronaut-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-execution-management-quarkus-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-execution-management-spring-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-execution-management-micronaut-binding</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-definition-management-client-apachehttp</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -262,19 +258,79 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-actor-runtime</artifactId>
+                <artifactId>openworkflow-pekko-runtime</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>oks-durable-processing-api</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>oks-durable-processing-core</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>oks-durable-processing-kafka-streams</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>oks-workflow-runtime-api</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>oks-workflow-runtime-core</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>oks-workflow-runtime-kafka-streams</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-persistence-core</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-persistence-postgresql</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-persistence-cassandra</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-persistence-contract-tests</artifactId><version>${project.version}</version></dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-eventing-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-eventing-jaxrs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-eventing-postgresql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-eventing-cassandra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-durable-processing-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-durable-processing-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-durable-processing-kafka-streams</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-kafka-streams-runtime-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-kafka-streams-runtime-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-kafka-streams-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-persistence-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-persistence-postgresql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-persistence-cassandra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-persistence-contract-tests</artifactId>
+                <version>${project.version}</version>
+            </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-execution-management-application</artifactId>
@@ -285,45 +341,126 @@
                 <artifactId>openworkflow-execution-management-jpa</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-models</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-apachehttp</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-server-jaxrs</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-jaxrs</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-typescript</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-python</artifactId><version>${project.version}</version></dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-execution-query-api</artifactId>
+                <artifactId>openworkflow-execution-models</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-execution-query-core</artifactId>
+                <artifactId>openworkflow-execution-client-apachehttp</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-execution-query-jpa</artifactId>
+                <artifactId>openworkflow-execution-server-jaxrs</artifactId>
                 <version>${project.version}</version>
             </dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-api</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-core</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-postgresql</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-cassandra</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-agent-protocols</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-amqp</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-cloud</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-jms</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-kafka</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-mqtt</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-nats</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-pulsar</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-redis</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-stomp</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-grpc</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-http</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-kafka</artifactId><version>${project.version}</version></dependency>
-            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-runner</artifactId><version>${project.version}</version></dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-execution-jaxrs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-execution-client-typescript</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-execution-client-python</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-postgresql</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-cassandra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-agent-protocols</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-amqp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-cloud</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-jms</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-kafka</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-mqtt</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-nats</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-pulsar</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-redis</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-asyncapi-stomp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-grpc</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-http</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-kafka</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-runner</artifactId>
+                <version>${project.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -383,26 +520,28 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
             </plugin>
-                <plugin>
-                    <groupId>org.apache.maven.plugins</groupId>
-                    <artifactId>maven-surefire-plugin</artifactId>
-                    <configuration>
-                        <systemPropertyVariables>
-                            <openworkflow.specification.version>${openworkflow.specification.version}</openworkflow.specification.version>
-                            <serverlessworkflow.schema.sha256>${serverlessworkflow.schema.sha256}</serverlessworkflow.schema.sha256>
-                        </systemPropertyVariables>
-                    </configuration>
-                </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <systemPropertyVariables>
+                        <openworkflow.specification.version>${openworkflow.specification.version}</openworkflow.specification.version>
+                        <serverlessworkflow.schema.sha256>${serverlessworkflow.schema.sha256}</serverlessworkflow.schema.sha256>
+                    </systemPropertyVariables>
+                </configuration>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
                         <id>enforce-reproducible-build</id>
-                        <goals><goal>enforce</goal></goals>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
                         <configuration>
                             <rules>
-                                <dependencyConvergence/>
+                                <dependencyConvergence />
                             </rules>
                         </configuration>
                     </execution>
@@ -419,12 +558,16 @@
                     <execution>
                         <id>flatten</id>
                         <phase>process-resources</phase>
-                        <goals><goal>flatten</goal></goals>
+                        <goals>
+                            <goal>flatten</goal>
+                        </goals>
                     </execution>
                     <execution>
                         <id>flatten-clean</id>
                         <phase>clean</phase>
-                        <goals><goal>clean</goal></goals>
+                        <goals>
+                            <goal>clean</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -439,18 +582,22 @@
                         <inputExclude>mvnw</inputExclude>
                         <inputExclude>mvnw.cmd</inputExclude>
                         <inputExclude>**/*.md</inputExclude>
-                        <!-- Exact Apache-2.0 upstream conformance fixtures; integrity is SHA-pinned. -->
+                        <!-- Exact Apache-2.0 upstream conformance fixtures; integrity is
+                        SHA-pinned. -->
                         <inputExclude>**/official-v1.0.3/**</inputExclude>
                         <inputExclude>config/keycloak/*.json</inputExclude>
                         <inputExclude>docs/diagrams/**</inputExclude>
-                        <!-- Helm chart metadata and generated bootstrap CQL are distribution assets. -->
+                        <!-- Helm chart metadata and generated bootstrap CQL are distribution
+                        assets. -->
                         <inputExclude>deploy/helmfile/helmfiles/studios.yaml.gotmpl</inputExclude>
-                        <inputExclude>deploy/helmfile/releases/openworkflow-foundation/files/cassandra-schema.cql</inputExclude>
-                        <inputExclude>deploy/helmfile/releases/openworkflow-foundation/templates/cassandra.yaml</inputExclude>
-                        <inputExclude>deploy/helmfile/releases/openworkflow-foundation/templates/redpanda.yaml</inputExclude>
+                        <inputExclude>
+                            deploy/helmfile/releases/openworkflow-foundation/templates/cassandra.yaml</inputExclude>
+                        <inputExclude>
+                            deploy/helmfile/releases/openworkflow-foundation/templates/redpanda.yaml</inputExclude>
                         <inputExclude>deploy/helmfile/releases/openworkflow-kafka-runtime/**</inputExclude>
                         <inputExclude>deploy/helmfile/releases/openworkflow-pekko-runtime/Chart.yaml</inputExclude>
-                        <inputExclude>deploy/helmfile/releases/openworkflow-pekko-runtime/values.yaml</inputExclude>
+                        <inputExclude>
+                            deploy/helmfile/releases/openworkflow-pekko-runtime/values.yaml</inputExclude>
                         <inputExclude>deploy/helmfile/releases/openworkflow-studio/**</inputExclude>
                         <!-- Maven-managed frontend dependencies and build/test output. -->
                         <inputExclude>**/node_modules/**</inputExclude>
@@ -465,7 +612,9 @@
                     <execution>
                         <id>license-check</id>
                         <phase>verify</phase>
-                        <goals><goal>check</goal></goals>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
                     </execution>
                 </executions>
             </plugin>
@@ -476,20 +625,30 @@
                     <execution>
                         <id>duplicate-class-check</id>
                         <phase>verify</phase>
-                        <goals><goal>check</goal></goals>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
                         <configuration>
                             <failBuildInCaseOfConflict>true</failBuildInCaseOfConflict>
                             <checkTestClasspath>true</checkTestClasspath>
                             <ignoredResourcePatterns>
                                 <ignoredResourcePattern>about.html</ignoredResourcePattern>
-                                <!-- Pekko/Typesafe configuration is intentionally additive across jars. -->
+                                <!-- Pekko/Typesafe configuration is intentionally additive across
+                                jars. -->
                                 <ignoredResourcePattern>reference.conf</ignoredResourcePattern>
-                                <!-- Pekko shades protobuf descriptors also supplied by the gRPC runtime. -->
+                                <!-- Pekko shades protobuf descriptors also supplied by the gRPC
+                                runtime. -->
                                 <ignoredResourcePattern>google/protobuf/.*\.proto</ignoredResourcePattern>
-                                <!-- Eclipse Paho MQTT v3/v5 publish the same OSGi localization resource. -->
+                                <!-- Eclipse Paho MQTT v3/v5 publish the same OSGi localization
+                                resource. -->
                                 <ignoredResourcePattern>bundle.properties</ignoredResourcePattern>
-                                <!-- HTTP clients embed independent snapshots of the public-suffix list. -->
-                                <ignoredResourcePattern>org/publicsuffix/list/effective_tld_names.dat</ignoredResourcePattern>
+                                <!-- HTTP clients embed independent snapshots of the public-suffix
+                                list. -->
+                                <ignoredResourcePattern>
+                                    org/publicsuffix/list/effective_tld_names.dat</ignoredResourcePattern>
+                                <!-- CDI and Jersey publish identical standard CDI descriptor
+                                schemas. -->
+                                <ignoredResourcePattern>beans_[0-9_]+\.xsd</ignoredResourcePattern>
                                 <ignoredResourcePattern>.*META-INF/.*</ignoredResourcePattern>
                             </ignoredResourcePatterns>
                         </configuration>
@@ -502,7 +661,9 @@
     <profiles>
         <profile>
             <id>focused</id>
-            <activation><activeByDefault>true</activeByDefault></activation>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
             <properties>
                 <skipITs>true</skipITs>
             </properties>

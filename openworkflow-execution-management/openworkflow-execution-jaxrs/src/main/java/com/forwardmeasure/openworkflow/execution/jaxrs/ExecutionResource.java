@@ -18,6 +18,7 @@ import com.forwardmeasure.openworkflow.execution.api.ExecutionsApi;
 import com.forwardmeasure.openworkflow.execution.api.model.Execution;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionControl;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionHistoryEntry;
+import com.forwardmeasure.openworkflow.execution.api.model.ExecutionHistoryPage;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionPage;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionStart;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionState;
@@ -27,6 +28,7 @@ import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementS
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionSearch;
 import jakarta.ws.rs.core.Response;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.Objects;
@@ -74,41 +76,67 @@ public class ExecutionResource implements ExecutionsApi {
   }
 
   @Override
-  public Response controlExecution(
+  public Response pauseExecution(
+      String ifMatch, String correlationId, UUID executionId, ExecutionControl control) {
+    return controlResponse(control(executionId, ifMatch, correlationId, Control.PAUSE, control));
+  }
+
+  @Override
+  public Response resumeExecution(
+      String ifMatch, String correlationId, UUID executionId, ExecutionControl control) {
+    return controlResponse(control(executionId, ifMatch, correlationId, Control.RESUME, control));
+  }
+
+  @Override
+  public Response cancelExecution(
+      String ifMatch, String correlationId, UUID executionId, ExecutionControl control) {
+    return controlResponse(control(executionId, ifMatch, correlationId, Control.CANCEL, control));
+  }
+
+  private enum Control {
+    PAUSE,
+    RESUME,
+    CANCEL
+  }
+
+  private CanonicalExecution control(
       UUID executionId,
-      String operation,
+      String ifMatch,
       String correlationId,
-      Long expectedVersion,
+      Control operation,
       ExecutionControl control) {
     var context = contexts.current();
     var id = new ExecutionId(context.tenantId(), executionId);
-    CanonicalExecution execution =
-        switch (operation) {
-          case "pause" ->
-              management
-                  .pause(context, id, commandIds.get(), expectedVersion, correlationId)
-                  .toCompletableFuture()
-                  .join();
-          case "resume" ->
-              management
-                  .resume(context, id, commandIds.get(), expectedVersion, correlationId)
-                  .toCompletableFuture()
-                  .join();
-          case "cancel" ->
-              management
-                  .cancel(
-                      context,
-                      id,
-                      commandIds.get(),
-                      expectedVersion,
-                      correlationId,
-                      control == null || control.getReason() == null
-                          ? "cancelled by actor"
-                          : control.getReason())
-                  .toCompletableFuture()
-                  .join();
-          default -> throw new IllegalArgumentException("unsupported execution operation");
-        };
+    long expectedVersion = ETagSupport.parseIfMatch(ifMatch);
+    UUID commandId = commandIds.get();
+    return switch (operation) {
+      case PAUSE ->
+          management
+              .pause(context, id, commandId, expectedVersion, correlationId)
+              .toCompletableFuture()
+              .join();
+      case RESUME ->
+          management
+              .resume(context, id, commandId, expectedVersion, correlationId)
+              .toCompletableFuture()
+              .join();
+      case CANCEL ->
+          management
+              .cancel(
+                  context,
+                  id,
+                  commandId,
+                  expectedVersion,
+                  correlationId,
+                  control == null || control.getReason() == null
+                      ? "cancelled by actor"
+                      : control.getReason())
+              .toCompletableFuture()
+              .join();
+    };
+  }
+
+  private Response controlResponse(CanonicalExecution execution) {
     return Response.accepted(map(execution)).build();
   }
 
@@ -130,7 +158,7 @@ public class ExecutionResource implements ExecutionsApi {
         queries.history(context.tenantId(), id, afterSequence, limit).stream()
             .map(ExecutionResource::map)
             .toList();
-    return Response.ok(history).build();
+    return Response.ok(new ExecutionHistoryPage(history)).build();
   }
 
   @Override
@@ -169,6 +197,7 @@ public class ExecutionResource implements ExecutionsApi {
   private static Execution map(CanonicalExecution execution) {
     return new Execution(
         execution.executionId().value(),
+        execution.definition().workflowId(),
         execution.definition().revisionId(),
         execution.definition().definitionSha256(),
         execution.engineId().value(),
@@ -183,6 +212,7 @@ public class ExecutionResource implements ExecutionsApi {
   private static Execution map(ExecutionProjection projection) {
     return new Execution(
             projection.executionId().value(),
+            projection.definition().workflowId(),
             projection.definition().revisionId(),
             projection.definition().definitionSha256(),
             projection.engineId().value(),
@@ -194,8 +224,8 @@ public class ExecutionResource implements ExecutionsApi {
             Date.from(projection.updatedAt()))
         .output(projection.output())
         .error(projection.error())
-        .effects(List.copyOf(projection.effects()))
-        .timers(List.copyOf(projection.timers()))
+        .effects(new ArrayList<>(projection.effects()))
+        .timers(new ArrayList<>(projection.timers()))
         .completedAt(projection.completedAt() == null ? null : Date.from(projection.completedAt()));
   }
 

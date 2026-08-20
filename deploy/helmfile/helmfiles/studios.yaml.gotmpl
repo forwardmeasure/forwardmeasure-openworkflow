@@ -9,8 +9,9 @@ releases:
     values:
       - framework: {{ $framework }}
         image:
-          repository: forwardmeasure/openworkflow-studio-{{ $framework }}
-          tag: {{ $.Values.studioVersion | quote }}
+          repository: {{ index $.Values.imageVersions.studio.repositories $framework | quote }}
+          tag: {{ $.Values.imageVersions.studio.tag | quote }}
+          digest: {{ index $.Values.imageVersions.studio.digests $framework | quote }}
           pullPolicy: {{ $.Values.imagePullPolicy }}
         apiUpstream: http://openworkflow-definition-{{ $framework }}:8080
         environmentName: Kind acceptance
@@ -29,6 +30,7 @@ releases:
           className: nginx
           host: openworkflow-{{ $framework }}.local
     labels:
+      stage: studio
       checkpoint: K4
       framework: {{ $framework }}
 {{- end }}

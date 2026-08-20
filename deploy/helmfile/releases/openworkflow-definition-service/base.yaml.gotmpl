@@ -14,9 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-image:
-  tag: {{ .Values.openworkflowVersion | quote }}
-  pullPolicy: {{ .Values.imagePullPolicy }}
 replicas: {{ dig "replicas" "definition" 1 .Values }}
 database:
   url: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" .Values | quote }}

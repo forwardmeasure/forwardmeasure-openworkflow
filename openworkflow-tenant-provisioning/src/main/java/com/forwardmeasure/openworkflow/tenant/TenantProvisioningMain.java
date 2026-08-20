@@ -46,7 +46,7 @@ public final class TenantProvisioningMain {
             mapper,
             tokens,
             new KeycloakAdminConfiguration(
-                server, realm, required("KEYCLOAK_SHARED_CLIENT_UUID"), Duration.ofSeconds(10)));
+                server, realm, required("KEYCLOAK_SHARED_CLIENT_ID"), Duration.ofSeconds(10)));
     var reconciler = new TenantOrganizationReconciler(admin);
     var packs =
         Arrays.stream(optional("FORWARDMEASURE_CAPABILITY_PACKS", "openworkflow").split(","))

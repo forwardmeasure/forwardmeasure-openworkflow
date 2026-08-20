@@ -10,8 +10,11 @@
  */
 package com.forwardmeasure.openworkflow.migration;
 
+import com.datastax.oss.driver.api.core.CqlSession;
 import com.forwardmeasure.jpa.tenancy.TenantId;
 import java.io.PrintWriter;
+import java.net.InetSocketAddress;
+import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -35,14 +38,62 @@ public final class OpenWorkflowMigrationsMain {
         .filter(value -> !value.isEmpty())
         .map(TenantId::parse)
         .forEach(migrator::provisionAndMigrate);
+    migrateCassandraIfConfigured();
+  }
+
+  private static void migrateCassandraIfConfigured() {
+    String contactPoints = optional("OPENWORKFLOW_CASSANDRA_CONTACT_POINTS");
+    if (contactPoints == null) {
+      return;
+    }
+    var builder =
+        CqlSession.builder()
+            .withLocalDatacenter(required("OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER"));
+    Arrays.stream(contactPoints.split(","))
+        .map(String::trim)
+        .filter(value -> !value.isEmpty())
+        .map(OpenWorkflowMigrationsMain::contactPoint)
+        .forEach(builder::addContactPoint);
+    String username = optional("OPENWORKFLOW_CASSANDRA_USERNAME");
+    String password = optional("OPENWORKFLOW_CASSANDRA_PASSWORD");
+    if ((username == null) != (password == null)) {
+      throw new IllegalStateException(
+          "OPENWORKFLOW_CASSANDRA_USERNAME and OPENWORKFLOW_CASSANDRA_PASSWORD must be supplied"
+              + " together");
+    }
+    if (username != null) {
+      builder.withAuthCredentials(username, password);
+    }
+    try (CqlSession session = builder.build()) {
+      String applicationKeyspace = optional("OPENWORKFLOW_CASSANDRA_APPLICATION_KEYSPACE");
+      OpenWorkflowCassandraMigrator.migrate(
+          session,
+          applicationKeyspace == null
+              ? OpenWorkflowCassandraMigrator.DEFAULT_APPLICATION_KEYSPACE
+              : applicationKeyspace);
+    }
+  }
+
+  static InetSocketAddress contactPoint(String value) {
+    URI endpoint = URI.create("cql://" + value);
+    if (endpoint.getHost() == null || endpoint.getPort() < 1 || endpoint.getPort() > 65535) {
+      throw new IllegalArgumentException(
+          "Cassandra contact point must use host:port syntax: " + value);
+    }
+    return new InetSocketAddress(endpoint.getHost(), endpoint.getPort());
   }
 
   private static String required(String name) {
-    String value = System.getenv(name);
+    String value = optional(name);
     if (value == null || value.isBlank()) {
       throw new IllegalStateException(name + " is required");
     }
     return value;
+  }
+
+  private static String optional(String name) {
+    String value = System.getenv(name);
+    return value == null || value.isBlank() ? null : value.trim();
   }
 
   private record DriverManagerDataSource(String url, String username, String password)

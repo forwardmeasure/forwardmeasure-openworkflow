@@ -4,27 +4,23 @@
   contributor license agreements. See the NOTICE file distributed with
   this work for additional information regarding copyright ownership.
   The ASF licenses this file to You under the Apache License, Version 2.0
-  (the "License"); you may not use this file except in compliance with
-  the License. You may obtain a copy of the License at
-
-      https://www.apache.org/licenses/LICENSE-2.0
-
-  Unless required by applicable law or agreed to in writing, software
-  distributed under the License is distributed on an "AS IS" BASIS,
-  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-  See the License for the specific language governing permissions and
-  limitations under the License.
+  (the "License"); you may not use this file except in compliance with the License. You may obtain
+  a copy of the License at https://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+  law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+  BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+  for the specific language governing permissions and limitations under the License.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0">
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.forwardmeasure.openworkflow</groupId>
-        <artifactId>forwardmeasure-openworkflow-parent</artifactId>
+        <artifactId>openworkflow-definition-management</artifactId>
         <version>${revision}</version>
-        <relativePath>../../pom.xml</relativePath>
+        <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>openworkflow-definition-management-jpa</artifactId>
     <name>ForwardMeasure OpenWorkflow :: Definition Management :: JPA</name>
+
     <dependencies>
         <dependency>
             <groupId>com.forwardmeasure.openworkflow</groupId>
@@ -35,12 +31,24 @@
             <artifactId>forwardmeasure-jpa-core</artifactId>
         </dependency>
         <dependency>
-            <groupId>jakarta.persistence</groupId>
-            <artifactId>jakarta.persistence-api</artifactId>
+            <groupId>com.forwardmeasure.jpa</groupId>
+            <artifactId>forwardmeasure-jpa-identity</artifactId>
         </dependency>
         <dependency>
-            <groupId>jakarta.validation</groupId>
-            <artifactId>jakarta.validation-api</artifactId>
+            <groupId>com.forwardmeasure.jpa</groupId>
+            <artifactId>forwardmeasure-jpa-tenancy</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-definition</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
         </dependency>
         <dependency>
             <groupId>jakarta.enterprise</groupId>
@@ -48,13 +56,17 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>com.forwardmeasure.openworkflow</groupId>
-            <artifactId>openworkflow-migrations</artifactId>
-            <scope>test</scope>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
-            <groupId>org.hibernate.orm</groupId>
-            <artifactId>hibernate-core</artifactId>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-migrations</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

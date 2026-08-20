@@ -19,6 +19,7 @@ replicas: 1
 image:
   repository: forwardmeasure/openworkflow-definition-quarkus
   tag: 1.0.0-SNAPSHOT
+  digest: ""
   pullPolicy: IfNotPresent
 database:
   url: jdbc:postgresql://postgresql:5432/openworkflow

@@ -1,0 +1,220 @@
+openapi: 3.1.0
+
+info:
+  title: ForwardMeasure OpenWorkflow API Common Definitions
+  version: 1.0.0
+  license:
+    name: Apache License, Version 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.txt
+
+paths: {}
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Keycloak-issued JWT for one active Organization. Tenant and actor
+        identity are derived from the token; they are never accepted from
+        request bodies, path parameters, or query parameters.
+  parameters:
+    Offset:
+      name: offset
+      in: query
+      required: false
+      description: Number of authorized resources to skip
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+    Limit:
+      name: limit
+      in: query
+      required: false
+      description: Maximum number of authorized resources to return
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 32
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Strong ETag returned by the most recent read or mutation
+      schema:
+        type: string
+        pattern: '^"[0-9]+"$'
+    CorrelationId:
+      name: X-Correlation-ID
+      in: header
+      required: true
+      description: Caller-supplied correlation identifier propagated through audit records
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 160
+  headers:
+    ETag:
+      description: Strong entity tag containing the current optimistic-lock revision
+      schema:
+        type: string
+        pattern: '^"[0-9]+"$'
+    Location:
+      description: Relative URI of the created or affected resource
+      schema:
+        type: string
+        format: uri-reference
+  responses:
+    BadRequest:
+      description: Malformed request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: Authentication is absent or invalid
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Forbidden:
+      description: The authenticated actor is not authorized for the requested resource action
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: The resource does not exist or is not visible to the authenticated actor
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: The request conflicts with resource identity or lifecycle state
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    PreconditionFailed:
+      description: The supplied If-Match value does not identify the current revision
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    UnprocessableEntity:
+      description: The request is syntactically valid but violates resource constraints
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    InternalServerError:
+      description: An unexpected error occurred while processing the request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Paging:
+      type: object
+      additionalProperties: false
+      required:
+        - start
+        - limit
+        - is_last_page
+      properties:
+        start:
+          type: integer
+          format: int32
+          minimum: 0
+        limit:
+          type: integer
+          format: int32
+          minimum: 1
+        is_last_page:
+          type: boolean
+        next_page_start:
+          type: integer
+          format: int32
+          minimum: 0
+          nullable: true
+        total_count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Total number of resources authorized for the caller
+    ActorReference:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - subject
+        - type
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        subject:
+          type: string
+          readOnly: true
+          description: Actor subject identifier from the trusted identity provider
+        type:
+          type: string
+          enum:
+            - human
+            - service
+          readOnly: true
+        display_name:
+          type: string
+          nullable: true
+          readOnly: true
+    Problem:
+      type: object
+      additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          default: about:blank
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+          minimum: 100
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+        correlation_id:
+          type: string
+          nullable: true
+        violations:
+          type: array
+          items:
+            $ref: '#/components/schemas/Violation'
+    Violation:
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - message
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        rejected_value:
+          type: string
+          nullable: true

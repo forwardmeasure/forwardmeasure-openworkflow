@@ -1,0 +1,610 @@
+openapi: 3.1.0
+info:
+  title: ForwardMeasure OpenWorkflow Execution Management API
+  version: 1.0.0
+  description: |
+    Tenant-scoped durable execution start, pause, resume, cancellation,
+    recovery, and query, for a published, non-deprecated workflow
+    definition revision.
+
+    Tenant and actor identity are derived from the authenticated security
+    context. They are never accepted from request bodies, path parameters,
+    or query parameters.
+
+    An execution is assigned an execution engine on admission and remains
+    pinned to it for its lifetime. Acknowledgement of a pause/resume/cancel
+    command means the relevant lifecycle transition is durable; a restarted
+    or relocated execution remains in that state.
+  license:
+    name: Apache License, Version 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.txt
+servers:
+  - url: /
+security:
+  - BearerAuth: []
+tags:
+  - name: Executions
+    description: Durable workflow execution control and query
+paths:
+  /v1/executions:
+    post:
+      tags: [Executions]
+      operationId: startExecution
+      summary: Start a durable execution of a published workflow revision
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: './common-definitions.yaml#/components/parameters/CorrelationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionStart'
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '202':
+          description: Execution durably admitted
+          headers:
+            Location:
+              $ref: './common-definitions.yaml#/components/headers/Location'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '400':
+          description: Malformed request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '404':
+          description: The referenced revision is not a published, non-deprecated definition
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '409':
+          description: The Idempotency-Key was already used for a different request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '422':
+          description: The request is syntactically valid but violates resource constraints
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+    get:
+      tags: [Executions]
+      operationId: listExecutions
+      summary: List executions visible to the authenticated actor
+      parameters:
+        - name: state
+          in: query
+          schema:
+            type: array
+            items:
+              $ref: '#/components/schemas/ExecutionState'
+          style: form
+          explode: false
+        - name: engineId
+          in: query
+          schema:
+            type: string
+        - name: correlationId
+          in: query
+          schema:
+            type: string
+        - name: createdFrom
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: createdUntil
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '200':
+          description: Canonical execution page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPage'
+        '400':
+          description: Malformed request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+  /v1/executions/{executionId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+    get:
+      tags: [Executions]
+      operationId: getExecution
+      summary: Retrieve the canonical execution
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '200':
+          description: Canonical execution
+          headers:
+            ETag:
+              $ref: './common-definitions.yaml#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '404':
+          description: The resource does not exist or is not visible to the authenticated actor
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+  /v1/executions/{executionId}/history:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+      - name: afterSequence
+        in: query
+        schema:
+          type: integer
+          format: int64
+          minimum: -1
+          default: -1
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 100
+    get:
+      tags: [Executions]
+      operationId: getExecutionHistory
+      summary: Retrieve ordered canonical execution history
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '200':
+          description: Ordered canonical history page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionHistoryPage'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '404':
+          description: The resource does not exist or is not visible to the authenticated actor
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+  /v1/executions/{executionId}/pause:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+    post:
+      tags: [Executions]
+      operationId: pauseExecution
+      summary: Durably request pause
+      description: |
+        Stops admitting new work at a defined safe boundary and persists
+        `PAUSING` then `PAUSED`. Acknowledgement means the `PAUSING`
+        transition is durable, not that pausing has completed.
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: './common-definitions.yaml#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionControl'
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '202':
+          description: Pause command transition is durable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '404':
+          description: The resource does not exist or is not visible to the authenticated actor
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '409':
+          description: The request conflicts with resource identity or lifecycle state
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '412':
+          description: The supplied If-Match value does not identify the current revision
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+  /v1/executions/{executionId}/resume:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+    post:
+      tags: [Executions]
+      operationId: resumeExecution
+      summary: Durably request resume
+      description: |
+        Continues from the retained durable cursor without repeating
+        accepted effects or completed tasks.
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: './common-definitions.yaml#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionControl'
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '202':
+          description: Resume command transition is durable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '404':
+          description: The resource does not exist or is not visible to the authenticated actor
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '409':
+          description: The request conflicts with resource identity or lifecycle state
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '412':
+          description: The supplied If-Match value does not identify the current revision
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+  /v1/executions/{executionId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionId'
+    post:
+      tags: [Executions]
+      operationId: cancelExecution
+      summary: Durably request cancellation
+      description: |
+        Persists `CANCELLING`, stops admitting work, requests best-effort
+        cancellation of cancellable effects, then persists irreversible
+        `CANCELLED`. Late timers, retries, responses, or duplicates cannot
+        resurrect a cancelled execution.
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: './common-definitions.yaml#/components/parameters/CorrelationId'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecutionControl'
+      responses:
+        '500':
+          description: An unexpected error occurred while processing the request
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '202':
+          description: Cancel command transition is durable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Execution'
+        '401':
+          description: Authentication is absent or invalid
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '403':
+          description: The authenticated actor is not authorized for the requested resource action
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '404':
+          description: The resource does not exist or is not visible to the authenticated actor
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '409':
+          description: The request conflicts with resource identity or lifecycle state
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+        '412':
+          description: The supplied If-Match value does not identify the current revision
+          content:
+            application/problem+json:
+              schema:
+                $ref: './common-definitions.yaml#/components/schemas/Problem'
+components:
+  securitySchemes:
+    BearerAuth:
+      $ref: './common-definitions.yaml#/components/securitySchemes/BearerAuth'
+  parameters:
+    ExecutionId:
+      name: executionId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 160
+  schemas:
+    ExecutionState:
+      type: string
+      enum: [NEW, RUNNING, WAITING, PAUSING, PAUSED, CANCELLING, CANCELLED, COMPLETED, FAILED]
+    ExecutionStart:
+      type: object
+      additionalProperties: false
+      required: [revisionId, input]
+      properties:
+        revisionId:
+          type: string
+          format: uuid
+          description: The published, non-deprecated workflow definition revision to execute
+        input:
+          description: Workflow input document
+    ExecutionControl:
+      type: object
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          maxLength: 1000
+          nullable: true
+    Execution:
+      type: object
+      additionalProperties: false
+      required: [id, workflowId, revisionId, revisionDigest, engineId, state, version, correlationId, input, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        workflowId:
+          type: string
+          format: uuid
+          readOnly: true
+          description: The stable workflow identity the executed revision belongs to
+        revisionId:
+          type: string
+          format: uuid
+          readOnly: true
+        revisionDigest:
+          type: string
+          pattern: '^[0-9a-f]{64}$'
+          readOnly: true
+        engineId:
+          type: string
+          readOnly: true
+        state:
+          $ref: '#/components/schemas/ExecutionState'
+        version:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+        correlationId:
+          type: string
+          readOnly: true
+        input:
+          readOnly: true
+        output:
+          nullable: true
+          readOnly: true
+        error:
+          nullable: true
+          readOnly: true
+        effects:
+          type: array
+          readOnly: true
+          items: {}
+        timers:
+          type: array
+          readOnly: true
+          items: {}
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+    ExecutionPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Execution'
+        next_cursor:
+          type: string
+          nullable: true
+    ExecutionHistoryEntry:
+      type: object
+      additionalProperties: false
+      required: [eventId, sequence, state, type, occurredAt, data]
+      properties:
+        eventId:
+          type: string
+          format: uuid
+          readOnly: true
+        sequence:
+          type: integer
+          format: int64
+          minimum: 0
+          readOnly: true
+        state:
+          $ref: '#/components/schemas/ExecutionState'
+        type:
+          type: string
+          readOnly: true
+        taskPath:
+          type: string
+          nullable: true
+          readOnly: true
+        occurredAt:
+          type: string
+          format: date-time
+          readOnly: true
+        data:
+          readOnly: true
+    ExecutionHistoryPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionHistoryEntry'
+        next_after_sequence:
+          type: integer
+          format: int64
+          nullable: true

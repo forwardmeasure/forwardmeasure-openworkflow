@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
         - name: cassandra
-          image: cassandra:{{ .Values.versions.cassandra }}
+          image: {{ .Values.images.cassandra.repository }}{{ if .Values.images.cassandra.digest }}@{{ .Values.images.cassandra.digest }}{{ else }}:{{ .Values.images.cassandra.tag }}{{ end }}
           imagePullPolicy: IfNotPresent
           env:
             - {name: CASSANDRA_CLUSTER_NAME, value: openworkflow}
@@ -44,37 +44,4 @@ spec:
           resources:
             requests: {cpu: 100m, memory: 768Mi}
             limits: {cpu: "2", memory: 1Gi}
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: openworkflow-cassandra-schema
-data:
-  schema.cql: |
-{{ .Files.Get "files/cassandra-schema.cql" | indent 4 }}
----
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: openworkflow-cassandra-schema-{{ .Files.Get "files/cassandra-schema.cql" | sha256sum | trunc 8 }}
-  annotations:
-    helm.sh/hook: post-install,post-upgrade
-    helm.sh/hook-weight: "5"
-    helm.sh/hook-delete-policy: before-hook-creation
-spec:
-  backoffLimit: 20
-  template:
-    spec:
-      restartPolicy: OnFailure
-      containers:
-        - name: migrate
-          image: cassandra:{{ .Values.versions.cassandra }}
-          command: ["sh", "-ec"]
-          args:
-            - until cqlsh cassandra 9042 -e 'SELECT release_version FROM system.local'; do sleep 3; done; cqlsh cassandra 9042 -f /schema/schema.cql
-          volumeMounts:
-            - {name: schema, mountPath: /schema}
-      volumes:
-        - name: schema
-          configMap: {name: openworkflow-cassandra-schema}
 {{- end }}

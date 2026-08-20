@@ -12,8 +12,8 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
-    "@forwardmeasure/openworkflow-definition-management-client": "file:../../../../../openworkflow-definition-management/openworkflow-definition-management-client-typescript/target/generated-typescript",
-    "@forwardmeasure/openworkflow-execution-client": "file:../../../../../openworkflow-execution-management/openworkflow-execution-client-typescript/target/generated-typescript",
+    "@forwardmeasure/openworkflow-definition-management-client": "file:../../../../../openworkflow-api-language-bindings/typescript/workflow-definition-management-service/openworkflow-definition-management-client-typescript/target/generated-typescript",
+    "@forwardmeasure/openworkflow-execution-client": "file:../../../../../openworkflow-api-language-bindings/typescript/workflow-execution-management-service/openworkflow-execution-client-typescript/target/generated-typescript",
     "js-yaml": "5.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"

@@ -15,9 +15,17 @@ import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
 import java.util.Objects;
 import java.util.UUID;
 
-/** Immutable, published definition revision selected by execution admission. */
+/**
+ * Immutable, published definition revision selected by execution admission.
+ *
+ * <p>{@code workflowId} is nullable: it identifies the owning {@code Workflow} for API responses
+ * that need it (e.g. the execution contract's {@code workflowId} field), but isn't always available
+ * where a {@link DefinitionRevision} is constructed (tests, engine-internal contexts with no
+ * definition-plane lookup).
+ */
 public record DefinitionRevision(
     UUID revisionId,
+    UUID workflowId,
     WorkflowCoordinates coordinates,
     String definitionSha256,
     String compilerSha256) {
@@ -30,8 +38,12 @@ public record DefinitionRevision(
   }
 
   public static DefinitionRevision from(UUID revisionId, WorkflowPlan plan) {
+    return from(revisionId, null, plan);
+  }
+
+  public static DefinitionRevision from(UUID revisionId, UUID workflowId, WorkflowPlan plan) {
     Objects.requireNonNull(plan, "plan");
     return new DefinitionRevision(
-        revisionId, plan.coordinates(), plan.definitionSha256(), plan.compilerSha256());
+        revisionId, workflowId, plan.coordinates(), plan.definitionSha256(), plan.compilerSha256());
   }
 }

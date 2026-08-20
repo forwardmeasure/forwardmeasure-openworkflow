@@ -1,9 +1,5 @@
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
- * agreements. See the NOTICE file distributed with this work for additional information.
- */
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
  * agreements. See the NOTICE file distributed with this work for additional information regarding
  * copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0
  * (the "License"); you may not use this file except in compliance with the License. You may obtain a
@@ -15,23 +11,27 @@
 package com.forwardmeasure.openworkflow.definition.management.jaxrs;
 
 import com.forwardmeasure.openworkflow.authorization.AuthorizationAction;
+import com.forwardmeasure.openworkflow.authorization.AuthorizationDecision;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationRequest;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationResource;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
-import jakarta.ws.rs.HeaderParam;
-import jakarta.ws.rs.POST;
-import jakarta.ws.rs.Path;
+import com.forwardmeasure.openworkflow.definition.management.api.AuthorizationApi;
+import com.forwardmeasure.openworkflow.definition.management.api.model.BatchAuthorizationRequest;
+import com.forwardmeasure.openworkflow.definition.management.api.model.BatchAuthorizationResponse;
 import jakarta.ws.rs.core.Response;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
- * AuthZEN batch facade used only for Studio affordances; command authorization remains
- * authoritative.
+ * AuthZEN batch facade used only for Studio UI affordances (e.g. greying out a button); every other
+ * operation in this capability independently and authoritatively re-checks authorization
+ * server-side regardless of what this endpoint returns.
  */
-@Path("/api/v1/authorizations")
-public final class StudioAuthorizationResource {
+public class StudioAuthorizationResource implements AuthorizationApi {
   private final AuthorizationService authorization;
   private final ActiveOrganizationProvider organizations;
 
@@ -41,51 +41,47 @@ public final class StudioAuthorizationResource {
     this.organizations = Objects.requireNonNull(organizations, "organizations");
   }
 
-  @POST
-  public Response evaluate(
-      @HeaderParam("X-Correlation-ID") String correlationId, BatchRequest request) {
+  @Override
+  public Response batchEvaluateAuthorizations(
+      String xCorrelationID, BatchAuthorizationRequest batchAuthorizationRequest) {
     var active = organizations.current();
-    var decisions =
+    List<String> actions = batchAuthorizationRequest.getActions();
+    Map<String, Object> properties =
+        batchAuthorizationRequest.getProperties() == null
+            ? Map.of()
+            : batchAuthorizationRequest.getProperties();
+    AuthorizationResource resource =
+        new AuthorizationResource(
+            batchAuthorizationRequest.getResourceType(),
+            batchAuthorizationRequest.getResourceId(),
+            properties);
+    List<AuthorizationDecision> decisions =
         authorization.evaluateBatch(
-            request.actions().stream()
+            actions.stream()
                 .map(
                     scope ->
                         new AuthorizationRequest(
                             active,
-                            new AuthorizationResource(
-                                request.resourceType(), request.resourceId(), request.properties()),
+                            resource,
                             action(scope),
-                            correlationId,
+                            xCorrelationID,
                             Map.of("studio", true)))
                 .toList());
-    return Response.ok(
-            new BatchResponse(
-                java.util.stream.IntStream.range(0, request.actions().size())
-                    .boxed()
-                    .collect(
-                        java.util.stream.Collectors.toUnmodifiableMap(
-                            index -> request.actions().get(index),
-                            index -> decisions.get(index).permitted()))))
-        .build();
+    BatchAuthorizationResponse response = new BatchAuthorizationResponse();
+    response.setDecisions(
+        IntStream.range(0, actions.size())
+            .boxed()
+            .collect(
+                Collectors.toUnmodifiableMap(
+                    actions::get, index -> decisions.get(index).permitted())));
+    return Response.ok(response).build();
   }
 
   private static AuthorizationAction action(String scope) {
-    return java.util.Arrays.stream(AuthorizationAction.values())
+    return Arrays.stream(AuthorizationAction.values())
         .filter(candidate -> candidate.scope().equals(scope))
         .findFirst()
-        .orElseThrow(() -> new IllegalArgumentException("Unsupported authorization action"));
+        .orElseThrow(
+            () -> new IllegalArgumentException("Unsupported authorization action: " + scope));
   }
-
-  public record BatchRequest(
-      String resourceType,
-      String resourceId,
-      Map<String, Object> properties,
-      List<String> actions) {
-    public BatchRequest {
-      properties = Map.copyOf(properties == null ? Map.of() : properties);
-      actions = List.copyOf(actions);
-    }
-  }
-
-  public record BatchResponse(Map<String, Boolean> decisions) {}
 }

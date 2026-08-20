@@ -27,6 +27,8 @@ case "$framework" in
 esac
 
 namespace=forwardmeasure-openworkflow
+identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
+identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 keycloak_port=18100
 service="openworkflow-definition-${framework}"
 definition="k2-${framework}-$(date +%s)"
@@ -38,7 +40,7 @@ cleanup() {
 trap cleanup EXIT
 
 kubectl -n "$namespace" rollout status "deployment/${service}" --timeout=180s
-kubectl -n "$namespace" port-forward service/keycloak "${keycloak_port}:8080" >"$work/keycloak.log" 2>&1 &
+kubectl -n "$identity_namespace" port-forward service/"$identity_service" "${keycloak_port}:8080" >"$work/keycloak.log" 2>&1 &
 keycloak_pid=$!
 kubectl -n "$namespace" port-forward "service/${service}" "${service_port}:8080" >"$work/service.log" 2>&1 &
 service_pid=$!

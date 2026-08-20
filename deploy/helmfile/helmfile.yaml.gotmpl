@@ -16,38 +16,46 @@
 #
 helmDefaults:
   wait: true
+  waitForJobs: true
   timeout: 600
   atomic: true
+  createNamespace: false
 
 environments:
   local:
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/local.yaml
   development:
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/development.yaml
   ci:
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/ci.yaml
   kind:
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/kind.yaml
   production-postgresql:
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/production-postgresql.yaml.gotmpl
   production-cassandra:
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/production-cassandra.yaml.gotmpl
 
@@ -55,25 +63,36 @@ helmfiles:
   - path: helmfiles/foundation.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
+      - environments/base.yaml
+      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+  - path: helmfiles/migrations.yaml.gotmpl
+    values:
+      - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
   - path: helmfiles/definition-services.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
   - path: helmfiles/execution-engines.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
   - path: helmfiles/studios.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
   - path: helmfiles/acceptance-fixtures.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
+      - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}

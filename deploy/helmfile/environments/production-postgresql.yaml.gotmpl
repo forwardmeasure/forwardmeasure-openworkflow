@@ -1,6 +1,11 @@
 deploymentProfile: production-postgresql
-openworkflowVersion: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
-studioVersion: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+imageVersions:
+  definition: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  studio: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  pekkoRuntime: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  kafkaRuntime: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  tenantProvisioning: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  migrations: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
 imagePullPolicy: Always
 ingressEnabled: true
 credentialsSecretName: {{ requiredEnv "OPENWORKFLOW_CREDENTIALS_SECRET" | quote }}

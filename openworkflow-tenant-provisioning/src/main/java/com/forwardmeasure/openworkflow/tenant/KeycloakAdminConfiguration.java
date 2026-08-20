@@ -22,13 +22,13 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 public record KeycloakAdminConfiguration(
-    URI serverUri, String realm, String sharedClientUuid, Duration requestTimeout) {
+    URI serverUri, String realm, String sharedClientId, Duration requestTimeout) {
   private static final Pattern SEGMENT = Pattern.compile("[A-Za-z0-9._-]+");
 
   public KeycloakAdminConfiguration {
     Objects.requireNonNull(serverUri, "serverUri");
     validateSegment(realm, "realm");
-    validateSegment(sharedClientUuid, "sharedClientUuid");
+    validateSegment(sharedClientId, "sharedClientId");
     Objects.requireNonNull(requestTimeout, "requestTimeout");
     if (requestTimeout.isZero() || requestTimeout.isNegative()) {
       throw new IllegalArgumentException("requestTimeout must be positive");

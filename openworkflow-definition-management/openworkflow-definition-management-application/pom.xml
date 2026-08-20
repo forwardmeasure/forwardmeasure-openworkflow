@@ -14,20 +14,51 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.forwardmeasure.openworkflow</groupId>
-        <artifactId>forwardmeasure-openworkflow-parent</artifactId>
+        <artifactId>openworkflow-definition-management</artifactId>
         <version>${revision}</version>
-        <relativePath>../../pom.xml</relativePath>
+        <relativePath>../pom.xml</relativePath>
     </parent>
     <artifactId>openworkflow-definition-management-application</artifactId>
     <name>ForwardMeasure OpenWorkflow :: Definition Management :: Application</name>
+
     <dependencies>
+        <dependency>
+            <groupId>com.forwardmeasure.jpa</groupId>
+            <artifactId>forwardmeasure-jpa-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.jpa</groupId>
+            <artifactId>forwardmeasure-jpa-identity</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.persistence</groupId>
+            <artifactId>jakarta.persistence-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-authorization-api</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.forwardmeasure.openworkflow</groupId>
             <artifactId>openworkflow-definition</artifactId>
         </dependency>
         <dependency>
             <groupId>com.forwardmeasure.openworkflow</groupId>
-            <artifactId>openworkflow-authorization-api</artifactId>
+            <artifactId>openworkflow-definition-management-models</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

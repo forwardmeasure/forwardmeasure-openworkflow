@@ -22,3 +22,7 @@ keycloak:
   tenantAlias: tenant-a
   testPassword: openworkflow-k2
 credentialsSecretName: openworkflow-foundation
+image:
+  repository: alpine
+  tag: "3.22"
+  digest: ""

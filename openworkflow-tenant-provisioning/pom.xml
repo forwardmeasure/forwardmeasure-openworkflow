@@ -50,7 +50,7 @@
     <build>
         <testResources>
             <testResource>
-                <directory>${maven.multiModuleProjectDirectory}/config/keycloak</directory>
+                <directory>${project.basedir}/../config/keycloak</directory>
             </testResource>
         </testResources>
         <plugins>

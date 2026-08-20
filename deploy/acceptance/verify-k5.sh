@@ -3,6 +3,8 @@
 set -euo pipefail
 
 namespace=${OPENWORKFLOW_ACCEPTANCE_NAMESPACE:-forwardmeasure-openworkflow}
+identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
+identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 work=$(mktemp -d)
 
@@ -45,7 +47,7 @@ service_port=$((18400 + RANDOM % 300))
 
 kubectl -n "$namespace" rollout status "deployment/$runtime" --timeout=240s
 gateway=$(kubectl -n "$namespace" get pods -l "$selector" -o jsonpath='{.items[0].metadata.name}')
-kubectl -n "$namespace" port-forward service/keycloak "$keycloak_port:8080" >"$work/keycloak.log" 2>&1 &
+kubectl -n "$identity_namespace" port-forward service/"$identity_service" "$keycloak_port:8080" >"$work/keycloak.log" 2>&1 &
 keycloak_pid=$!
 start_service_forward() {
   local target="service/$service"

@@ -226,12 +226,14 @@ public final class JpaExecutionRepository implements ExecutionRepository {
         .createNativeQuery(
             "select"
                 + " e.uuid,e.version,r.uuid,r.resolved_document,r.resolved_resources,r.resolved_digest,e.engine_id,"
-                + "e.lifecycle_state,e.idempotency_key,e.correlation_id,a.subject_identifier,e.input,e.created_at,e.updated_at"
+                + "e.lifecycle_state,e.idempotency_key,e.correlation_id,a.subject_identifier,e.input,e.created_at,e.updated_at,w.uuid"
                 + " from "
                 + schema
                 + ".workflow_execution e join "
                 + schema
-                + ".workflow_revision r on r.id=e.revision_id join "
+                + ".workflow_definition r on r.id=e.revision_id join "
+                + schema
+                + ".workflow w on w.id=r.workflow_id join "
                 + schema
                 + ".actor a on a.id=e.started_by_actor_id where "
                 + predicate)
@@ -249,7 +251,11 @@ public final class JpaExecutionRepository implements ExecutionRepository {
     return new CanonicalExecution(
         new ExecutionId(engineTenantId, (UUID) values[0]),
         new DefinitionRevision(
-            (UUID) values[2], plan.coordinates(), values[5].toString(), plan.compilerSha256()),
+            (UUID) values[2],
+            (UUID) values[14],
+            plan.coordinates(),
+            values[5].toString(),
+            plan.compilerSha256()),
         new EngineId(values[6].toString()),
         ExecutionLifecycleState.valueOf(values[7].toString()),
         ((Number) values[1]).longValue(),

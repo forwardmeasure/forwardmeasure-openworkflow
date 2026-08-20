@@ -17,17 +17,15 @@
 
 namespace: forwardmeasure-openworkflow
 imagePullPolicy: IfNotPresent
-versions:
-  keycloak: "26.7.1"
-  postgres: "18.0"
-  cassandra: "5.0"
-  redpanda: "v25.1.9"
-  tenantProvisioning: "1.0.0-SNAPSHOT"
-  migrations: "1.0.0-SNAPSHOT"
+images:
+  postgresql: {repository: postgres, tag: "18.0", digest: ""}
+  cassandra: {repository: cassandra, tag: "5.0", digest: ""}
+  redpanda: {repository: docker.redpanda.com/redpandadata/redpanda, tag: "v25.1.9", digest: ""}
+  tenantProvisioning: {repository: forwardmeasure/openworkflow-tenant-provisioning, tag: "1.0.0-SNAPSHOT", digest: ""}
+  curl: {repository: curlimages/curl, tag: "8.16.0", digest: ""}
 keycloak:
-  enabled: true
-  realm: openworkflow
-  sharedClientUuid: 00000000-0000-0000-0000-000000000001
+  realm: forwardmeasure
+  sharedClientId: forwardmeasure-public
   adminUsername: admin
   adminPassword: openworkflow-k1-admin
   clientSecret: openworkflow-k1-client
@@ -45,12 +43,11 @@ redpanda:
 secrets:
   create: true
   name: openworkflow-foundation
+identityCredentialsSecretName: openworkflow-identity-credentials
 jobs:
   tenantReconciliation:
     enabled: true
-    keycloakUrl: http://keycloak:8080
-  migrations:
-    enabled: true
+    keycloakUrl: http://keycloak.keycloak.svc.cluster.local:8080
 capabilityPacks:
   - openworkflow
 tenants:

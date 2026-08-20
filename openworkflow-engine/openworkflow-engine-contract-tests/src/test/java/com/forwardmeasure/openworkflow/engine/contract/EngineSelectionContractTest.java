@@ -42,6 +42,7 @@ class EngineSelectionContractTest {
   private static final DefinitionRevision DEFINITION =
       new DefinitionRevision(
           UUID.fromString("66d84900-a7fc-4cc2-a832-2fc848d0af1d"),
+          null,
           new WorkflowCoordinates("selection", "workflow", "1.0.0", "1.0.3"),
           DIGEST,
           DIGEST);

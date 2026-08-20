@@ -45,8 +45,10 @@ class DefinitionPlaneMigrationTest {
 
     List<String> expected =
         List.of(
+            "openworkflow_event_subscription",
             "pekko_projection_management",
             "pekko_projection_offset_store",
+            "workflow",
             "workflow_authorization_audit",
             "workflow_command_receipt",
             "workflow_definition",
@@ -55,15 +57,16 @@ class DefinitionPlaneMigrationTest {
             "workflow_execution_projection",
             "workflow_lifecycle_history",
             "workflow_publication",
-            "workflow_review",
-            "workflow_revision",
-            "workflow_validation");
+            "workflow_review");
     assertEquals(expected, applicationTables(database, TenantSchema.forTenant(TENANT_A).value()));
     assertEquals(expected, applicationTables(database, TenantSchema.forTenant(TENANT_B).value()));
-    assertEquals(25, changeSetCount(database, TenantSchema.forTenant(TENANT_A).value()));
-    assertEquals(25, changeSetCount(database, TenantSchema.forTenant(TENANT_B).value()));
-    assertEquals(1, nextSequenceValue(database, TenantSchema.forTenant(TENANT_A).value()));
-    assertEquals(1, nextSequenceValue(database, TenantSchema.forTenant(TENANT_B).value()));
+    assertEquals(22, changeSetCount(database, TenantSchema.forTenant(TENANT_A).value()));
+    assertEquals(22, changeSetCount(database, TenantSchema.forTenant(TENANT_B).value()));
+    // openworkflow-170 unconditionally aligns every definition-plane sequence to the next
+    // 50-boundary, even on a fresh schema - matches incrementBy=50 on these sequences, which
+    // matches allocationSize=50 on each entity's @SequenceGenerator.
+    assertEquals(50, nextSequenceValue(database, TenantSchema.forTenant(TENANT_A).value()));
+    assertEquals(50, nextSequenceValue(database, TenantSchema.forTenant(TENANT_B).value()));
   }
 
   private static List<String> applicationTables(PostgreSqlTestContainer database, String schema)
@@ -72,8 +75,8 @@ class DefinitionPlaneMigrationTest {
         var statement =
             connection.prepareStatement(
                 "select table_name from information_schema.tables where table_schema = ? and"
-                    + " (table_name like 'workflow_%' or table_name like 'pekko_projection_%')"
-                    + " order by table_name")) {
+                    + " (table_name = 'workflow' or table_name like 'workflow\\_%' escape '\\' or"
+                    + " table_name like 'pekko_projection_%') order by table_name")) {
       statement.setString(1, schema);
       try (var result = statement.executeQuery()) {
         var tables = new java.util.ArrayList<String>();
@@ -101,7 +104,7 @@ class DefinitionPlaneMigrationTest {
     try (Connection connection = database.dataSource().getConnection();
         var statement =
             connection.prepareStatement(
-                "select nextval('" + schema + ".workflow_revision_id_seq')");
+                "select nextval('" + schema + ".workflow_definition_id_seq')");
         var result = statement.executeQuery()) {
       result.next();
       return result.getLong(1);
