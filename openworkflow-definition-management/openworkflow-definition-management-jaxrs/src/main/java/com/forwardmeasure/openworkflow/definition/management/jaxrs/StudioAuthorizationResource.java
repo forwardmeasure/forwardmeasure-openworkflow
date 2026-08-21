@@ -10,6 +10,7 @@
  */
 package com.forwardmeasure.openworkflow.definition.management.jaxrs;
 
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationAction;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationDecision;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationRequest;

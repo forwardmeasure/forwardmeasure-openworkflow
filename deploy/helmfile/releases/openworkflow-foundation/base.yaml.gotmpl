@@ -33,4 +33,5 @@ tenants:
     displayName: Tenant B
 jobs:
   tenantReconciliation:
+    enabled: {{ dig "tenantReconciliation" "enabled" true .Values }}
     keycloakUrl: {{ .Values.keycloak.url | quote }}

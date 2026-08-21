@@ -102,7 +102,8 @@ final class LifecycleCloudEventMapperTest {
             new EngineEvent.Cancelled(command, List.of("/do/0/initialize"), AT));
     assertEquals("io.serverlessworkflow.workflow.cancelled.v1", cancelled.getFirst().type());
     assertEquals("io.serverlessworkflow.task.cancelled.v1", cancelled.get(1).type());
-    assertEquals(TENANT.value(), cancelled.getFirst().extensions().get("tenant").asText());
+    assertEquals(
+        TENANT.value().toString(), cancelled.getFirst().extensions().get("tenant").asText());
   }
 
   @Test

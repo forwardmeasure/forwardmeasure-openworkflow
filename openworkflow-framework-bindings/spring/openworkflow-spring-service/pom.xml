@@ -25,8 +25,9 @@
     <version>${revision}</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <artifactId>openworkflow-spring-service</artifactId>
-  <name>ForwardMeasure OpenWorkflow :: Spring Service</name>
+  <artifactId>openworkflow-definition-management-spring-service</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Definition Management :: Spring Service</name>
+  <properties><container-image.name>openworkflow-definition-management-spring</container-image.name></properties>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -40,6 +41,10 @@
   </dependencyManagement>
   <dependencies>
     <dependency>
+      <groupId>com.forwardmeasure.jpa</groupId>
+      <artifactId>forwardmeasure-jpa-locking</artifactId>
+    </dependency>
+    <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-spring-binding</artifactId>
       <version>${project.version}</version>
@@ -47,16 +52,6 @@
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-definition-management-spring</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>openworkflow-engine-spring-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>openworkflow-execution-management-spring-binding</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -101,22 +96,21 @@
       <build>
         <plugins>
           <plugin>
-            <groupId>com.google.cloud.tools</groupId>
-            <artifactId>jib-maven-plugin</artifactId>
+            <groupId>io.fabric8</groupId>
+            <artifactId>docker-maven-plugin</artifactId>
             <configuration>
-              <from><image>eclipse-temurin:25-jre</image></from>
-              <to><image>forwardmeasure/openworkflow-definition-spring:${project.version}</image></to>
-              <container>
-                <mainClass>com.forwardmeasure.openworkflow.service.spring.OpenWorkflowSpringApplication</mainClass>
-                <creationTime>EPOCH</creationTime>
-              </container>
+              <images><image>
+                <name>${container-image.registry}/${container-image.group}/${container-image.name}:${container-image.tag}</name>
+                <build><contextDir>${project.basedir}</contextDir><dockerFile>src/main/docker/Dockerfile.jvm</dockerFile><args><APPLICATION_JAR>target/${project.build.finalName}.jar</APPLICATION_JAR><BASE_IMAGE>${container-image.base-jre}</BASE_IMAGE></args></build>
+              </image></images>
             </configuration>
             <executions>
               <execution>
                 <id>build-container-image</id>
                 <phase>package</phase>
-                <goals><goal>dockerBuild</goal></goals>
+                <goals><goal>build</goal></goals>
               </execution>
+              <execution><id>push-container-image</id><phase>package</phase><goals><goal>push</goal></goals></execution>
             </executions>
           </plugin>
         </plugins>

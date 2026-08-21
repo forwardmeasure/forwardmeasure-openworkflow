@@ -19,7 +19,7 @@ helmDefaults:
   waitForJobs: true
   timeout: 600
   atomic: true
-  createNamespace: false
+  createNamespace: true
 
 environments:
   local:
@@ -72,13 +72,31 @@ helmfiles:
       - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+  - path: helmfiles/security.yaml.gotmpl
+    values:
+      - environments/chart-versions.yaml
+      - environments/image-versions.yaml
+      - environments/base.yaml
+      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
   - path: helmfiles/definition-services.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
       - environments/image-versions.yaml
       - environments/base.yaml
       - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+  - path: helmfiles/execution-services.yaml.gotmpl
+    values:
+      - environments/chart-versions.yaml
+      - environments/image-versions.yaml
+      - environments/base.yaml
+      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
   - path: helmfiles/execution-engines.yaml.gotmpl
+    values:
+      - environments/chart-versions.yaml
+      - environments/image-versions.yaml
+      - environments/base.yaml
+      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+  - path: helmfiles/operation-adapters.yaml.gotmpl
     values:
       - environments/chart-versions.yaml
       - environments/image-versions.yaml

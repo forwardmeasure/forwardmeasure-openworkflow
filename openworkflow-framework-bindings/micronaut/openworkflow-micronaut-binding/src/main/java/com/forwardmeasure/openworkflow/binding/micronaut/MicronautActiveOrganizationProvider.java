@@ -11,8 +11,8 @@
 package com.forwardmeasure.openworkflow.binding.micronaut;
 
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganization;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.KeycloakOrganizationClaims;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import io.micronaut.security.authentication.Authentication;
 import io.micronaut.security.utils.SecurityService;
 import jakarta.inject.Singleton;

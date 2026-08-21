@@ -8,7 +8,7 @@ image:
   tag: 1.0.0-SNAPSHOT
   digest: ""
   pullPolicy: IfNotPresent
-apiUpstream: http://openworkflow-definition-quarkus:8080
+apiUpstream: http://openworkflow-definition-management-quarkus:8080
 environmentName: Acceptance
 ingress:
   enabled: false

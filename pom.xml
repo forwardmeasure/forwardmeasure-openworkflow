@@ -56,6 +56,9 @@
         <forwardmeasure.jpa.version>1.0.0</forwardmeasure.jpa.version>
         <forwardmeasure.testcontainers.version>1.0.0</forwardmeasure.testcontainers.version>
 
+        <!-- Every deployable leaf owns container-image.name; coordinates and switches are inherited. -->
+        <container-image.tag>${project.version}</container-image.tag>
+
         <!-- Shared library versions. -->
         <archunit.version>1.4.1</archunit.version>
         <jackson.jq.version>1.6.2</jackson.jq.version>
@@ -87,6 +90,7 @@
         <module>openworkflow-operation-adapter</module>
         <module>openworkflow-studio</module>
         <module>openworkflow-framework-bindings</module>
+        <module>openworkflow-deployments</module>
         <module>openworkflow-architecture-tests</module>
         <module>openworkflow-coverage</module>
     </modules>
@@ -274,6 +278,21 @@
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-engine-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-http</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-http-server</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-engine-event-http-server</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -483,6 +502,11 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-operation-adapter-pekko</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-operation-adapter-runner</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -508,7 +532,7 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-quarkus-service</artifactId>
+                <artifactId>openworkflow-definition-management-quarkus-service</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -518,7 +542,7 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-spring-service</artifactId>
+                <artifactId>openworkflow-definition-management-spring-service</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -528,7 +552,7 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-micronaut-service</artifactId>
+                <artifactId>openworkflow-definition-management-micronaut-service</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -675,7 +699,7 @@
                         <!-- Exact Apache-2.0 upstream conformance fixtures; integrity is
                         SHA-pinned. -->
                         <inputExclude>**/official-v1.0.3/**</inputExclude>
-                        <inputExclude>config/keycloak/*.json</inputExclude>
+                        <inputExclude>openworkflow-tenant-provisioning/src/main/resources/*.json</inputExclude>
                         <inputExclude>docs/diagrams/**</inputExclude>
                         <!-- Helm chart metadata and generated bootstrap CQL are distribution
                         assets. -->
@@ -749,6 +773,19 @@
     </build>
 
     <profiles>
+        <profile>
+            <id>container-image</id>
+            <properties>
+                <container-image.build>true</container-image.build>
+            </properties>
+        </profile>
+        <profile>
+            <id>push-container-image</id>
+            <activation>
+                <property><name>container-image.push</name><value>true</value></property>
+            </activation>
+            <properties><docker.skip.push>false</docker.skip.push></properties>
+        </profile>
         <profile>
             <id>focused</id>
             <activation>

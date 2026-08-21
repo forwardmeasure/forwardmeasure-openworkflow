@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>com.forwardmeasure.openworkflow</groupId>
+    <artifactId>openworkflow-deployments</artifactId>
+    <version>${revision}</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+ 
+  <artifactId>openworkflow-execution-management-quarkus-service</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Execution Management :: Quarkus Service</name>
+
+  <properties>
+    <container-image.name>openworkflow-execution-management-quarkus</container-image.name>
+    <quarkus.container-image.registry>${container-image.registry}</quarkus.container-image.registry>
+    <quarkus.container-image.group>${container-image.group}</quarkus.container-image.group>
+    <quarkus.container-image.name>${container-image.name}</quarkus.container-image.name>
+    <quarkus.container-image.tag>${container-image.tag}</quarkus.container-image.tag>
+  </properties>
+ 
+  <dependencies>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-quarkus-binding</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-execution-management-quarkus-binding</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-rest-jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-config-yaml</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-smallrye-health</artifactId>
+    </dependency>
+  </dependencies>
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>io.quarkus</groupId>
+        <artifactId>quarkus-maven-plugin</artifactId>
+        <extensions>true</extensions>
+        <executions>
+          <execution>
+            <goals>
+              <goal>build</goal>
+              <goal>generate-code</goal>
+              <goal>generate-code-tests</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+  <profiles>
+    <profile>
+      <id>container-image</id>
+      <dependencies>
+        <dependency>
+          <groupId>io.quarkus</groupId>
+          <artifactId>quarkus-container-image-docker</artifactId>
+        </dependency>
+      </dependencies>
+      <properties>
+        <quarkus.container-image.build>${container-image.build}</quarkus.container-image.build>
+        <quarkus.container-image.push>${container-image.push}</quarkus.container-image.push>
+        <quarkus.container-image.docker.dockerfile-jvm-path>src/main/docker/Dockerfile.jvm</quarkus.container-image.docker.dockerfile-jvm-path>
+      </properties>
+    </profile>
+  </profiles>
+</project>

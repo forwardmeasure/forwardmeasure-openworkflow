@@ -1,0 +1,17 @@
+quarkus: {application: {name: openworkflow-engine-pekko-quarkus}, http: {host: 0.0.0.0}}
+openworkflow:
+  execution-events: {url: "${OPENWORKFLOW_EXECUTION_EVENTS_URL:http://openworkflow-execution-management-quarkus:8080/internal/v1/execution-events/}", timeout: 30S}
+  persistence:
+    profile: "${OPENWORKFLOW_PERSISTENCE_PROFILE:postgresql}"
+    endpoint: "${OPENWORKFLOW_PERSISTENCE_ENDPOINT:jdbc:postgresql://postgresql:5432/openworkflow}"
+    username: "${OPENWORKFLOW_PERSISTENCE_USERNAME:openworkflow}"
+    password: "${OPENWORKFLOW_PERSISTENCE_PASSWORD:openworkflow}"
+    local-datacenter: "${OPENWORKFLOW_PERSISTENCE_LOCAL_DATACENTER:datacenter1}"
+  pekko: {system-name: "${OPENWORKFLOW_PEKKO_SYSTEM_NAME:openworkflow-pekko}", ask-timeout: 10S}
+  cluster:
+    discovery-service: "${OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE:}"
+    pod-ip: "${OPENWORKFLOW_CLUSTER_POD_IP:}"
+    artery-port: 25520
+    management-port: 8558
+    required-contact-points: 1
+    role: workflow-engine

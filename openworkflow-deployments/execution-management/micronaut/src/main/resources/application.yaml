@@ -1,0 +1,25 @@
+micronaut:
+  application: {name: openworkflow-execution-management-micronaut}
+  server: {host: 0.0.0.0}
+datasources:
+  default:
+    url: "${OPENWORKFLOW_DATABASE_URL:jdbc:postgresql://localhost:5432/openworkflow}"
+    username: "${OPENWORKFLOW_DATABASE_USERNAME:openworkflow}"
+    password: "${OPENWORKFLOW_DATABASE_PASSWORD:openworkflow}"
+    driver-class-name: org.postgresql.Driver
+openworkflow:
+  engines:
+    default: "${OPENWORKFLOW_DEFAULT_ENGINE:kafka-streams}"
+    timeout: 30s
+    kafka-streams:
+      url: "${OPENWORKFLOW_KAFKA_ENGINE_URL:http://openworkflow-engine-kafka-streams-micronaut:8080/internal/v1/engine/}"
+    pekko:
+      url: "${OPENWORKFLOW_PEKKO_ENGINE_URL:http://openworkflow-engine-pekko-micronaut:8080/internal/v1/engine/}"
+  authorization:
+    issuer: "${OPENWORKFLOW_KEYCLOAK_ISSUER:http://localhost:8080/realms/openworkflow}"
+    client-id: forwardmeasure-openworkflow
+    client-secret: "${OPENWORKFLOW_CLIENT_SECRET}"
+    request-timeout: 5s
+    decision-ttl: 5s
+    maximum-cache-entries: 10000
+    policy-version: v1

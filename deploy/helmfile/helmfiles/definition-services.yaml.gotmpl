@@ -14,41 +14,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: true
+
 releases:
-  - name: openworkflow-k2-security
-    namespace: {{ .Values.openworkflowNamespace }}
-    chart: ../releases/openworkflow-k2-security
-    installed: {{ dig "securityBootstrap" "enabled" true .Values }}
-    values:
-      - keycloak:
-          url: {{ dig "keycloak" "url" "http://keycloak:8080" .Values | quote }}
-        credentialsSecretName: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
-        image:
-          repository: {{ .Values.imageVersions.alpine.repository | quote }}
-          tag: {{ .Values.imageVersions.alpine.tag | quote }}
-          digest: {{ .Values.imageVersions.alpine.digest | quote }}
-    labels:
-      stage: definitions
-      checkpoint: k2
-      component: security
 {{- range $framework := list "quarkus" "spring" "micronaut" }}
-  - name: openworkflow-definition-{{ $framework }}
+  - name: openworkflow-definition-management-{{ $framework }}
     namespace: {{ $.Values.openworkflowNamespace }}
-    chart: ../releases/openworkflow-definition-service
+    chart: ../releases/openworkflow-service
     {{- if dig "securityBootstrap" "enabled" true $.Values }}
     needs:
       - {{ $.Values.openworkflowNamespace }}/openworkflow-k2-security
     {{- end }}
     values:
-      - ../releases/openworkflow-definition-service/base.yaml.gotmpl
-      - framework: {{ $framework }}
+      - name: openworkflow-definition-management-{{ $framework }}
+        capability: definition-management
+        framework: {{ $framework }}
+        replicas: {{ dig "replicas" "definition" 1 $.Values }}
         image:
-          repository: {{ index $.Values.imageVersions.definition.repositories $framework | quote }}
-          tag: {{ $.Values.imageVersions.definition.tag | quote }}
-          digest: {{ index $.Values.imageVersions.definition.digests $framework | quote }}
+          repository: {{ index $.Values.imageVersions.definitionManagement.repositories $framework | quote }}
+          tag: {{ $.Values.imageVersions.definitionManagement.tag | quote }}
+          digest: {{ index $.Values.imageVersions.definitionManagement.digests $framework | quote }}
           pullPolicy: {{ $.Values.imagePullPolicy }}
+        env:
+          - {name: OPENWORKFLOW_DATABASE_URL, value: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_DATABASE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_KEYCLOAK_ISSUER, value: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" $.Values | quote }}}
+        secretEnv:
+          - {name: OPENWORKFLOW_DATABASE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+          - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
     labels:
       stage: definitions
       checkpoint: K3B
+      capability: definition-management
       framework: {{ $framework }}
 {{- end }}

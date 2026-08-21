@@ -10,8 +10,8 @@
  */
 package com.forwardmeasure.openworkflow.definition.management.micronaut;
 
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.StudioAuthorizationResource;
 import jakarta.inject.Inject;
 import jakarta.inject.Singleton;

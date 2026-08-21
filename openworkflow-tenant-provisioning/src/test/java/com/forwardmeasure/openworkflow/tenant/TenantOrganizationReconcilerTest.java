@@ -29,6 +29,9 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class TenantOrganizationReconcilerTest {
+  private static final CapabilityPack TEST_PACK =
+      new CapabilityPack("test-pack", "1", Set.of("test-role-a", "test-role-b"), Set.of());
+
   @Test
   void reconciliationIsIdempotentAndNeverAssignsMemberRoles() {
     FakeAdmin admin = new FakeAdmin();
@@ -36,12 +39,12 @@ class TenantOrganizationReconcilerTest {
     TenantProvisioningRequest request =
         new TenantProvisioningRequest(new TenantId(UUID.randomUUID()), "Acme", "acme");
 
-    OrganizationState first = reconciler.reconcile(request);
-    OrganizationState second = reconciler.reconcile(request);
+    OrganizationState first = reconciler.reconcileCapabilityPack(request, TEST_PACK);
+    OrganizationState second = reconciler.reconcileCapabilityPack(request, TEST_PACK);
 
     assertEquals(first, second);
-    assertEquals(CapabilityPack.OPENWORKFLOW_V1.roles(), admin.roles);
-    assertEquals(CapabilityPack.OPENWORKFLOW_V1.roles(), admin.groups.get(first.id()));
+    assertEquals(TEST_PACK.roles(), admin.roles);
+    assertEquals(TEST_PACK.roles(), admin.groups.get(first.id()));
     assertEquals(
         "did:forwardmeasure:tenant:" + request.tenantId(),
         first.attributes().get(TenantOrganizationReconciler.TENANT_DID_ATTRIBUTE));
@@ -50,35 +53,17 @@ class TenantOrganizationReconcilerTest {
   }
 
   @Test
-  void entityIntelligenceAddsEmptyRoleGroupsAndNarrowWorkloadIdentity() {
-    FakeAdmin admin = new FakeAdmin();
-    TenantOrganizationReconciler reconciler = new TenantOrganizationReconciler(admin);
-    TenantProvisioningRequest request =
-        new TenantProvisioningRequest(new TenantId(UUID.randomUUID()), "Acme", "acme");
-
-    OrganizationState organization =
-        reconciler.reconcileCapabilityPack(request, CapabilityPack.ENTITY_INTELLIGENCE_V1);
-    reconciler.reconcileCapabilityPack(request, CapabilityPack.ENTITY_INTELLIGENCE_V1);
-
-    assertEquals(CapabilityPack.ENTITY_INTELLIGENCE_V1.sharedClientRoles(), admin.roles);
-    assertEquals(
-        CapabilityPack.ENTITY_INTELLIGENCE_V1.roles(), admin.groups.get(organization.id()));
-    assertEquals(0, admin.memberRoleAssignmentCount);
-    assertEquals(
-        "1", organization.attributes().get("forwardmeasure.capability-pack.entity-intelligence"));
-  }
-
-  @Test
   void aliasCannotBeReboundToAnotherTenant() {
     FakeAdmin admin = new FakeAdmin();
     TenantOrganizationReconciler reconciler = new TenantOrganizationReconciler(admin);
-    reconciler.reconcile(
-        new TenantProvisioningRequest(new TenantId(UUID.randomUUID()), "Acme", "acme"));
+    reconciler.reconcileCapabilityPack(
+        new TenantProvisioningRequest(new TenantId(UUID.randomUUID()), "Acme", "acme"), TEST_PACK);
     assertThrows(
         IllegalStateException.class,
         () ->
-            reconciler.reconcile(
-                new TenantProvisioningRequest(new TenantId(UUID.randomUUID()), "Other", "acme")));
+            reconciler.reconcileCapabilityPack(
+                new TenantProvisioningRequest(new TenantId(UUID.randomUUID()), "Other", "acme"),
+                TEST_PACK));
   }
 
   private static final class FakeAdmin implements KeycloakOrganizationAdmin {

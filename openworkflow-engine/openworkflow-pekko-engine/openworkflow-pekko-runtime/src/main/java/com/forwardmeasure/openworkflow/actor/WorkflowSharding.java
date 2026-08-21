@@ -31,13 +31,25 @@ public final class WorkflowSharding {
   }
 
   public static WorkflowSharding initialize(ActorSystem<?> system) {
+    return initialize(system, "");
+  }
+
+  /** Registers a cluster-wide proxy while restricting entity hosting to the requested role. */
+  public static WorkflowSharding initialize(ActorSystem<?> system, String role) {
     Objects.requireNonNull(system, "system");
     ClusterSharding sharding = ClusterSharding.get(system);
-    sharding.init(
-        Entity.of(
-                TYPE_KEY,
-                context -> WorkflowEntity.create(ExecutionId.fromEntityId(context.getEntityId())))
-            .withEntityProps(Props.empty().withMailboxFromConfig("openworkflow.entity-mailbox")));
+    Entity<
+            WorkflowCommand,
+            org.apache.pekko.cluster.sharding.typed.ShardingEnvelope<WorkflowCommand>>
+        entity =
+            Entity.of(
+                    TYPE_KEY,
+                    context ->
+                        WorkflowEntity.create(ExecutionId.fromEntityId(context.getEntityId())))
+                .withEntityProps(
+                    Props.empty().withMailboxFromConfig("openworkflow.entity-mailbox"));
+    if (role != null && !role.isBlank()) entity = entity.withRole(role);
+    sharding.init(entity);
     return new WorkflowSharding(sharding);
   }
 

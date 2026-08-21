@@ -1,52 +1,54 @@
-#
-# Licensed to the Apache Software Foundation (ASF) under one or more contributor license
-# agreements. See the NOTICE file distributed with this work for additional information regarding
-# copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0
-# (the "License"); you may not use this file except in compliance with the License. You may obtain a
-# copy of the License at https://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
-# law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
-# BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
-# for the specific language governing permissions and limitations under the License.
-#
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: true
+
 releases:
-  - name: openworkflow-pekko-postgresql
-    namespace: {{ .Values.openworkflowNamespace }}
-    chart: ../releases/openworkflow-pekko-runtime
-    installed: {{ dig "engines" "pekkoPostgresql" true .Values }}
+{{- range $engine := list "kafka-streams" "pekko" }}
+{{- range $framework := list "quarkus" "spring" "micronaut" }}
+  - name: openworkflow-engine-{{ $engine }}-{{ $framework }}
+    namespace: {{ $.Values.openworkflowNamespace }}
+    chart: ../releases/openworkflow-service
+    installed: {{ if eq $engine "kafka-streams" }}{{ dig "engines" "kafkaStreams" true $.Values }}{{ else }}{{ or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) }}{{ end }}
     values:
-      - ../releases/openworkflow-pekko-runtime/base.yaml.gotmpl
-      - name: openworkflow-pekko-postgresql
-        persistence:
-          profile: postgresql
-          endpoint: {{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow?currentSchema=t_11111111111111111111111111111111" .Values | quote }}
-    labels:
-      stage: execution
-      checkpoint: K3A
-      persistence: postgresql
-  - name: openworkflow-pekko-cassandra
-    namespace: {{ .Values.openworkflowNamespace }}
-    chart: ../releases/openworkflow-pekko-runtime
-    installed: {{ dig "engines" "pekkoCassandra" true .Values }}
-    values:
-      - ../releases/openworkflow-pekko-runtime/base.yaml.gotmpl
-      - name: openworkflow-pekko-cassandra
-        persistence:
-          profile: cassandra
-          endpoint: {{ dig "pekko" "cassandraEndpoint" "cassandra:9042" .Values | quote }}
-          username: ""
-          password: ""
-          localDatacenter: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" .Values | quote }}
-    labels:
-      stage: execution
-      checkpoint: K3A
-      persistence: cassandra
-  - name: openworkflow-kafka
-    namespace: {{ .Values.openworkflowNamespace }}
-    chart: ../releases/openworkflow-kafka-runtime
-    installed: {{ dig "engines" "kafkaStreams" true .Values }}
-    values:
-      - ../releases/openworkflow-kafka-runtime/base.yaml.gotmpl
-    labels:
-      stage: execution
-      checkpoint: K3B
-      engine: kafka-streams
+      - name: openworkflow-engine-{{ $engine }}-{{ $framework }}
+        capability: workflow-engine
+        framework: {{ $framework }}
+        engine: {{ $engine }}
+        service:
+          enabled: true
+          port: 8080
+          {{- if eq $engine "pekko" }}
+          clusterIP: None
+          extraPorts: [{name: artery, port: 25520, targetPort: artery}, {name: management, port: 8558, targetPort: management}]
+          {{- end }}
+        {{- if eq $engine "pekko" }}
+        containerPorts: [{name: artery, containerPort: 25520}, {name: management, containerPort: 8558}]
+        {{- end }}
+        replicas: {{ dig "replicas" "engine" 1 $.Values }}
+        image:
+          repository: {{ index (index $.Values.imageVersions.engines $engine).repositories $framework | quote }}
+          tag: {{ (index $.Values.imageVersions.engines $engine).tag | quote }}
+          digest: {{ index (index $.Values.imageVersions.engines $engine).digests $framework | quote }}
+          pullPolicy: {{ $.Values.imagePullPolicy }}
+        env:
+          - {name: OPENWORKFLOW_EXECUTION_EVENTS_URL, value: {{ printf "http://openworkflow-execution-management-%s:8080/internal/v1/execution-events/" $framework | quote }}}
+          {{- if eq $engine "kafka-streams" }}
+          - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ dig "kafka" "bootstrapServers" "redpanda:9092" $.Values | quote }}}
+          {{- else }}
+          - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ ternary "cassandra" "postgresql" (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if dig "engines" "pekkoCassandra" false $.Values }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_LOCAL_DATACENTER, value: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" $.Values | quote }}}
+          - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-pekko-%s" $framework | quote }}}
+          - {name: OPENWORKFLOW_CLUSTER_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+          - {name: OPENWORKFLOW_CLUSTER_REQUIRED_CONTACT_POINTS, value: {{ dig "replicas" "engine" 1 $.Values | quote }}}
+          {{- end }}
+        {{- if eq $engine "pekko" }}
+        secretEnv:
+          - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+        {{- end }}
+    labels: {stage: execution, capability: workflow-engine, engine: {{ $engine }}, framework: {{ $framework }}}
+{{- end }}
+{{- end }}

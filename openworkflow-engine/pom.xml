@@ -28,6 +28,9 @@
   <name>ForwardMeasure OpenWorkflow :: Engines</name>
   <modules>
     <module>openworkflow-engine-api</module>
+    <module>openworkflow-engine-http</module>
+    <module>openworkflow-engine-http-server</module>
+    <module>openworkflow-engine-event-http-server</module>
     <module>openworkflow-engine-contract-tests</module>
     <module>openworkflow-pekko-engine</module>
     <module>openworkflow-kafka-streams-engine</module>

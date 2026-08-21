@@ -1,0 +1,8 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+ARG APPLICATION_JAR
+ARG DEPENDENCY_DIR
+COPY --chown=10001:10001 ${DEPENDENCY_DIR} /deployments/dependency/
+COPY --chown=10001:10001 ${APPLICATION_JAR} /deployments/application.jar
+USER 10001:10001
+ENTRYPOINT ["java","-jar","/deployments/application.jar"]

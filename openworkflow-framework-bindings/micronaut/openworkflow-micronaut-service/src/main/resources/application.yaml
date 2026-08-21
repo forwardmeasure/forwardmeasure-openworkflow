@@ -8,7 +8,7 @@
 # for the specific language governing permissions and limitations under the License.
 micronaut:
   application:
-    name: openworkflow-micronaut-service
+    name: openworkflow-definition-management-micronaut
   server:
     host: 0.0.0.0
   security:
@@ -43,18 +43,6 @@ jpa:
         - com.forwardmeasure.jpa.identity.entity
         - com.forwardmeasure.openworkflow.definition.domain.entity
 openworkflow:
-  engine:
-    profile: ${OPENWORKFLOW_ENGINE_PROFILE:kafka-streams}
-  kafka:
-    bootstrap-servers: ${OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
-    application-id: ${OPENWORKFLOW_KAFKA_APPLICATION_ID:openworkflow-kafka}
-    instance-id: ${OPENWORKFLOW_KAFKA_INSTANCE_ID:${HOSTNAME:local}}
-    topic-prefix: ${OPENWORKFLOW_KAFKA_TOPIC_PREFIX:openworkflow}
-    state-dir: ${OPENWORKFLOW_KAFKA_STATE_DIR:/tmp/openworkflow-kafka}
-  adapters:
-    consumer-group: ${OPENWORKFLOW_ADAPTER_CONSUMER_GROUP:openworkflow-kafka-operations}
-    secret-directory: ${OPENWORKFLOW_ADAPTER_SECRET_DIRECTORY:/var/run/secrets/openworkflow}
-    http-egress-allowlist: ${OPENWORKFLOW_ADAPTER_HTTP_EGRESS_ALLOWLIST:}
   authorization:
     issuer: ${OPENWORKFLOW_KEYCLOAK_ISSUER:`http://localhost:8080/realms/openworkflow`}
     client-id: forwardmeasure-openworkflow

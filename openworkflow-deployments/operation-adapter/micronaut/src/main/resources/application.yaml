@@ -1,0 +1,9 @@
+micronaut: {application: {name: openworkflow-operation-adapter-micronaut}, server: {port: 8080}}
+openworkflow:
+  authorization: {issuer: "${OPENWORKFLOW_AUTHORIZATION_ISSUER:http://keycloak:8080/realms/openworkflow}", client-id: "${OPENWORKFLOW_AUTHORIZATION_CLIENT_ID:openworkflow}", client-secret: "${OPENWORKFLOW_AUTHORIZATION_CLIENT_SECRET:change-me}", request-timeout: 10s, decision-ttl: 30s, maximum-cache-entries: 10000, policy-version: v1}
+  kafka: {bootstrap-servers: "${OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}", topic-prefix: "${OPENWORKFLOW_KAFKA_TOPIC_PREFIX:openworkflow}"}
+  adapters: {consumer-group: "${OPENWORKFLOW_ADAPTER_CONSUMER_GROUP:openworkflow-operation-adapters}", instance-id: "${OPENWORKFLOW_ADAPTER_INSTANCE_ID:${HOSTNAME:local}}", secret-directory: "${OPENWORKFLOW_ADAPTER_SECRET_DIRECTORY:/var/run/secrets/openworkflow}", http-egress-allowlist: "${OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST:}"}
+  operations: {protocol: {timeout-ms: 30000}, mcp-command-allowlist: "", run: {command-allowlist: "", interpreter-allowlist: "", image-allowlist: "", volume-allowlist: "", port-allowlist: "", oci-runtime: podman}}
+  persistence: {profile: "${OPENWORKFLOW_PERSISTENCE_PROFILE:postgresql}", endpoint: "${OPENWORKFLOW_PERSISTENCE_ENDPOINT:jdbc:postgresql://postgresql:5432/openworkflow}", username: "${OPENWORKFLOW_PERSISTENCE_USERNAME:openworkflow}", password: "${OPENWORKFLOW_PERSISTENCE_PASSWORD:openworkflow}", local-datacenter: "${OPENWORKFLOW_PERSISTENCE_LOCAL_DATACENTER:datacenter1}"}
+  pekko: {system-name: "${OPENWORKFLOW_PEKKO_SYSTEM_NAME:openworkflow-pekko}", ask-timeout-ms: 10000}
+  cluster: {discovery-service: "${OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE:}", pod-ip: "${OPENWORKFLOW_CLUSTER_POD_IP:}", artery-port: 25520, management-port: 8558, required-contact-points: 1}

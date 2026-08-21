@@ -22,6 +22,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.Map;
 
 /** Bounded Kubernetes Keycloak reconciliation-job entry point. */
 public final class TenantProvisioningMain {
@@ -33,13 +34,14 @@ public final class TenantProvisioningMain {
     HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
     ObjectMapper mapper = new ObjectMapper();
     KeycloakAdminTokenSupplier tokens =
-        () ->
-            adminToken(
-                client,
-                mapper,
-                server,
-                required("KEYCLOAK_ADMIN_USERNAME"),
-                required("KEYCLOAK_ADMIN_PASSWORD"));
+        new CachingKeycloakAdminTokenSupplier(
+            () ->
+                adminToken(
+                    client,
+                    mapper,
+                    server,
+                    required("KEYCLOAK_ADMIN_USERNAME"),
+                    required("KEYCLOAK_ADMIN_PASSWORD")));
     var admin =
         new HttpKeycloakOrganizationAdmin(
             client,
@@ -48,11 +50,13 @@ public final class TenantProvisioningMain {
             new KeycloakAdminConfiguration(
                 server, realm, required("KEYCLOAK_SHARED_CLIENT_ID"), Duration.ofSeconds(10)));
     var reconciler = new TenantOrganizationReconciler(admin);
+    Map<String, CapabilityPack> availablePacks =
+        CapabilityPackLoader.load(System.getenv("OPENWORKFLOW_CAPABILITY_PACK_CONFIG_DIR"));
     var packs =
         Arrays.stream(optional("FORWARDMEASURE_CAPABILITY_PACKS", "openworkflow").split(","))
             .map(String::trim)
             .filter(value -> !value.isEmpty())
-            .map(CapabilityPack::named)
+            .map(value -> requireCapabilityPack(availablePacks, value))
             .toList();
     Arrays.stream(required("OPENWORKFLOW_TENANTS").split(","))
         .map(String::trim)
@@ -70,7 +74,17 @@ public final class TenantProvisioningMain {
             });
   }
 
-  private static String adminToken(
+  private static CapabilityPack requireCapabilityPack(
+      Map<String, CapabilityPack> availablePacks, String id) {
+    CapabilityPack pack = availablePacks.get(id.toLowerCase(java.util.Locale.ROOT));
+    if (pack == null) {
+      throw new IllegalArgumentException(
+          "Unknown capability pack: " + id + " (available: " + availablePacks.keySet() + ")");
+    }
+    return pack;
+  }
+
+  private static CachingKeycloakAdminTokenSupplier.TokenResponse adminToken(
       HttpClient client, ObjectMapper mapper, URI server, String username, String password) {
     String form =
         "client_id=admin-cli&grant_type=password&username="
@@ -89,11 +103,17 @@ public final class TenantProvisioningMain {
         throw new KeycloakAdminException(
             "Keycloak token endpoint returned HTTP " + response.statusCode());
       }
-      JsonNode token = mapper.readTree(response.body()).get("access_token");
+      JsonNode body = mapper.readTree(response.body());
+      JsonNode token = body.get("access_token");
       if (token == null || !token.isTextual() || token.textValue().isBlank()) {
         throw new KeycloakAdminException("Keycloak token response is unusable");
       }
-      return token.textValue();
+      JsonNode expiresIn = body.get("expires_in");
+      Duration ttl =
+          expiresIn != null && expiresIn.isIntegralNumber() && expiresIn.asLong() > 0
+              ? Duration.ofSeconds(expiresIn.asLong())
+              : Duration.ZERO;
+      return new CachingKeycloakAdminTokenSupplier.TokenResponse(token.textValue(), ttl);
     } catch (IOException exception) {
       throw new KeycloakAdminException("Keycloak token endpoint is unavailable", exception);
     } catch (InterruptedException exception) {

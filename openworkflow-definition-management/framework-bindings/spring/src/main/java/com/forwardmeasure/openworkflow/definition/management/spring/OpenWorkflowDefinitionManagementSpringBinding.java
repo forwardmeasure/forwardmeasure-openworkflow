@@ -11,23 +11,28 @@
 package com.forwardmeasure.openworkflow.definition.management.spring;
 
 import com.forwardmeasure.jpa.tenancy.TenantScope;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
+import com.forwardmeasure.openworkflow.binding.spring.SpringCorrelationIdProvider;
+import com.forwardmeasure.openworkflow.binding.spring.SpringWorkflowTransactionExecutor;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowGovernanceService;
 import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowManagementService;
 import com.forwardmeasure.openworkflow.definition.domain.service.jpa.JpaWorkflowGovernanceService;
 import com.forwardmeasure.openworkflow.definition.domain.service.jpa.JpaWorkflowManagementService;
 import com.forwardmeasure.openworkflow.definition.infrastructure.persistence.WorkflowTransactionExecutor;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.CorrelationIdProvider;
+import com.forwardmeasure.openworkflow.definition.management.jaxrs.StudioAuthorizationResource;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowDefinitionGovernanceResource;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowDefinitionResource;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowManagementResource;
 import jakarta.persistence.EntityManagerFactory;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.boot.jersey.autoconfigure.ResourceConfigCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.orm.jpa.SharedEntityManagerCreator;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Spring composition for the definition-management resources. Registers into the single Jersey
@@ -39,6 +44,27 @@ import org.springframework.orm.jpa.SharedEntityManagerCreator;
  */
 @Configuration(proxyBeanMethods = false)
 public class OpenWorkflowDefinitionManagementSpringBinding {
+
+  @Bean
+  OpenWorkflowCompiler openWorkflowCompiler() {
+    return new OpenWorkflowCompiler();
+  }
+
+  @Bean
+  WorkflowTransactionExecutor workflowTransactionExecutor(TransactionTemplate transactions) {
+    return new SpringWorkflowTransactionExecutor(transactions);
+  }
+
+  @Bean
+  CorrelationIdProvider correlationIdProvider(HttpServletRequest request) {
+    return new SpringCorrelationIdProvider(request);
+  }
+
+  @Bean
+  StudioAuthorizationResource studioAuthorizationResource(
+      AuthorizationService authorization, ActiveOrganizationProvider organizations) {
+    return new StudioAuthorizationResource(authorization, organizations);
+  }
 
   @Bean
   WorkflowManagementService workflowManagementService(
@@ -96,8 +122,13 @@ public class OpenWorkflowDefinitionManagementSpringBinding {
   ResourceConfigCustomizer definitionManagementResourceConfigCustomizer(
       WorkflowManagementResource workflows,
       WorkflowDefinitionResource definitions,
-      WorkflowDefinitionGovernanceResource governance) {
+      WorkflowDefinitionGovernanceResource governance,
+      StudioAuthorizationResource authorizations) {
     return resourceConfig ->
-        resourceConfig.register(workflows).register(definitions).register(governance);
+        resourceConfig
+            .register(workflows)
+            .register(definitions)
+            .register(governance)
+            .register(authorizations);
   }
 }

@@ -9,13 +9,13 @@ namespace=${OPENWORKFLOW_ACCEPTANCE_NAMESPACE:-forwardmeasure-openworkflow}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-for chart in openworkflow-foundation openworkflow-k2-security openworkflow-definition-service \
-  openworkflow-pekko-runtime openworkflow-kafka-runtime openworkflow-studio; do
+for chart in openworkflow-foundation openworkflow-k2-security openworkflow-migrations \
+  openworkflow-service openworkflow-studio openworkflow-acceptance-fixtures; do
   helm lint "$root/deploy/helmfile/releases/$chart" >/dev/null
 done
 
 for profile in local development ci kind; do
-  helmfile -f "$helmfile_path" -e "$profile" template >"$work/$profile.yaml"
+  helmfile --kube-context "$context" -f "$helmfile_path" -e "$profile" template >"$work/$profile.yaml"
   test "$(yq eval-all '[select((.kind == "Deployment" or .kind == "StatefulSet") and .metadata.name == "keycloak")] | length' "$work/$profile.yaml")" -eq 0
 done
 
@@ -34,33 +34,36 @@ production_env=(
 )
 env "${production_env[@]}" \
   OPENWORKFLOW_PEKKO_POSTGRESQL_ENDPOINT=jdbc:postgresql://journal.example/openworkflow \
-  helmfile -f "$helmfile_path" -e production-postgresql template >"$work/production-postgresql.yaml"
+  helmfile --kube-context "$context" -f "$helmfile_path" -e production-postgresql template >"$work/production-postgresql.yaml"
 env "${production_env[@]}" \
   OPENWORKFLOW_PEKKO_CASSANDRA_ENDPOINT=cassandra.example:9042 \
   OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER=dc1 \
-  helmfile -f "$helmfile_path" -e production-cassandra template >"$work/production-cassandra.yaml"
+  helmfile --kube-context "$context" -f "$helmfile_path" -e production-cassandra template >"$work/production-cassandra.yaml"
 
 for profile in production-postgresql production-cassandra; do
   manifest="$work/$profile.yaml"
-  test "$(yq eval-all '[select(.kind == "NetworkPolicy")] | length' "$manifest")" -ge 8
+  test "$(yq eval-all '[select(.kind == "NetworkPolicy")] | length' "$manifest")" -ge 18
   test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "postgresql")] | length' "$manifest")" -eq 0
   test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "keycloak")] | length' "$manifest")" -eq 0
   test "$(yq eval-all '[select(.metadata.name == "k7-echo")] | length' "$manifest")" -eq 0
-  test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-definition-quarkus" and .spec.replicas == 2)] | length' "$manifest")" -eq 1
-  test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-definition-quarkus" and .spec.template.metadata.annotations."instrumentation.opentelemetry.io/inject-java" == "true")] | length' "$manifest")" -eq 1
+  test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-definition-management-quarkus" and .spec.replicas == 2)] | length' "$manifest")" -eq 1
+  test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-definition-management-quarkus" and .spec.template.metadata.annotations."instrumentation.opentelemetry.io/inject-java" == "true")] | length' "$manifest")" -eq 1
   test "$(yq eval-all '[select(.kind == "NetworkPolicy") | .spec.egress[]? | select(.to[]?.ipBlock.cidr == "10.0.0.0/8")] | length' "$manifest")" -ge 8
 done
-test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-pekko-postgresql")] | length' "$work/production-postgresql.yaml")" -eq 1
-test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-pekko-cassandra")] | length' "$work/production-postgresql.yaml")" -eq 0
-test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-pekko-cassandra")] | length' "$work/production-cassandra.yaml")" -eq 1
-test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "openworkflow-pekko-postgresql")] | length' "$work/production-cassandra.yaml")" -eq 0
+for framework in quarkus spring micronaut; do
+  test "$(yq eval-all "[select(.kind == \"Deployment\" and .metadata.name == \"openworkflow-engine-pekko-$framework\")] | length" "$work/production-postgresql.yaml")" -eq 1
+  test "$(yq eval-all "[select(.kind == \"Deployment\" and .metadata.name == \"openworkflow-engine-pekko-$framework\")] | length" "$work/production-cassandra.yaml")" -eq 1
+done
 
 kubectl --context "$context" apply --dry-run=server -f "$work/kind.yaml" >/dev/null
-helmfile -f "$helmfile_path" -e kind sync --sync-args=--force-conflicts >/dev/null
+helmfile --kube-context "$context" -f "$helmfile_path" -e kind sync --sync-args=--force-conflicts >/dev/null
 
 deployments=(
-  openworkflow-definition-quarkus openworkflow-definition-spring openworkflow-definition-micronaut
-  openworkflow-kafka openworkflow-pekko-postgresql openworkflow-pekko-cassandra
+  openworkflow-definition-management-quarkus openworkflow-definition-management-spring openworkflow-definition-management-micronaut
+  openworkflow-execution-management-quarkus openworkflow-execution-management-spring openworkflow-execution-management-micronaut
+  openworkflow-engine-kafka-streams-quarkus openworkflow-engine-kafka-streams-spring openworkflow-engine-kafka-streams-micronaut
+  openworkflow-engine-pekko-quarkus openworkflow-engine-pekko-spring openworkflow-engine-pekko-micronaut
+  openworkflow-operation-adapter-quarkus openworkflow-operation-adapter-spring openworkflow-operation-adapter-micronaut
   openworkflow-studio-quarkus openworkflow-studio-spring openworkflow-studio-micronaut
 )
 for deployment in "${deployments[@]}"; do
@@ -77,9 +80,9 @@ for deployment in "${deployments[@]}"; do
     (.spec.template.spec.containers[0].lifecycle.preStop != null)' >/dev/null
 done
 
-test "$(kubectl --context "$context" -n "$namespace" get pdb -o json | jq '[.items[] | select(.metadata.name | startswith("openworkflow-"))] | length')" -ge 9
-kubectl --context "$context" -n "$namespace" rollout restart deployment/openworkflow-kafka >/dev/null
-kubectl --context "$context" -n "$namespace" rollout status deployment/openworkflow-kafka --timeout=300s >/dev/null
+test "$(kubectl --context "$context" -n "$namespace" get pdb -o json | jq '[.items[] | select(.metadata.name | startswith("openworkflow-"))] | length')" -ge 18
+kubectl --context "$context" -n "$namespace" rollout restart deployment/openworkflow-engine-kafka-streams-quarkus >/dev/null
+kubectl --context "$context" -n "$namespace" rollout status deployment/openworkflow-engine-kafka-streams-quarkus --timeout=300s >/dev/null
 "$root/deploy/acceptance/verify-k6.sh"
 
-printf 'K7 verified: six profiles render, production is externalized and isolated, hardened workloads roll safely, and the complete K6 journey remains green.\n'
+printf 'K7 verified: six profiles render the capability/framework/engine matrix, production is externalized and isolated, hardened workloads roll safely, and the complete K6 journey remains green.\n'

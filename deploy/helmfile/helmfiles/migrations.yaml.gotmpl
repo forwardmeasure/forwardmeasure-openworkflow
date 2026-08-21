@@ -14,6 +14,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: true
+
 releases:
   - name: openworkflow-migrations
     namespace: {{ .Values.openworkflowNamespace }}

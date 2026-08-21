@@ -11,13 +11,27 @@
 package com.forwardmeasure.openworkflow.execution.management.quarkus;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
+import com.forwardmeasure.openworkflow.engine.api.EngineId;
+import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProviders;
+import com.forwardmeasure.openworkflow.engine.http.HttpExecutionEngineProvider;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
+import com.forwardmeasure.openworkflow.execution.management.AuthzenExecutionAuthorizer;
+import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
+import com.forwardmeasure.openworkflow.execution.persistence.JpaExecutionPersistenceFactory;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.persistence.JpaTenantRoutingExecutionStore;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import jakarta.persistence.EntityManager;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Quarkus composition for the query-side store and the actor-context bridge used by {@link
@@ -26,6 +40,39 @@ import jakarta.persistence.EntityManager;
  */
 @ApplicationScoped
 public class OpenWorkflowExecutionManagementQuarkusBinding {
+
+  @Produces
+  @ApplicationScoped
+  JpaExecutionPersistenceFactory executionPersistence(
+      EntityManager entityManager, ObjectMapper objectMapper) {
+    return new JpaExecutionPersistenceFactory(entityManager, objectMapper);
+  }
+
+  @Produces
+  @ApplicationScoped
+  ExecutionManagementService executionManagement(
+      JpaExecutionPersistenceFactory persistence,
+      AuthorizationService authorization,
+      ActiveOrganizationProvider organizations,
+      ObjectMapper mapper,
+      @ConfigProperty(name = "openworkflow.engines.kafka-streams.url") URI kafkaUrl,
+      @ConfigProperty(name = "openworkflow.engines.pekko.url") URI pekkoUrl,
+      @ConfigProperty(name = "openworkflow.engines.default") String defaultEngine,
+      @ConfigProperty(name = "openworkflow.engines.timeout") Duration timeout) {
+    HttpClient client = HttpClient.newBuilder().connectTimeout(timeout).build();
+    var kafka =
+        new HttpExecutionEngineProvider(EngineId.KAFKA_STREAMS, kafkaUrl, client, mapper, timeout);
+    var pekko = new HttpExecutionEngineProvider(EngineId.PEKKO, pekkoUrl, client, mapper, timeout);
+    EngineId selected = new EngineId(defaultEngine);
+    return new ExecutionManagementService(
+        persistence,
+        new AuthzenExecutionAuthorizer(authorization, ignored -> organizations.current()),
+        persistence,
+        new ExecutionEngineProviders(List.of(kafka, pekko)),
+        ignored -> selected,
+        Clock.systemUTC(),
+        UUID::randomUUID);
+  }
 
   @Produces
   @ApplicationScoped

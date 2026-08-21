@@ -11,8 +11,8 @@
 package com.forwardmeasure.openworkflow.binding.spring;
 
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganization;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.KeycloakOrganizationClaims;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;

@@ -18,38 +18,13 @@ package com.forwardmeasure.openworkflow.tenant;
 
 import java.util.Set;
 
+/**
+ * A tenant's entitlement to a product's Keycloak shared-client roles and per-Organization role
+ * groups. Definitions are not hardcoded here - see {@link CapabilityPackLoader}, which loads them
+ * from {@code config/keycloak/*.json}, optionally overlaid by an external directory.
+ */
 public record CapabilityPack(
     String id, String version, Set<String> roles, Set<String> workloadIdentities) {
-  public static final CapabilityPack OPENWORKFLOW_V1 =
-      new CapabilityPack(
-          "openworkflow",
-          "1",
-          Set.of(
-              "workflow-author",
-              "workflow-approver",
-              "workflow-publisher",
-              "workflow-execution-controller",
-              "workflow-auditor",
-              "workflow-administrator"),
-          Set.of());
-
-  public static final CapabilityPack ENTITY_INTELLIGENCE_V1 =
-      new CapabilityPack(
-          "entity-intelligence",
-          "1",
-          Set.of(
-              "entity-intelligence-dossier-analyst",
-              "entity-intelligence-entity-analyst",
-              "entity-intelligence-evidence-curator",
-              "entity-intelligence-information-extraction-operator",
-              "entity-intelligence-ingestion-operator",
-              "entity-intelligence-investigator",
-              "entity-intelligence-resolution-analyst",
-              "entity-intelligence-screening-analyst",
-              "entity-intelligence-reference-population-submitter",
-              "entity-intelligence-reference-population-approver"),
-          Set.of("entity-intelligence-workflow-invoker"));
-
   public CapabilityPack {
     if (id == null || id.isBlank() || version == null || version.isBlank()) {
       throw new IllegalArgumentException("Capability pack identity must not be blank");
@@ -65,13 +40,5 @@ public record CapabilityPack(
     var combined = new java.util.HashSet<>(roles);
     combined.addAll(workloadIdentities);
     return Set.copyOf(combined);
-  }
-
-  public static CapabilityPack named(String value) {
-    return switch (value.trim().toLowerCase(java.util.Locale.ROOT)) {
-      case "openworkflow" -> OPENWORKFLOW_V1;
-      case "entity-intelligence" -> ENTITY_INTELLIGENCE_V1;
-      default -> throw new IllegalArgumentException("Unknown capability pack: " + value);
-    };
   }
 }

@@ -25,12 +25,14 @@
     <version>${revision}</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <artifactId>openworkflow-quarkus-service</artifactId>
-  <name>ForwardMeasure OpenWorkflow :: Quarkus Service</name>
+  <artifactId>openworkflow-definition-management-quarkus-service</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Definition Management :: Quarkus Service</name>
   <properties>
-    <quarkus.container-image.name>openworkflow-definition-quarkus</quarkus.container-image.name>
-    <quarkus.container-image.group>forwardmeasure</quarkus.container-image.group>
-    <quarkus.container-image.tag>${project.version}</quarkus.container-image.tag>
+    <container-image.name>openworkflow-definition-management-quarkus</container-image.name>
+    <quarkus.container-image.registry>${container-image.registry}</quarkus.container-image.registry>
+    <quarkus.container-image.group>${container-image.group}</quarkus.container-image.group>
+    <quarkus.container-image.name>${container-image.name}</quarkus.container-image.name>
+    <quarkus.container-image.tag>${container-image.tag}</quarkus.container-image.tag>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -55,16 +57,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>openworkflow-engine-quarkus-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>openworkflow-execution-management-quarkus-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-rest-jackson</artifactId>
     </dependency>
@@ -82,7 +74,7 @@
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
-      <artifactId>quarkus-container-image-jib</artifactId>
+      <artifactId>quarkus-container-image-docker</artifactId>
     </dependency>
   </dependencies>
   <build>
@@ -107,7 +99,9 @@
     <profile>
       <id>container-image</id>
       <properties>
-        <quarkus.container-image.build>true</quarkus.container-image.build>
+        <quarkus.container-image.build>${container-image.build}</quarkus.container-image.build>
+        <quarkus.container-image.push>${container-image.push}</quarkus.container-image.push>
+        <quarkus.container-image.docker.dockerfile-jvm-path>src/main/docker/Dockerfile.jvm</quarkus.container-image.docker.dockerfile-jvm-path>
       </properties>
     </profile>
   </profiles>

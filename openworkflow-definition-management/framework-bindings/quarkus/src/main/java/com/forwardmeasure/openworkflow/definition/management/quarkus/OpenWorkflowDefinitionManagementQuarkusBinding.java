@@ -11,6 +11,7 @@
 package com.forwardmeasure.openworkflow.definition.management.quarkus;
 
 import com.forwardmeasure.jpa.tenancy.TenantScope;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowGovernanceService;
@@ -18,8 +19,8 @@ import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowManagem
 import com.forwardmeasure.openworkflow.definition.domain.service.jpa.JpaWorkflowGovernanceService;
 import com.forwardmeasure.openworkflow.definition.domain.service.jpa.JpaWorkflowManagementService;
 import com.forwardmeasure.openworkflow.definition.infrastructure.persistence.WorkflowTransactionExecutor;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.CorrelationIdProvider;
+import com.forwardmeasure.openworkflow.definition.management.jaxrs.StudioAuthorizationResource;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowDefinitionGovernanceResource;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowDefinitionResource;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowManagementResource;
@@ -35,6 +36,19 @@ import jakarta.persistence.EntityManager;
  */
 @ApplicationScoped
 public class OpenWorkflowDefinitionManagementQuarkusBinding {
+
+  @Produces
+  @ApplicationScoped
+  OpenWorkflowCompiler openWorkflowCompiler() {
+    return new OpenWorkflowCompiler();
+  }
+
+  @Produces
+  @ApplicationScoped
+  StudioAuthorizationResource studioAuthorizationResource(
+      AuthorizationService authorization, ActiveOrganizationProvider organizations) {
+    return new StudioAuthorizationResource(authorization, organizations);
+  }
 
   @Produces
   @ApplicationScoped

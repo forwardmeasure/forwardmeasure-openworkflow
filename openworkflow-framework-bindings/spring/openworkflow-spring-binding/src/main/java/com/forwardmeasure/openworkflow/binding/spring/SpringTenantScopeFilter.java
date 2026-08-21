@@ -12,7 +12,7 @@ package com.forwardmeasure.openworkflow.binding.spring;
 
 import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.jpa.tenancy.TenantScope;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;

@@ -1,9 +1,12 @@
 deploymentProfile: production-postgresql
 imageVersions:
-  definition: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  definitionManagement: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  executionManagement: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
   studio: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
-  pekkoRuntime: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
-  kafkaRuntime: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  engines:
+    kafka-streams: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+    pekko: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  operationAdapter: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
   tenantProvisioning: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
   migrations: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
 imagePullPolicy: Always
@@ -12,7 +15,7 @@ credentialsSecretName: {{ requiredEnv "OPENWORKFLOW_CREDENTIALS_SECRET" | quote 
 foundation: {enabled: false}
 securityBootstrap: {enabled: false}
 acceptanceFixtures: {enabled: false}
-replicas: {definition: 2, runtime: 3, studio: 2}
+replicas: {definition: 2, executionManagement: 2, engine: 3, operationAdapter: 3, studio: 2}
 engines:
   pekkoPostgresql: true
   pekkoCassandra: false

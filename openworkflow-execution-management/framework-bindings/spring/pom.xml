@@ -39,14 +39,8 @@
       <groupId>com.forwardmeasure.openworkflow</groupId>
       <artifactId>openworkflow-execution-management-jpa</artifactId>
     </dependency>
-    <dependency>
-      <groupId>com.forwardmeasure.openworkflow</groupId>
-      <artifactId>openworkflow-engine-spring-binding</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.forwardmeasure.openworkflow</groupId>
-      <artifactId>openworkflow-definition-management-jaxrs</artifactId>
-    </dependency>
+    <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-http</artifactId></dependency>
+    <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-event-http-server</artifactId></dependency>
     <dependency>
       <groupId>com.forwardmeasure.jpa</groupId>
       <artifactId>forwardmeasure-jpa-spring</artifactId>

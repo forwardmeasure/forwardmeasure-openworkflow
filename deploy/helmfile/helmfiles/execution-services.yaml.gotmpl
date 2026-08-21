@@ -1,0 +1,32 @@
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: true
+
+releases:
+{{- range $framework := list "quarkus" "spring" "micronaut" }}
+  - name: openworkflow-execution-management-{{ $framework }}
+    namespace: {{ $.Values.openworkflowNamespace }}
+    chart: ../releases/openworkflow-service
+    values:
+      - name: openworkflow-execution-management-{{ $framework }}
+        capability: execution-management
+        framework: {{ $framework }}
+        replicas: {{ dig "replicas" "executionManagement" 1 $.Values }}
+        image:
+          repository: {{ index $.Values.imageVersions.executionManagement.repositories $framework | quote }}
+          tag: {{ $.Values.imageVersions.executionManagement.tag | quote }}
+          digest: {{ index $.Values.imageVersions.executionManagement.digests $framework | quote }}
+          pullPolicy: {{ $.Values.imagePullPolicy }}
+        env:
+          - {name: OPENWORKFLOW_DATABASE_URL, value: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_DATABASE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_KEYCLOAK_ISSUER, value: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_KAFKA_ENGINE_URL, value: {{ printf "http://openworkflow-engine-kafka-streams-%s:8080/internal/v1/engine/" $framework | quote }}}
+          - {name: OPENWORKFLOW_PEKKO_ENGINE_URL, value: {{ printf "http://openworkflow-engine-pekko-%s:8080/internal/v1/engine/" $framework | quote }}}
+        secretEnv:
+          - {name: OPENWORKFLOW_DATABASE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+          - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
+    labels: {stage: execution, capability: execution-management, framework: {{ $framework }}}
+{{- end }}

@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "packId": "openworkflow",
+  "packVersion": "1",
+  "keycloakVersion": "26.7.1",
+  "clientId": "forwardmeasure-openworkflow",
+  "authzenFeature": "authzen",
+  "roles": [
+    "workflow-author",
+    "workflow-approver",
+    "workflow-publisher",
+    "workflow-execution-controller",
+    "workflow-auditor",
+    "workflow-administrator"
+  ],
+  "resources": [
+    {"type": "openworkflow-definition", "id": "definitions"},
+    {"type": "openworkflow-execution", "id": "executions"},
+    {"type": "openworkflow-operation", "id": "operations"},
+    {"type": "openworkflow-audit", "id": "audit"}
+  ],
+  "scopes": [
+    "definition:create", "definition:read", "definition:list", "definition:update",
+    "definition:delete", "definition:validate", "definition:submit", "definition:withdraw",
+    "definition:approve", "definition:reject", "definition:publish", "definition:deprecate",
+    "execution:start", "execution:read", "execution:list", "execution:pause",
+    "execution:resume", "execution:cancel", "operation:execute", "audit:read", "audit:query"
+  ],
+  "roleGrants": {
+    "workflow-author": [
+      "definition:create", "definition:read", "definition:list", "definition:update",
+      "definition:delete", "definition:validate", "definition:submit", "definition:withdraw",
+      "execution:start", "execution:read", "execution:list", "operation:execute"
+    ],
+    "workflow-approver": [
+      "definition:read", "definition:list", "definition:validate",
+      "definition:approve", "definition:reject"
+    ],
+    "workflow-publisher": [
+      "definition:read", "definition:list", "definition:publish", "definition:deprecate"
+    ],
+    "workflow-execution-controller": [
+      "execution:start", "execution:read", "execution:list", "execution:pause",
+      "execution:resume", "execution:cancel", "operation:execute"
+    ],
+    "workflow-auditor": [
+      "definition:read", "definition:list", "execution:read", "execution:list",
+      "audit:read", "audit:query"
+    ],
+    "workflow-administrator": [
+      "definition:create", "definition:read", "definition:list", "definition:update",
+      "definition:delete", "definition:validate", "definition:submit", "definition:withdraw",
+      "definition:approve", "definition:reject", "definition:publish", "definition:deprecate",
+      "execution:start", "execution:read", "execution:list", "execution:pause",
+      "execution:resume", "execution:cancel", "operation:execute", "audit:read", "audit:query"
+    ]
+  },
+  "constraints": {
+    "activeOrganizationRequired": true,
+    "organizationRolesOnly": true,
+    "topLevelRoleClaimsForbidden": true,
+    "defaultDecision": "deny",
+    "memberRoleAssignmentOnPackInstall": false
+  }
+}

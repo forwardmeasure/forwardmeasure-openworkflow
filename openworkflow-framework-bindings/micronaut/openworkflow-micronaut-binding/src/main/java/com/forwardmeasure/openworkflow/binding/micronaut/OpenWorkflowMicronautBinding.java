@@ -13,7 +13,6 @@ package com.forwardmeasure.openworkflow.binding.micronaut;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.authorization.authzen.AuthzenAuthorizationFactory;
-import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
@@ -47,10 +46,5 @@ public class OpenWorkflowMicronautBinding {
         decisionTtl,
         cacheEntries,
         policyVersion);
-  }
-
-  @Singleton
-  OpenWorkflowCompiler openWorkflowCompiler() {
-    return new OpenWorkflowCompiler();
   }
 }

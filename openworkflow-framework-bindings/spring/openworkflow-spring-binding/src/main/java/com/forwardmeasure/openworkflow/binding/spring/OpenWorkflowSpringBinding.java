@@ -13,12 +13,8 @@ package com.forwardmeasure.openworkflow.binding.spring;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.authorization.authzen.AuthzenAuthorizationFactory;
-import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.StudioAuthorizationResource;
 import java.net.URI;
 import java.time.Duration;
-import org.glassfish.jersey.server.ResourceConfig;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -53,11 +49,6 @@ public class OpenWorkflowSpringBinding {
   }
 
   @Bean
-  OpenWorkflowCompiler openWorkflowCompiler() {
-    return new OpenWorkflowCompiler();
-  }
-
-  @Bean
   SecurityFilterChain openWorkflowSecurity(
       HttpSecurity http, SpringTenantScopeFilter tenantScopeFilter) throws Exception {
     return http.csrf(csrf -> csrf.disable())
@@ -73,16 +64,5 @@ public class OpenWorkflowSpringBinding {
     var registration = new FilterRegistrationBean<>(filter);
     registration.setEnabled(false);
     return registration;
-  }
-
-  @Bean
-  ResourceConfig openWorkflowResources(StudioAuthorizationResource authorizations) {
-    return new ResourceConfig().register(authorizations);
-  }
-
-  @Bean
-  StudioAuthorizationResource studioAuthorizationResource(
-      AuthorizationService authorization, ActiveOrganizationProvider organizations) {
-    return new StudioAuthorizationResource(authorization, organizations);
   }
 }

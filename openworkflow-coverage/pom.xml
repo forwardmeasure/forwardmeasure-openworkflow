@@ -366,7 +366,7 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>openworkflow-micronaut-service</artifactId>
+            <artifactId>openworkflow-definition-management-micronaut-service</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -386,7 +386,7 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>openworkflow-quarkus-service</artifactId>
+            <artifactId>openworkflow-definition-management-quarkus-service</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -406,7 +406,7 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>openworkflow-spring-service</artifactId>
+            <artifactId>openworkflow-definition-management-spring-service</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -705,11 +705,11 @@
                                 openworkflow-execution-management-jpa,
                                 openworkflow-expression-jq,
                                 openworkflow-micronaut-binding,
-                                openworkflow-micronaut-service,
+                                openworkflow-definition-management-micronaut-service,
                                 openworkflow-quarkus-binding,
-                                openworkflow-quarkus-service,
+                                openworkflow-definition-management-quarkus-service,
                                 openworkflow-spring-binding,
-                                openworkflow-spring-service,
+                                openworkflow-definition-management-spring-service,
                                 openworkflow-migrations,
                                 openworkflow-operation-adapter-agent-protocols,
                                 openworkflow-operation-adapter-api,
@@ -836,4 +836,3 @@
         </plugins>
     </build>
 </project>
-

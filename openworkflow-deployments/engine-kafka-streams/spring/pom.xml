@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-deployments</artifactId><version>${revision}</version><relativePath>../../pom.xml</relativePath></parent>
+  <artifactId>openworkflow-engine-kafka-streams-spring</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Engine Kafka Streams :: Spring</name>
+  <properties><container-image.name>openworkflow-engine-kafka-streams-spring</container-image.name></properties>
+  <dependencies>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-kafka-streams-engine</artifactId></dependency>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-engine-http</artifactId></dependency>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-engine-http-server</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jersey</artifactId><exclusions><exclusion><groupId>org.glassfish.hk2.external</groupId><artifactId>aopalliance-repackaged</artifactId></exclusion></exclusions></dependency>
+    <dependency><groupId>org.jetbrains.kotlin</groupId><artifactId>kotlin-stdlib</artifactId><scope>provided</scope></dependency>
+  </dependencies>
+  <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId><executions><execution><goals><goal>repackage</goal></goals></execution></executions></plugin></plugins></build>
+  <profiles><profile><id>container-image</id><build><plugins><plugin><groupId>io.fabric8</groupId><artifactId>docker-maven-plugin</artifactId><configuration><images><image><name>${container-image.registry}/${container-image.group}/${container-image.name}:${container-image.tag}</name><build><contextDir>${project.basedir}</contextDir><dockerFile>src/main/docker/Dockerfile.jvm</dockerFile><args><APPLICATION_JAR>target/${project.build.finalName}.jar</APPLICATION_JAR><BASE_IMAGE>${container-image.base-jre}</BASE_IMAGE></args></build></image></images></configuration><executions><execution><id>build-container-image</id><phase>package</phase><goals><goal>build</goal></goals></execution><execution><id>push-container-image</id><phase>package</phase><goals><goal>push</goal></goals></execution></executions></plugin></plugins></build></profile></profiles>
+</project>

@@ -1,7 +1,10 @@
-FROM eclipse-temurin:25-jre-ubi10-minimal@sha256:35f47084a4c1e34636fc8842780d5ca1e85b1b74de139723d1a541137932ddf2
-ARG APPLICATION_JAR=target/openworkflow-studio-micronaut-1.0.0-SNAPSHOT-runner.jar
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+ARG APPLICATION_JAR=target/openworkflow-studio-micronaut-1.0.0-SNAPSHOT.jar
+ARG DEPENDENCY_DIR=target/dependency
 ARG APP_UID=10001
 ARG APP_GID=10001
+COPY --chown=${APP_UID}:${APP_GID} ${DEPENDENCY_DIR} /deployments/dependency/
 COPY --chown=${APP_UID}:${APP_GID} ${APPLICATION_JAR} /deployments/application.jar
 EXPOSE 8080
 USER ${APP_UID}:${APP_GID}

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: openworkflow-service
+description: Independently deployable OpenWorkflow capability workload
+type: application
+version: 1.0.0
+appVersion: "1.0.0-SNAPSHOT"

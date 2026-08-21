@@ -1,0 +1,9 @@
+micronaut: {application: {name: openworkflow-engine-kafka-streams-micronaut}, server: {port: 8080}}
+openworkflow:
+  execution-events: {url: "${OPENWORKFLOW_EXECUTION_EVENTS_URL:http://openworkflow-execution-management-micronaut:8080/internal/v1/execution-events/}", timeout: 30s}
+  kafka:
+    bootstrap-servers: "${OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
+    application-id: "${OPENWORKFLOW_KAFKA_APPLICATION_ID:openworkflow-kafka}"
+    instance-id: "${OPENWORKFLOW_KAFKA_INSTANCE_ID:${HOSTNAME:local}}"
+    topic-prefix: "${OPENWORKFLOW_KAFKA_TOPIC_PREFIX:openworkflow}"
+    state-dir: "${OPENWORKFLOW_KAFKA_STATE_DIR:/tmp/openworkflow-kafka}"

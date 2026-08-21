@@ -11,6 +11,7 @@
 package com.forwardmeasure.openworkflow.definition.management.jaxrs;
 
 import com.forwardmeasure.jpa.core.query.Page;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowDefinition;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowLifecycleState;
 import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowGovernanceService;

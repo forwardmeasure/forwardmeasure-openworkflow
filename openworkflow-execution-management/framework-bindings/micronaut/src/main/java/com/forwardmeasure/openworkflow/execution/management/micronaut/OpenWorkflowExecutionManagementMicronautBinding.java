@@ -12,14 +12,30 @@ package com.forwardmeasure.openworkflow.execution.management.micronaut;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.jpa.tenancy.TenantScope;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
+import com.forwardmeasure.openworkflow.engine.api.EngineId;
+import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProviders;
+import com.forwardmeasure.openworkflow.engine.api.ExecutionEventSink;
+import com.forwardmeasure.openworkflow.engine.http.HttpExecutionEngineProvider;
+import com.forwardmeasure.openworkflow.engine.http.server.ExecutionEventResource;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
+import com.forwardmeasure.openworkflow.execution.management.AuthzenExecutionAuthorizer;
+import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
+import com.forwardmeasure.openworkflow.execution.persistence.JpaExecutionPersistenceFactory;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.persistence.JpaTenantRoutingExecutionStore;
 import io.micronaut.context.annotation.Factory;
+import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
 
 /**
  * Micronaut composition for the query-side store and the actor-context bridge used by {@link
@@ -29,6 +45,41 @@ import jakarta.persistence.EntityManagerFactory;
  */
 @Factory
 public class OpenWorkflowExecutionManagementMicronautBinding {
+
+  @Singleton
+  ExecutionEventResource executionEventResource(ExecutionEventSink sink) {
+    return new ExecutionEventResource(sink);
+  }
+
+  @Singleton
+  JpaExecutionPersistenceFactory executionPersistence(
+      EntityManager entityManager, ObjectMapper objectMapper) {
+    return new JpaExecutionPersistenceFactory(entityManager, objectMapper);
+  }
+
+  @Singleton
+  ExecutionManagementService executionManagement(
+      JpaExecutionPersistenceFactory persistence,
+      AuthorizationService authorization,
+      ActiveOrganizationProvider organizations,
+      ObjectMapper mapper,
+      @Value("${openworkflow.engines.kafka-streams.url}") URI kafkaUrl,
+      @Value("${openworkflow.engines.pekko.url}") URI pekkoUrl,
+      @Value("${openworkflow.engines.default}") String defaultEngine,
+      @Value("${openworkflow.engines.timeout}") Duration timeout) {
+    HttpClient client = HttpClient.newBuilder().connectTimeout(timeout).build();
+    var kafka =
+        new HttpExecutionEngineProvider(EngineId.KAFKA_STREAMS, kafkaUrl, client, mapper, timeout);
+    var pekko = new HttpExecutionEngineProvider(EngineId.PEKKO, pekkoUrl, client, mapper, timeout);
+    return new ExecutionManagementService(
+        persistence,
+        new AuthzenExecutionAuthorizer(authorization, ignored -> organizations.current()),
+        persistence,
+        new ExecutionEngineProviders(List.of(kafka, pekko)),
+        ignored -> new EngineId(defaultEngine),
+        Clock.systemUTC(),
+        UUID::randomUUID);
+  }
 
   @Singleton
   MicronautExecutionEventSink executionEventSink(

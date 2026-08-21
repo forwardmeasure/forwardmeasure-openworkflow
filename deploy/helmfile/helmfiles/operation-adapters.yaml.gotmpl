@@ -1,0 +1,48 @@
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: true
+
+releases:
+{{- range $framework := list "quarkus" "spring" "micronaut" }}
+  - name: openworkflow-operation-adapter-{{ $framework }}
+    namespace: {{ $.Values.openworkflowNamespace }}
+    chart: ../releases/openworkflow-service
+    values:
+      - name: openworkflow-operation-adapter-{{ $framework }}
+        capability: operation-adapter
+        framework: {{ $framework }}
+        service:
+          enabled: true
+          port: 8080
+          {{- if or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) }}
+          clusterIP: None
+          extraPorts: [{name: artery, port: 25520, targetPort: artery}, {name: management, port: 8558, targetPort: management}]
+          {{- end }}
+        {{- if or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) }}
+        containerPorts: [{name: artery, containerPort: 25520}, {name: management, containerPort: 8558}]
+        {{- end }}
+        replicas: {{ dig "replicas" "operationAdapter" 1 $.Values }}
+        image:
+          repository: {{ index $.Values.imageVersions.operationAdapter.repositories $framework | quote }}
+          tag: {{ $.Values.imageVersions.operationAdapter.tag | quote }}
+          digest: {{ index $.Values.imageVersions.operationAdapter.digests $framework | quote }}
+          pullPolicy: {{ $.Values.imagePullPolicy }}
+        env:
+          - {name: OPENWORKFLOW_AUTHORIZATION_ISSUER, value: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ dig "kafka" "bootstrapServers" "redpanda:9092" $.Values | quote }}}
+          - {name: OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST, value: {{ dig "operations" "httpEgressAllowlist" "" $.Values | quote }}}
+          - {name: OPENWORKFLOW_ADAPTER_PEKKO_ENABLED, value: {{ or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ ternary "cassandra" "postgresql" (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if dig "engines" "pekkoCassandra" false $.Values }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_LOCAL_DATACENTER, value: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" $.Values | quote }}}
+          - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-pekko-%s" $framework | quote }}}
+          - {name: OPENWORKFLOW_CLUSTER_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
+          - {name: OPENWORKFLOW_CLUSTER_REQUIRED_CONTACT_POINTS, value: {{ dig "replicas" "engine" 1 $.Values | quote }}}
+        secretEnv:
+          - {name: OPENWORKFLOW_AUTHORIZATION_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
+          - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+    labels: {stage: execution, capability: operation-adapter, framework: {{ $framework }}}
+{{- end }}

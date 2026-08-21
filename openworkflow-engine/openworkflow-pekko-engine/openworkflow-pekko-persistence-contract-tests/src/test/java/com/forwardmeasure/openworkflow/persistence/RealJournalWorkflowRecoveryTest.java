@@ -12,7 +12,6 @@ package com.forwardmeasure.openworkflow.persistence;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.datastax.oss.driver.api.core.CqlSession;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.forwardmeasure.jpa.tenancy.TenantId;
 import com.forwardmeasure.openworkflow.actor.WorkflowCommand;
@@ -84,14 +83,8 @@ class RealJournalWorkflowRecoveryTest {
       cassandra.start();
       InetSocketAddress address =
           new InetSocketAddress(cassandra.getHost(), cassandra.getMappedPort(9042));
-      try (CqlSession session =
-          CqlSession.builder()
-              .addContactPoint(address)
-              .withLocalDatacenter(cassandra.getLocalDatacenter())
-              .build()) {
-        OpenWorkflowCassandraMigrator.migrate(
-            CassandraMigrationTarget.unauthenticated(address, cassandra.getLocalDatacenter()));
-      }
+      OpenWorkflowCassandraMigrator.migrate(
+          CassandraMigrationTarget.unauthenticated(address, cassandra.getLocalDatacenter()));
       String endpoint = address.getHostString() + ':' + address.getPort();
       Config config =
           PersistenceConfigLoader.withConnection(

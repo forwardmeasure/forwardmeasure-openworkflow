@@ -40,7 +40,7 @@ class CapabilityPackPolicyTest {
     Set<String> roles = strings(root.path("roles"));
     Set<String> actions = strings(root.path("scopes"));
 
-    assertEquals(CapabilityPack.OPENWORKFLOW_V1.roles(), roles);
+    assertEquals(CapabilityPackLoader.load(null).get("openworkflow").roles(), roles);
     assertEquals(
         java.util.Arrays.stream(AuthorizationAction.values())
             .map(AuthorizationAction::scope)
@@ -51,29 +51,6 @@ class CapabilityPackPolicyTest {
     assertTrue(root.at("/constraints/activeOrganizationRequired").asBoolean());
     assertTrue(root.at("/constraints/topLevelRoleClaimsForbidden").asBoolean());
     assertFalse(root.at("/constraints/memberRoleAssignmentOnPackInstall").asBoolean());
-  }
-
-  @Test
-  void entityIntelligencePolicyIsLeastPrivilegeAndMakerChecker() throws IOException {
-    JsonNode root =
-        new ObjectMapper()
-            .readTree(
-                CapabilityPackPolicyTest.class.getResourceAsStream(
-                    "/entity-intelligence-capability-pack-v1.json"));
-
-    assertEquals(CapabilityPack.ENTITY_INTELLIGENCE_V1.roles(), strings(root.path("roles")));
-    assertEquals(
-        CapabilityPack.ENTITY_INTELLIGENCE_V1.workloadIdentities(),
-        strings(root.path("workloadIdentities")));
-    assertFalse(
-        strings(root.at("/roleGrants/entity-intelligence-reference-population-submitter"))
-            .contains("reference-population:approve"));
-    assertFalse(
-        strings(root.at("/roleGrants/entity-intelligence-reference-population-approver"))
-            .contains("reference-population:submit"));
-    assertTrue(root.at("/constraints/referencePopulationMakerChecker").asBoolean());
-    assertTrue(root.at("/constraints/databaseSchemaSelectorInTokensForbidden").asBoolean());
-    assertTrue(root.at("/constraints/legacyWorkflowInternalForbidden").asBoolean());
   }
 
   private static Set<String> strings(JsonNode array) {

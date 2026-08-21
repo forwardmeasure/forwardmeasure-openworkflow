@@ -1,0 +1,12 @@
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+ARG APPLICATION_JAR
+ARG DEPENDENCY_DIR
+ARG APP_UID=10001
+ARG APP_GID=10001
+COPY --chown=${APP_UID}:${APP_GID} ${DEPENDENCY_DIR} /deployments/dependency/
+COPY --chown=${APP_UID}:${APP_GID} ${APPLICATION_JAR} /deployments/application.jar
+USER ${APP_UID}:${APP_GID}
+WORKDIR /deployments
+EXPOSE 8080 25520 8558
+ENTRYPOINT ["java", "-jar", "/deployments/application.jar"]

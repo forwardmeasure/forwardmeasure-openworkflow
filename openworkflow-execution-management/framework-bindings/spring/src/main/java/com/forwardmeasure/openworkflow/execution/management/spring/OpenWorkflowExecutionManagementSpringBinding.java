@@ -12,12 +12,27 @@ package com.forwardmeasure.openworkflow.execution.management.spring;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.jpa.tenancy.TenantScope;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
+import com.forwardmeasure.openworkflow.engine.api.EngineId;
+import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProviders;
+import com.forwardmeasure.openworkflow.engine.api.ExecutionEventSink;
+import com.forwardmeasure.openworkflow.engine.http.HttpExecutionEngineProvider;
+import com.forwardmeasure.openworkflow.engine.http.server.ExecutionEventResource;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
+import com.forwardmeasure.openworkflow.execution.management.AuthzenExecutionAuthorizer;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
+import com.forwardmeasure.openworkflow.execution.persistence.JpaExecutionPersistenceFactory;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.persistence.JpaTenantRoutingExecutionStore;
 import jakarta.persistence.EntityManagerFactory;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.List;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.jersey.autoconfigure.ResourceConfigCustomizer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -32,6 +47,37 @@ import org.springframework.orm.jpa.SharedEntityManagerCreator;
  */
 @Configuration(proxyBeanMethods = false)
 public class OpenWorkflowExecutionManagementSpringBinding {
+
+  @Bean
+  JpaExecutionPersistenceFactory executionPersistence(
+      EntityManagerFactory entityManagerFactory, ObjectMapper objectMapper) {
+    return new JpaExecutionPersistenceFactory(
+        SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory), objectMapper);
+  }
+
+  @Bean
+  ExecutionManagementService executionManagement(
+      JpaExecutionPersistenceFactory persistence,
+      AuthorizationService authorization,
+      ActiveOrganizationProvider organizations,
+      ObjectMapper mapper,
+      @Value("${openworkflow.engines.kafka-streams.url}") URI kafkaUrl,
+      @Value("${openworkflow.engines.pekko.url}") URI pekkoUrl,
+      @Value("${openworkflow.engines.default}") String defaultEngine,
+      @Value("${openworkflow.engines.timeout}") Duration timeout) {
+    HttpClient client = HttpClient.newBuilder().connectTimeout(timeout).build();
+    var kafka =
+        new HttpExecutionEngineProvider(EngineId.KAFKA_STREAMS, kafkaUrl, client, mapper, timeout);
+    var pekko = new HttpExecutionEngineProvider(EngineId.PEKKO, pekkoUrl, client, mapper, timeout);
+    return new ExecutionManagementService(
+        persistence,
+        new AuthzenExecutionAuthorizer(authorization, ignored -> organizations.current()),
+        persistence,
+        new ExecutionEngineProviders(List.of(kafka, pekko)),
+        ignored -> new EngineId(defaultEngine),
+        Clock.systemUTC(),
+        UUID::randomUUID);
+  }
 
   @Bean
   SpringExecutionEventSink executionEventSink(
@@ -68,8 +114,13 @@ public class OpenWorkflowExecutionManagementSpringBinding {
   }
 
   @Bean
+  ExecutionEventResource executionEventResource(ExecutionEventSink sink) {
+    return new ExecutionEventResource(sink);
+  }
+
+  @Bean
   ResourceConfigCustomizer executionManagementResourceConfigCustomizer(
-      SpringExecutionResource executions) {
-    return resourceConfig -> resourceConfig.register(executions);
+      SpringExecutionResource executions, ExecutionEventResource events) {
+    return resourceConfig -> resourceConfig.register(executions).register(events);
   }
 }

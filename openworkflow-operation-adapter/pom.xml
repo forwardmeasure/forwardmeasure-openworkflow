@@ -38,6 +38,7 @@
     <module>openworkflow-operation-adapter-grpc</module>
     <module>openworkflow-operation-adapter-http</module>
     <module>openworkflow-operation-adapter-kafka</module>
+    <module>openworkflow-operation-adapter-pekko</module>
     <module>openworkflow-operation-adapter-runner</module>
   </modules>
 </project>

@@ -1,0 +1,16 @@
+name: openworkflow-service
+capability: service
+framework: quarkus
+engine: ""
+replicas: 1
+image: {repository: "", tag: 1.0.0-SNAPSHOT, digest: "", pullPolicy: IfNotPresent}
+service: {enabled: true, port: 8080, clusterIP: "", extraPorts: []}
+containerPorts: []
+env: []
+secretEnv: []
+credentialsSecretName: openworkflow-foundation
+serviceAccount: {create: true, name: ""}
+podSecurityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
+containerSecurityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+resources: {requests: {cpu: 100m, memory: 384Mi}, limits: {cpu: "2", memory: 1Gi}}
+terminationGracePeriodSeconds: 60

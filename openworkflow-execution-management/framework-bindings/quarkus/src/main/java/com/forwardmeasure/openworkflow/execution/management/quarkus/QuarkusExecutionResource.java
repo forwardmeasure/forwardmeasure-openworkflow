@@ -13,7 +13,7 @@ package com.forwardmeasure.openworkflow.execution.management.quarkus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.jpa.tenancy.TenantScope;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.execution.api.ExecutionsApi;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionControl;
 import com.forwardmeasure.openworkflow.execution.api.model.ExecutionStart;

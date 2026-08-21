@@ -17,8 +17,8 @@ import com.forwardmeasure.openworkflow.actor.ProtocolOperationCoordinatorShardin
 import com.forwardmeasure.openworkflow.actor.WorkflowSharding;
 import com.forwardmeasure.openworkflow.adapter.kafka.KafkaOperationAdapterRuntime;
 import com.forwardmeasure.openworkflow.adapter.kafka.KafkaProtocolOperationExecutors;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.engine.api.EngineId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProvider;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProviders;

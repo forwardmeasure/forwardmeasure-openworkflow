@@ -41,19 +41,7 @@
   <dependencies>
     <dependency>
       <groupId>com.forwardmeasure.openworkflow</groupId>
-      <artifactId>openworkflow-definition-management-jaxrs</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.forwardmeasure.openworkflow</groupId>
       <artifactId>openworkflow-authorization-authzen</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.forwardmeasure.openworkflow</groupId>
-      <artifactId>openworkflow-definition-management-jpa</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.forwardmeasure.openworkflow</groupId>
-      <artifactId>openworkflow-engine-quarkus-binding</artifactId>
     </dependency>
     <dependency>
       <groupId>com.forwardmeasure.jpa</groupId>

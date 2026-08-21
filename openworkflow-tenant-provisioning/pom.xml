@@ -27,6 +27,9 @@
     </parent>
     <artifactId>openworkflow-tenant-provisioning</artifactId>
     <name>ForwardMeasure OpenWorkflow :: Tenant Provisioning</name>
+    <properties>
+        <container-image.name>openworkflow-tenant-provisioning</container-image.name>
+    </properties>
     <dependencies>
         <dependency>
             <groupId>com.forwardmeasure.openworkflow</groupId>
@@ -48,24 +51,84 @@
         </dependency>
     </dependencies>
     <build>
-        <testResources>
-            <testResource>
-                <directory>${project.basedir}/../config/keycloak</directory>
-            </testResource>
-        </testResources>
         <plugins>
             <plugin>
-                <groupId>com.google.cloud.tools</groupId>
-                <artifactId>jib-maven-plugin</artifactId>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>copy-dependencies</id>
+                        <phase>prepare-package</phase>
+                        <goals>
+                            <goal>copy-dependencies</goal>
+                        </goals>
+                        <configuration>
+                            <outputDirectory>${project.build.directory}/dependency</outputDirectory>
+                            <includeScope>runtime</includeScope>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
                 <configuration>
-                    <from><image>eclipse-temurin:25-jre</image></from>
-                    <to><image>forwardmeasure/openworkflow-tenant-provisioning:1.0.0-SNAPSHOT</image></to>
-                    <container>
-                        <mainClass>com.forwardmeasure.openworkflow.tenant.TenantProvisioningMain</mainClass>
-                        <creationTime>USE_CURRENT_TIMESTAMP</creationTime>
-                    </container>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.forwardmeasure.openworkflow.tenant.TenantProvisioningMain</mainClass>
+                            <addClasspath>true</addClasspath>
+                            <classpathPrefix>dependency/</classpathPrefix>
+                        </manifest>
+                    </archive>
                 </configuration>
             </plugin>
         </plugins>
     </build>
+    <profiles>
+        <profile>
+            <id>container-image</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>io.fabric8</groupId>
+                        <artifactId>docker-maven-plugin</artifactId>
+                        <configuration>
+                            <images>
+                                <image>
+                                    <name>
+                                        ${container-image.registry}/${container-image.group}/${container-image.name}:${container-image.tag}</name>
+                                    <build>
+                                        <contextDir>${project.basedir}</contextDir>
+                                        <dockerFile>src/main/docker/Dockerfile.jvm</dockerFile>
+                                        <args>
+                                            <APPLICATION_JAR>
+                                                target/${project.build.finalName}.jar</APPLICATION_JAR>
+                                            <DEPENDENCY_DIR>target/dependency</DEPENDENCY_DIR>
+                                            <BASE_IMAGE>${container-image.base-jre}</BASE_IMAGE>
+                                        </args>
+                                    </build>
+                                </image>
+                            </images>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <id>build-container-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>build</goal>
+                                </goals>
+                            </execution>
+                            <execution>
+                                <id>push-container-image</id>
+                                <phase>package</phase>
+                                <goals>
+                                    <goal>push</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

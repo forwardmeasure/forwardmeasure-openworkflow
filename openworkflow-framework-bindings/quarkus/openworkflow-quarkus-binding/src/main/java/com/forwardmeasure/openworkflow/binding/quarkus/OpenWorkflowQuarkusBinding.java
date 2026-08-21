@@ -13,9 +13,6 @@ package com.forwardmeasure.openworkflow.binding.quarkus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.authorization.authzen.AuthzenAuthorizationFactory;
-import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.StudioAuthorizationResource;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
 import java.net.URI;
@@ -45,18 +42,5 @@ public class OpenWorkflowQuarkusBinding {
         decisionTtl,
         cacheEntries,
         policyVersion);
-  }
-
-  @Produces
-  @ApplicationScoped
-  OpenWorkflowCompiler openWorkflowCompiler() {
-    return new OpenWorkflowCompiler();
-  }
-
-  @Produces
-  @ApplicationScoped
-  StudioAuthorizationResource studioAuthorizationResource(
-      AuthorizationService authorization, ActiveOrganizationProvider organizations) {
-    return new StudioAuthorizationResource(authorization, organizations);
   }
 }

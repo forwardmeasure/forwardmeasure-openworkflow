@@ -25,8 +25,9 @@
     <version>${revision}</version>
     <relativePath>../../../pom.xml</relativePath>
   </parent>
-  <artifactId>openworkflow-micronaut-service</artifactId>
-  <name>ForwardMeasure OpenWorkflow :: Micronaut Service</name>
+  <artifactId>openworkflow-definition-management-micronaut-service</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Definition Management :: Micronaut Service</name>
+  <properties><container-image.name>openworkflow-definition-management-micronaut</container-image.name></properties>
   <dependencyManagement>
     <dependencies>
       <dependency>
@@ -40,6 +41,14 @@
   </dependencyManagement>
   <dependencies>
     <dependency>
+      <groupId>com.forwardmeasure.jpa</groupId>
+      <artifactId>forwardmeasure-jpa-locking</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.forwardmeasure.jpa</groupId>
+      <artifactId>forwardmeasure-jpa-async-task</artifactId>
+    </dependency>
+    <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-micronaut-binding</artifactId>
       <version>${project.version}</version>
@@ -47,16 +56,6 @@
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-definition-management-micronaut</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>openworkflow-engine-micronaut-binding</artifactId>
-      <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>${project.groupId}</groupId>
-      <artifactId>openworkflow-execution-management-micronaut-binding</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -103,26 +102,33 @@
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
+        <artifactId>maven-dependency-plugin</artifactId>
         <executions>
           <execution>
-            <phase>package</phase>
+            <id>copy-dependencies</id>
+            <phase>prepare-package</phase>
             <goals>
-              <goal>shade</goal>
+              <goal>copy-dependencies</goal>
             </goals>
             <configuration>
-              <shadedArtifactAttached>true</shadedArtifactAttached>
-              <shadedClassifierName>runner</shadedClassifierName>
-              <createDependencyReducedPom>false</createDependencyReducedPom>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>com.forwardmeasure.openworkflow.service.micronaut.OpenWorkflowMicronautApplication</mainClass>
-                </transformer>
-              </transformers>
+              <outputDirectory>${project.build.directory}/dependency</outputDirectory>
+              <includeScope>runtime</includeScope>
             </configuration>
           </execution>
         </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-jar-plugin</artifactId>
+        <configuration>
+          <archive>
+            <manifest>
+              <mainClass>com.forwardmeasure.openworkflow.service.micronaut.OpenWorkflowMicronautApplication</mainClass>
+              <addClasspath>true</addClasspath>
+              <classpathPrefix>dependency/</classpathPrefix>
+            </manifest>
+          </archive>
+        </configuration>
       </plugin>
     </plugins>
   </build>
@@ -132,22 +138,21 @@
       <build>
         <plugins>
           <plugin>
-            <groupId>com.google.cloud.tools</groupId>
-            <artifactId>jib-maven-plugin</artifactId>
+            <groupId>io.fabric8</groupId>
+            <artifactId>docker-maven-plugin</artifactId>
             <configuration>
-              <from><image>eclipse-temurin:25-jre</image></from>
-              <to><image>forwardmeasure/openworkflow-definition-micronaut:${project.version}</image></to>
-              <container>
-                <mainClass>com.forwardmeasure.openworkflow.service.micronaut.OpenWorkflowMicronautApplication</mainClass>
-                <creationTime>EPOCH</creationTime>
-              </container>
+              <images><image>
+                <name>${container-image.registry}/${container-image.group}/${container-image.name}:${container-image.tag}</name>
+                <build><contextDir>${project.basedir}</contextDir><dockerFile>src/main/docker/Dockerfile.jvm</dockerFile><args><APPLICATION_JAR>target/${project.build.finalName}.jar</APPLICATION_JAR><DEPENDENCY_DIR>target/dependency</DEPENDENCY_DIR><BASE_IMAGE>${container-image.base-jre}</BASE_IMAGE></args></build>
+              </image></images>
             </configuration>
             <executions>
               <execution>
                 <id>build-container-image</id>
                 <phase>package</phase>
-                <goals><goal>dockerBuild</goal></goals>
+                <goals><goal>build</goal></goals>
               </execution>
+              <execution><id>push-container-image</id><phase>package</phase><goals><goal>push</goal></goals></execution>
             </executions>
           </plugin>
         </plugins>

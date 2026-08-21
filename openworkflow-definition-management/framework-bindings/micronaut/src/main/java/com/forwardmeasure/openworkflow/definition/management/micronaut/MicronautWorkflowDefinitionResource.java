@@ -10,8 +10,8 @@
  */
 package com.forwardmeasure.openworkflow.definition.management.micronaut;
 
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowGovernanceService;
-import com.forwardmeasure.openworkflow.definition.management.jaxrs.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.CorrelationIdProvider;
 import com.forwardmeasure.openworkflow.definition.management.jaxrs.WorkflowDefinitionResource;
 import jakarta.inject.Inject;

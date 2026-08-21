@@ -1,12 +1,21 @@
-FROM eclipse-temurin:25-jre-ubi10-minimal@sha256:35f47084a4c1e34636fc8842780d5ca1e85b1b74de139723d1a541137932ddf2
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE} AS builder
 ARG APPLICATION_JAR=target/openworkflow-studio-spring-1.0.0-SNAPSHOT.jar
+WORKDIR /builder
+COPY ${APPLICATION_JAR} application.jar
+RUN java -Djarmode=tools -jar application.jar extract --layers --destination extracted
+
+FROM ${BASE_IMAGE}
 ARG APP_UID=10001
 ARG APP_GID=10001
-COPY --chown=${APP_UID}:${APP_GID} ${APPLICATION_JAR} /deployments/application.jar
+WORKDIR /application
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /builder/extracted/dependencies/ ./
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /builder/extracted/spring-boot-loader/ ./
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /builder/extracted/snapshot-dependencies/ ./
+COPY --from=builder --chown=${APP_UID}:${APP_GID} /builder/extracted/application/ ./
 EXPOSE 8080
 USER ${APP_UID}:${APP_GID}
-WORKDIR /deployments
-ENTRYPOINT ["java", "-jar", "/deployments/application.jar"]
+ENTRYPOINT ["java", "-jar", "application.jar"]
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements. See the NOTICE file distributed with

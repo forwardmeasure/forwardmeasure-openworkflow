@@ -10,6 +10,7 @@
  */
 package com.forwardmeasure.openworkflow.definition.management.jaxrs;
 
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowDefinition;
 import com.forwardmeasure.openworkflow.definition.domain.service.WorkflowGovernanceService;
 import com.forwardmeasure.openworkflow.definition.management.api.WorkflowDefinitionGovernanceApi;

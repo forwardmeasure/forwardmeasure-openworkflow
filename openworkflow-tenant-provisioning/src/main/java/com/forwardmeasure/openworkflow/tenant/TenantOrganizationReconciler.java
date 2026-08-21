@@ -33,10 +33,6 @@ public final class TenantOrganizationReconciler {
     this.admin = Objects.requireNonNull(admin, "admin");
   }
 
-  public OrganizationState reconcile(TenantProvisioningRequest request) {
-    return reconcileCapabilityPack(request, CapabilityPack.OPENWORKFLOW_V1);
-  }
-
   public OrganizationState provisionOrganization(TenantProvisioningRequest request) {
     Objects.requireNonNull(request, "request");
     Map<String, String> desiredAttributes =
