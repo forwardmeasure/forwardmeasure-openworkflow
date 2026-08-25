@@ -1,0 +1,5 @@
+apiVersion: v2
+name: openworkflow-gateway
+description: Shared Istio Gateway (K8s Gateway API) and HTTPRoutes for OpenWorkflow's public domain
+type: application
+version: 0.1.0

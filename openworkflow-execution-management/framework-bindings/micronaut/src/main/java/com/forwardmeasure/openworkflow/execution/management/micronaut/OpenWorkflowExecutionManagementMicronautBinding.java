@@ -22,8 +22,10 @@ import com.forwardmeasure.openworkflow.engine.http.server.ExecutionEventResource
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
 import com.forwardmeasure.openworkflow.execution.management.AuthzenExecutionAuthorizer;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
+import com.forwardmeasure.openworkflow.execution.management.ExecutionTransactionExecutor;
 import com.forwardmeasure.openworkflow.execution.persistence.JpaExecutionPersistenceFactory;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
+import com.forwardmeasure.openworkflow.execution.query.TenantScopedExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.persistence.JpaTenantRoutingExecutionStore;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Value;
@@ -39,9 +41,8 @@ import java.util.UUID;
 
 /**
  * Micronaut composition for the query-side store and the actor-context bridge used by {@link
- * MicronautExecutionResource}/{@link MicronautExecutionController}. The
- * engine/command-orchestration wiring lives in {@code openworkflow-engine-micronaut-binding}
- * instead - not capability-specific.
+ * MicronautExecutionResource}. The engine/command-orchestration runtime for each execution engine
+ * is wired up in that engine's own deployable module instead - not capability-specific.
  */
 @Factory
 public class OpenWorkflowExecutionManagementMicronautBinding {
@@ -63,6 +64,8 @@ public class OpenWorkflowExecutionManagementMicronautBinding {
       AuthorizationService authorization,
       ActiveOrganizationProvider organizations,
       ObjectMapper mapper,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions,
       @Value("${openworkflow.engines.kafka-streams.url}") URI kafkaUrl,
       @Value("${openworkflow.engines.pekko.url}") URI pekkoUrl,
       @Value("${openworkflow.engines.default}") String defaultEngine,
@@ -78,7 +81,9 @@ public class OpenWorkflowExecutionManagementMicronautBinding {
         new ExecutionEngineProviders(List.of(kafka, pekko)),
         ignored -> new EngineId(defaultEngine),
         Clock.systemUTC(),
-        UUID::randomUUID);
+        UUID::randomUUID,
+        tenants,
+        transactions);
   }
 
   @Singleton
@@ -89,8 +94,12 @@ public class OpenWorkflowExecutionManagementMicronautBinding {
 
   @Singleton
   ExecutionQueryRepository executionQueries(
-      EntityManager entityManager, ObjectMapper objectMapper) {
-    return new JpaTenantRoutingExecutionStore(entityManager, objectMapper);
+      EntityManager entityManager,
+      ObjectMapper objectMapper,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions) {
+    return new TenantScopedExecutionQueryRepository(
+        new JpaTenantRoutingExecutionStore(entityManager, objectMapper), tenants, transactions);
   }
 
   @Singleton

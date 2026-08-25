@@ -23,6 +23,7 @@ spec:
         instrumentation.opentelemetry.io/inject-java: "true"
       {{- end }}
     spec:
+      imagePullSecrets: {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       serviceAccountName: {{ default (printf "openworkflow-studio-%s" .Values.framework) .Values.serviceAccount.name }}
       automountServiceAccountToken: false
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}

@@ -34,13 +34,13 @@ production_env=(
 )
 env "${production_env[@]}" \
   OPENWORKFLOW_PEKKO_POSTGRESQL_ENDPOINT=jdbc:postgresql://journal.example/openworkflow \
-  helmfile --kube-context "$context" -f "$helmfile_path" -e production-postgresql template >"$work/production-postgresql.yaml"
+  helmfile --kube-context "$context" -f "$helmfile_path" -e gcp-openworkflow-prod template >"$work/gcp-openworkflow-prod.yaml"
 env "${production_env[@]}" \
   OPENWORKFLOW_PEKKO_CASSANDRA_ENDPOINT=cassandra.example:9042 \
   OPENWORKFLOW_CASSANDRA_LOCAL_DATACENTER=dc1 \
   helmfile --kube-context "$context" -f "$helmfile_path" -e production-cassandra template >"$work/production-cassandra.yaml"
 
-for profile in production-postgresql production-cassandra; do
+for profile in gcp-openworkflow-prod production-cassandra; do
   manifest="$work/$profile.yaml"
   test "$(yq eval-all '[select(.kind == "NetworkPolicy")] | length' "$manifest")" -ge 18
   test "$(yq eval-all '[select(.kind == "Deployment" and .metadata.name == "postgresql")] | length' "$manifest")" -eq 0
@@ -51,7 +51,7 @@ for profile in production-postgresql production-cassandra; do
   test "$(yq eval-all '[select(.kind == "NetworkPolicy") | .spec.egress[]? | select(.to[]?.ipBlock.cidr == "10.0.0.0/8")] | length' "$manifest")" -ge 8
 done
 for framework in quarkus spring micronaut; do
-  test "$(yq eval-all "[select(.kind == \"Deployment\" and .metadata.name == \"openworkflow-engine-pekko-$framework\")] | length" "$work/production-postgresql.yaml")" -eq 1
+  test "$(yq eval-all "[select(.kind == \"Deployment\" and .metadata.name == \"openworkflow-engine-pekko-$framework\")] | length" "$work/gcp-openworkflow-prod.yaml")" -eq 1
   test "$(yq eval-all "[select(.kind == \"Deployment\" and .metadata.name == \"openworkflow-engine-pekko-$framework\")] | length" "$work/production-cassandra.yaml")" -eq 1
 done
 

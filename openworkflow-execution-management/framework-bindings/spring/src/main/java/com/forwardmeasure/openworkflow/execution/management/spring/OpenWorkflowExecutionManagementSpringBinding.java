@@ -20,10 +20,13 @@ import com.forwardmeasure.openworkflow.engine.api.ExecutionEventSink;
 import com.forwardmeasure.openworkflow.engine.http.HttpExecutionEngineProvider;
 import com.forwardmeasure.openworkflow.engine.http.server.ExecutionEventResource;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
+import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionResource;
 import com.forwardmeasure.openworkflow.execution.management.AuthzenExecutionAuthorizer;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
+import com.forwardmeasure.openworkflow.execution.management.ExecutionTransactionExecutor;
 import com.forwardmeasure.openworkflow.execution.persistence.JpaExecutionPersistenceFactory;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
+import com.forwardmeasure.openworkflow.execution.query.TenantScopedExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.persistence.JpaTenantRoutingExecutionStore;
 import jakarta.persistence.EntityManagerFactory;
 import java.net.URI;
@@ -40,8 +43,8 @@ import org.springframework.orm.jpa.SharedEntityManagerCreator;
 
 /**
  * Spring composition for the query-side store, the actor-context bridge, and the REST resource
- * itself. The engine/command-orchestration wiring lives in {@code
- * openworkflow-engine-spring-binding} instead - not capability-specific. Registers into the single
+ * itself. The engine/command-orchestration runtime for each execution engine is wired up in that
+ * engine's own deployable module instead - not capability-specific. Registers into the single
  * central Jersey {@code ResourceConfig} via {@link ResourceConfigCustomizer}, same pattern as
  * {@code OpenWorkflowDefinitionManagementSpringBinding}.
  */
@@ -61,6 +64,8 @@ public class OpenWorkflowExecutionManagementSpringBinding {
       AuthorizationService authorization,
       ActiveOrganizationProvider organizations,
       ObjectMapper mapper,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions,
       @Value("${openworkflow.engines.kafka-streams.url}") URI kafkaUrl,
       @Value("${openworkflow.engines.pekko.url}") URI pekkoUrl,
       @Value("${openworkflow.engines.default}") String defaultEngine,
@@ -76,7 +81,9 @@ public class OpenWorkflowExecutionManagementSpringBinding {
         new ExecutionEngineProviders(List.of(kafka, pekko)),
         ignored -> new EngineId(defaultEngine),
         Clock.systemUTC(),
-        UUID::randomUUID);
+        UUID::randomUUID,
+        tenants,
+        transactions);
   }
 
   @Bean
@@ -87,9 +94,16 @@ public class OpenWorkflowExecutionManagementSpringBinding {
 
   @Bean
   ExecutionQueryRepository executionQueries(
-      EntityManagerFactory entityManagerFactory, ObjectMapper objectMapper) {
-    return new JpaTenantRoutingExecutionStore(
-        SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory), objectMapper);
+      EntityManagerFactory entityManagerFactory,
+      ObjectMapper objectMapper,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions) {
+    return new TenantScopedExecutionQueryRepository(
+        new JpaTenantRoutingExecutionStore(
+            SharedEntityManagerCreator.createSharedEntityManager(entityManagerFactory),
+            objectMapper),
+        tenants,
+        transactions);
   }
 
   @Bean
@@ -105,12 +119,12 @@ public class OpenWorkflowExecutionManagementSpringBinding {
   }
 
   @Bean
-  SpringExecutionResource executionResource(
+  ExecutionResource executionResource(
       ExecutionManagementService management,
       ExecutionQueryRepository queries,
       ExecutionContextProvider contexts,
       ObjectMapper objectMapper) {
-    return new SpringExecutionResource(management, queries, contexts, objectMapper);
+    return new ExecutionResource(management, queries, contexts, objectMapper, UUID::randomUUID);
   }
 
   @Bean
@@ -120,7 +134,7 @@ public class OpenWorkflowExecutionManagementSpringBinding {
 
   @Bean
   ResourceConfigCustomizer executionManagementResourceConfigCustomizer(
-      SpringExecutionResource executions, ExecutionEventResource events) {
+      ExecutionResource executions, ExecutionEventResource events) {
     return resourceConfig -> resourceConfig.register(executions).register(events);
   }
 }

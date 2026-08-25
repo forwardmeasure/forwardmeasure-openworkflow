@@ -1,0 +1,97 @@
+deploymentProfile: production-multi-engine
+imageVersions:
+  definitionManagement: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  executionManagement: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  studio: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  engines:
+    kafka-streams: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+    pekko: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  operationAdapter: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  tenantProvisioning: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+  migrations: {tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}}
+imagePullPolicy: Always
+ingressEnabled: true
+gcpProjectId: {{ requiredEnv "OPENWORKFLOW_GCP_PROJECT_ID" | quote }}
+credentialsSecretName: {{ requiredEnv "OPENWORKFLOW_CREDENTIALS_SECRET" | quote }}
+foundation: {enabled: false}
+securityBootstrap: {enabled: false}
+acceptanceFixtures: {enabled: false}
+replicas: {definition: 2, executionManagement: 2, engine: 3, operationAdapter: 3, studio: 2}
+engines:
+  pekkoPostgresql: false
+  pekkoCassandra: false
+  kafkaStreams: true
+hardening:
+  networkPolicyEnabled: true
+# Not requiredEnv - see gcp-openworkflow-prod.yaml.gotmpl's identical fix
+# for why (matches local/ci/kind/development's own "" default; env, not
+# requiredEnv, so unset just means "").
+networkPolicy:
+  externalEgressCidr: {{ env "OPENWORKFLOW_EXTERNAL_EGRESS_CIDR" | quote }}
+telemetry:
+  otlpEndpoint: {{ requiredEnv "OPENWORKFLOW_OTLP_ENDPOINT" | quote }}
+  injectJava: true
+database:
+  url: {{ requiredEnv "OPENWORKFLOW_DATABASE_URL" | quote }}
+  username: {{ requiredEnv "OPENWORKFLOW_DATABASE_USERNAME" | quote }}
+  # Matches openworkflow-k8s-setup/terraform/gcp's
+  # var.database_administrator_username default - see
+  # gcp-openworkflow-prod.yaml.gotmpl's identical override for why this
+  # isn't requiredEnv.
+  administratorUsername: openworkflow_migration
+# keycloak.url/issuer deliberately not overridden here - base.yaml's value
+# (built from keycloakNamespace/keycloakRealm) is already correct and the
+# same platform Keycloak regardless of persistence profile. Requiring a
+# manually re-typed value here was pure risk with no benefit: nothing
+# validated it, and a wrong entry would only surface later when a live
+# authorization check failed at runtime.
+kafka:
+  bootstrapServers: {{ requiredEnv "OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS" | quote }}
+# Fixed facts of the k8ssandra-cluster release this same environment
+# provisions (helmfiles/cassandra.yaml.gotmpl, releases/k8ssandra-cluster) -
+# not requiredEnv, same reasoning as gcpProjectId/cloudSqlProxy above:
+# computed cluster facts aren't something a human should be asked to
+# retype. k8ssandra-operator/cass-operator's own standard naming
+# convention is <clusterName>-<datacenterName>-service for the CQL
+# service and <clusterName>-superuser for the auto-generated auth Secret -
+# both created in openworkflowNamespace itself (see environments/base.yaml's
+# comment on why), matching cassandra.clusterName: openworkflow and
+# datacenters[0].name: dc1 in releases/k8ssandra-cluster/base.yaml.gotmpl.
+pekko:
+  # openworkflowNamespace isn't accessible here as .Values - environment
+  # files don't see each other's values at this stage of rendering (unlike
+  # release overlay files, which get the fully merged environment values).
+  # Hardcoded to match base.yaml's own openworkflowNamespace: value
+  # directly, same as it does.
+  cassandraEndpoint: "openworkflow-dc1-service.forwardmeasure-openworkflow.svc.cluster.local:9042"
+  cassandraLocalDatacenter: dc1
+  cassandraMigrationKeyspace: {{ env "OPENWORKFLOW_CASSANDRA_MIGRATION_KEYSPACE" | default "openworkflow_migrations" | quote }}
+  # Matches the k8ssandra-cluster release's own datacenters[0].size (3
+  # nodes) - same convention data-fabric's own itineris app uses for its
+  # identically-sized cluster.
+  cassandraReplicationFactor: 3
+  cassandraCredentialsSecret:
+    name: openworkflow-superuser
+    usernameKey: username
+    passwordKey: password
+# Not requiredEnv - see gcp-openworkflow-prod.yaml.gotmpl's identical fix.
+operations:
+  httpEgressAllowlist: {{ env "OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST" | quote }}
+definitionResources:
+  allowedHosts: {{ env "OPENWORKFLOW_DEFINITION_RESOURCE_ALLOWED_HOSTS" | quote }}
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#

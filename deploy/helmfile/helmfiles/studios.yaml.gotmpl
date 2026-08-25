@@ -8,7 +8,11 @@ helmDefaults:
   atomic: true
 
 releases:
-{{- range $framework := list "quarkus" "spring" "micronaut" }}
+{{- /*
+Pinned to workflowPlatformFramework, not all 3 - see execution-engines.yaml.gotmpl's
+identical comment for why.
+*/}}
+{{- range $framework := list $.Values.workflowPlatformFramework }}
   - name: openworkflow-studio-{{ $framework }}
     namespace: {{ $.Values.openworkflowNamespace }}
     chart: ../releases/openworkflow-studio

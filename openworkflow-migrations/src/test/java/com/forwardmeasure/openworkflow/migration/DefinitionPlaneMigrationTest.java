@@ -37,7 +37,9 @@ class DefinitionPlaneMigrationTest {
   @Test
   void installsDefinitionPlaneIndependentlyIntoEveryTenantSchema(PostgreSqlTestContainer database)
       throws Exception {
-    OpenWorkflowTenantMigrator migrator = new OpenWorkflowTenantMigrator(database.dataSource());
+    OpenWorkflowTenantMigrator migrator =
+        new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+    migrator.ensureRuntimeRole(database.password());
 
     migrator.provisionAndMigrate(TENANT_A);
     migrator.provisionAndMigrate(TENANT_B);

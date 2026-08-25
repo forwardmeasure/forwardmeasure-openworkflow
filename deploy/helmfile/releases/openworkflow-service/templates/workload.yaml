@@ -11,8 +11,9 @@ spec:
     metadata:
       labels: {app.kubernetes.io/name: {{ .Values.name }}, openworkflow.io/capability: {{ .Values.capability }}, openworkflow.io/framework: {{ .Values.framework }}{{ if .Values.engine }}, openworkflow.io/engine: {{ .Values.engine }}{{ end }}}
     spec:
+      imagePullSecrets: {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       serviceAccountName: {{ default .Values.name .Values.serviceAccount.name }}
-      automountServiceAccountToken: false
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
       terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       securityContext: {{- toYaml .Values.podSecurityContext | nindent 8 }}
       containers:
@@ -31,6 +32,22 @@ spec:
           livenessProbe: {tcpSocket: {port: http}, initialDelaySeconds: 20, periodSeconds: 10}
           resources: {{- toYaml .Values.resources | nindent 12 }}
           volumeMounts: [{name: tmp, mountPath: /tmp}]
+        {{- if .Values.cloudSqlProxy.enabled }}
+        - name: cloud-sql-proxy
+          image: {{ required "cloudSqlProxy.image.repository is required" .Values.cloudSqlProxy.image.repository }}{{ if .Values.cloudSqlProxy.image.digest }}@{{ .Values.cloudSqlProxy.image.digest }}{{ else }}:{{ .Values.cloudSqlProxy.image.tag }}{{ end }}
+          imagePullPolicy: {{ .Values.cloudSqlProxy.image.pullPolicy | default "IfNotPresent" }}
+          args:
+            - "--structured-logs"
+            - "--port={{ .Values.cloudSqlProxy.port }}"
+            {{- if .Values.cloudSqlProxy.privateIp }}
+            - "--private-ip"
+            {{- end }}
+            - {{ required "cloudSqlProxy.instanceConnectionName is required when cloudSqlProxy.enabled" .Values.cloudSqlProxy.instanceConnectionName | quote }}
+          resources: {{- toYaml .Values.cloudSqlProxy.resources | nindent 12 }}
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+        {{- end }}
       volumes: [{name: tmp, emptyDir: {}}]
 ---
 {{- if .Values.service.enabled }}

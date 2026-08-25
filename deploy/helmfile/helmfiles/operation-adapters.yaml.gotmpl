@@ -5,7 +5,19 @@ helmDefaults:
   atomic: true
 
 releases:
-{{- range $framework := list "quarkus" "spring" "micronaut" }}
+{{- /*
+Pinned to workflowPlatformFramework, not all 3 - see execution-engines.yaml.gotmpl's
+identical comment for why.
+*/}}
+{{- /*
+Same placeholder as execution-services.yaml.gotmpl's identical comment -
+which pekko flavor this joins when both engines.pekkoPostgresql and
+engines.pekkoCassandra are enabled. Reproduces the exact prior ternary
+behavior (cassandra wins).
+*/}}
+{{- $pekkoDefaultEngine := ternary "pekko-cassandra" "pekko-postgresql" (dig "engines" "pekkoCassandra" false .Values) }}
+{{- $isCassandra := eq $pekkoDefaultEngine "pekko-cassandra" }}
+{{- range $framework := list $.Values.workflowPlatformFramework }}
   - name: openworkflow-operation-adapter-{{ $framework }}
     namespace: {{ $.Values.openworkflowNamespace }}
     chart: ../releases/openworkflow-service
@@ -33,16 +45,49 @@ releases:
           - {name: OPENWORKFLOW_AUTHORIZATION_ISSUER, value: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" $.Values | quote }}}
           - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ dig "kafka" "bootstrapServers" "redpanda:9092" $.Values | quote }}}
           - {name: OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST, value: {{ dig "operations" "httpEgressAllowlist" "" $.Values | quote }}}
-          - {name: OPENWORKFLOW_ADAPTER_PEKKO_ENABLED, value: {{ or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
-          - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ ternary "cassandra" "postgresql" (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
-          - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if dig "engines" "pekkoCassandra" false $.Values }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
+          # Was OPENWORKFLOW_ADAPTER_PEKKO_ENABLED (singular "ADAPTER") -
+          # confirmed against PekkoOperationAdapterRuntime.java that the
+          # real config key is openworkflow.adapters.pekko-enabled (plural
+          # "adapters"), which MicroProfile Config's standard env var
+          # mapping (dots/hyphens -> underscores, uppercased - confirmed
+          # against this same file's other config keys, e.g.
+          # cluster.discovery-service -> OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE)
+          # resolves to OPENWORKFLOW_ADAPTERS_PEKKO_ENABLED. The singular
+          # name never reached Java at all; it silently fell back to the
+          # code's own default ("true"), meaning this was never actually a
+          # working toggle despite looking like one.
+          - {name: OPENWORKFLOW_ADAPTERS_PEKKO_ENABLED, value: {{ or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ if $isCassandra }}cassandra{{ else }}postgresql{{ end }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if $isCassandra }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
+          {{- if not $isCassandra }}
           - {name: OPENWORKFLOW_PERSISTENCE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          {{- end }}
           - {name: OPENWORKFLOW_PERSISTENCE_LOCAL_DATACENTER, value: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" $.Values | quote }}}
-          - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-pekko-%s" $framework | quote }}}
+          - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-%s-%s" $pekkoDefaultEngine $framework | quote }}}
           - {name: OPENWORKFLOW_CLUSTER_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
           - {name: OPENWORKFLOW_CLUSTER_REQUIRED_CONTACT_POINTS, value: {{ dig "replicas" "engine" 1 $.Values | quote }}}
         secretEnv:
           - {name: OPENWORKFLOW_AUTHORIZATION_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
+        {{- if $isCassandra }}
+          # Was unconditionally sourced from the Postgres username/password
+          # secrets even when running against Cassandra - same pre-existing
+          # bug already found and fixed in execution-engines.yaml.gotmpl,
+          # confirmed present here too on inspection.
+          - {name: OPENWORKFLOW_PERSISTENCE_USERNAME, valueFrom: {secretKeyRef: {name: {{ dig "pekko" "cassandraCredentialsSecret" "name" "openworkflow-superuser" $.Values | quote }}, key: {{ dig "pekko" "cassandraCredentialsSecret" "usernameKey" "username" $.Values | quote }}}}}
+          - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "pekko" "cassandraCredentialsSecret" "name" "openworkflow-superuser" $.Values | quote }}, key: {{ dig "pekko" "cassandraCredentialsSecret" "passwordKey" "password" $.Values | quote }}}}}
+        {{- else }}
           - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+        {{- end }}
+        {{- if not (dig "engines" "pekkoCassandra" false $.Values) }}
+        cloudSqlProxy:
+          enabled: {{ dig "cloudSqlProxy" "enabled" false $.Values }}
+          instanceConnectionName: {{ dig "cloudSqlProxy" "instanceConnectionName" "" $.Values | quote }}
+          image:
+            repository: {{ $.Values.imageVersions.cloudSqlProxy.repository | quote }}
+            tag: {{ $.Values.imageVersions.cloudSqlProxy.tag | quote }}
+        {{- if dig "cloudSqlProxy" "enabled" false $.Values }}
+        serviceAccount: {create: false, name: openworkflow-runtime, automount: true}
+        {{- end }}
+        {{- end }}
     labels: {stage: execution, capability: operation-adapter, framework: {{ $framework }}}
 {{- end }}

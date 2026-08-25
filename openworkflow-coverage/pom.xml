@@ -116,36 +116,6 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
-            <artifactId>openworkflow-engine-micronaut-binding</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>openworkflow-engine-quarkus-binding</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
-            <artifactId>openworkflow-engine-spring-binding</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>*</groupId>
-                    <artifactId>*</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>${project.groupId}</groupId>
             <artifactId>openworkflow-engine-api</artifactId>
             <exclusions>
                 <exclusion>
@@ -680,9 +650,6 @@
                                 openworkflow-definition-management-application,
                                 openworkflow-definition-management-jaxrs,
                                 openworkflow-definition-management-jpa,
-                                openworkflow-engine-micronaut-binding,
-                                openworkflow-engine-quarkus-binding,
-                                openworkflow-engine-spring-binding,
                                 openworkflow-engine-api,
                                 openworkflow-durable-processing-api,
                                 openworkflow-durable-processing-core,

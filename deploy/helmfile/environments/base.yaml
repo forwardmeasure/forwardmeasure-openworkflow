@@ -15,8 +15,67 @@
 # limitations under the License.
 #
 
+# No cloud selected at this tier - see environments/gcp.yaml for the
+# cloud-wide layer. Drives which cloud-specific release overlays render.
+cloudProvider: ""
+
 openworkflowNamespace: forwardmeasure-openworkflow
 ingressEnabled: false
+
+# Gateway API CRDs (Gateway/HTTPRoute/GatewayClass) that charts/openworkflow-gateway's
+# Gateway/HTTPRoute resources require just to be schema-valid - only this
+# repo's own install.sh installs them (standalone clusters: local/ci/kind/
+# development have no forwardmeasure-platform install to provide them; on a
+# real cloud cluster forwardmeasure-platform's own install.sh already
+# installs the same CRDs first, so this is a harmless no-op re-apply there).
+# Matches forwardmeasure-platform's own gatewayApi.version exactly - same
+# CRDs, same version, both repos' install.sh apply them the same way.
+gatewayApi:
+  version: v1.5.1
+
+# Namespace of the istio (or equivalent Gateway API implementation)
+# installed by forwardmeasure-platform (or an equivalent already-provisioned
+# cluster) - charts/openworkflow-gateway addresses its Gateway resources
+# here. keycloakNamespace must stay "keycloak" until security.yaml.gotmpl's
+# hardcoded keycloak.keycloak.svc.cluster.local reference is parameterized
+# to match.
+istioSystemNamespace: istio-system
+keycloakNamespace: keycloak
+
+# Cassandra for the pekko-cassandra engine (production-multi-engine profile
+# only - see helmfiles/cassandra.yaml.gotmpl, gated on
+# engines.pekkoCassandra). This is genuinely OpenWorkflow's own persistence
+# store, not shared tenant infrastructure like keycloak/istio above, so
+# OpenWorkflow provisions it itself rather than expecting
+# forwardmeasure-platform to - mirrors how data-fabric's own itineris app
+# provisions its own dedicated k8ssandra cluster rather than treating
+# Cassandra as shared platform infra.
+#
+# Only the operator gets its own namespace (data-fabric's own convention -
+# operators commonly run separately from what they manage). The
+# K8ssandraCluster CR itself deploys into openworkflowNamespace, not a
+# separate one: k8ssandra-operator creates the auto-generated superuser
+# Secret in the SAME namespace as the CR, and a Kubernetes secretKeyRef
+# can't cross namespaces - confirmed data-fabric has no reflector/secret-
+# replication tool solving this for its own (cross-namespace) itineris
+# setup, so this deliberately doesn't copy that part of the pattern.
+k8ssandraOperatorNamespace: k8ssandra-operator
+
+# Public hostnames for OpenWorkflow's own Gateway/HTTPRoutes (studio,
+# definitions, etc.) live under this domain. TLS for it is provisioned by
+# whichever cluster (forwardmeasure-platform or equivalent) owns the
+# Gateway - not this repo's concern.
+# gcpProjectId is set per-environment (development.yaml.gotmpl,
+# production-*.yaml.gotmpl) via requiredEnv OPENWORKFLOW_GCP_PROJECT_ID, not
+# here - not something to commit as a literal.
+platformTld: kriyagentic.com
+
+# Which framework binding backs the public hostnames in
+# charts/openworkflow-gateway (helmfiles/routing.yaml.gotmpl). Hostnames stay
+# fixed; only this changes if the production binding ever changes.
+workflowPlatformFramework: quarkus
+
+keycloakDnsName: auth.kriyagentic.com
 keycloakRealm: forwardmeasure
 keycloakSharedClientId: forwardmeasure-public
 identityCredentialsSecretName: openworkflow-identity-credentials

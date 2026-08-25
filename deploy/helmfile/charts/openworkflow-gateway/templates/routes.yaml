@@ -1,0 +1,23 @@
+{{- range $key, $route := .Values.routes }}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ $key }}
+  namespace: {{ $.Values.openworkflowNamespace }}
+spec:
+  parentRefs:
+    - name: {{ $.Values.gateway.name }}
+      namespace: {{ $.Values.gateway.namespace }}
+      sectionName: {{ $.Values.gateway.sectionName }}
+  rules:
+    - matches:
+        - path: {type: PathPrefix, value: {{ $route.publicPathPrefix | quote }}}
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path: {type: ReplacePrefixMatch, replacePrefixMatch: {{ $route.backendPathPrefix | quote }}}
+      backendRefs:
+        - name: {{ printf "%s-%s" $route.serviceNamePrefix $.Values.workflowPlatformFramework }}
+          port: {{ $route.port }}
+{{- end }}

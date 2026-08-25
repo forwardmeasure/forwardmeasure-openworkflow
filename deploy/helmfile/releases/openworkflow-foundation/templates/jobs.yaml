@@ -33,6 +33,7 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
+      imagePullSecrets: {{- toYaml .Values.imagePullSecrets | nindent 8 }}
       initContainers:
         - name: wait-for-keycloak
           image: {{ .Values.images.curl.repository }}{{ if .Values.images.curl.digest }}@{{ .Values.images.curl.digest }}{{ else }}:{{ .Values.images.curl.tag }}{{ end }}

@@ -21,14 +21,22 @@ helmDefaults:
   atomic: true
 
 releases:
-{{- range $framework := list "quarkus" "spring" "micronaut" }}
+{{- /*
+Pinned to workflowPlatformFramework, not all 3 - see execution-engines.yaml.gotmpl's
+identical comment for why.
+*/}}
+{{- range $framework := list $.Values.workflowPlatformFramework }}
   - name: openworkflow-definition-management-{{ $framework }}
     namespace: {{ $.Values.openworkflowNamespace }}
     chart: ../releases/openworkflow-service
-    {{- if dig "securityBootstrap" "enabled" true $.Values }}
-    needs:
-      - {{ $.Values.openworkflowNamespace }}/openworkflow-k2-security
-    {{- end }}
+    # No explicit `needs` on openworkflow-k2-security even when
+    # securityBootstrap.enabled - helmfile 1.3.2 cannot reliably resolve a
+    # `needs` reference across separate top-level helmfiles: entries
+    # (confirmed directly, not just inferred - this one only surfaces under
+    # local/ci, since every other environment sets
+    # securityBootstrap.enabled: false and never exercises this path).
+    # Ordering is still guaranteed without it: security.yaml.gotmpl loads
+    # before this file in helmfile.yaml.gotmpl's helmfiles: list.
     values:
       - name: openworkflow-definition-management-{{ $framework }}
         capability: definition-management
@@ -46,6 +54,15 @@ releases:
         secretEnv:
           - {name: OPENWORKFLOW_DATABASE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
           - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
+        cloudSqlProxy:
+          enabled: {{ dig "cloudSqlProxy" "enabled" false $.Values }}
+          instanceConnectionName: {{ dig "cloudSqlProxy" "instanceConnectionName" "" $.Values | quote }}
+          image:
+            repository: {{ $.Values.imageVersions.cloudSqlProxy.repository | quote }}
+            tag: {{ $.Values.imageVersions.cloudSqlProxy.tag | quote }}
+        {{- if dig "cloudSqlProxy" "enabled" false $.Values }}
+        serviceAccount: {create: false, name: openworkflow-runtime, automount: true}
+        {{- end }}
     labels:
       stage: definitions
       checkpoint: K3B

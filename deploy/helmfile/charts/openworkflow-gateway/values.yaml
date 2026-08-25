@@ -1,0 +1,62 @@
+platformTld: kriyagentic.com
+
+istioSystemNamespace: istio-system
+openworkflowNamespace: forwardmeasure-openworkflow
+
+# gateway.enabled: true creates this chart's own Gateway (standalone
+# clusters - local/ci/kind/development - where nothing else provides one).
+# false skips it entirely and just attaches the HTTPRoutes below to an
+# already-existing Gateway (a real cloud cluster's shared
+# forwardmeasure-platform Gateway) via name/namespace/sectionName -
+# see forwardmeasure-platform's platform-routing release, which already
+# has a wildcard `tenant-https` listener for exactly this. Only
+# letsencryptClusterIssuerName/wildcardCertSecretName are meaningful when
+# gateway.enabled is true - both irrelevant, unused when false.
+gateway:
+  enabled: true
+  name: openworkflow-gateway
+  namespace: istio-system
+  sectionName: https
+letsencryptClusterIssuerName: letsencrypt-dns01
+wildcardCertSecretName: kriyagentic-com-tls
+
+# Which framework binding backs the public routes. Public paths never change
+# - only this does, when the production binding changes.
+workflowPlatformFramework: quarkus
+
+# Public URLs are <tenant-id>.platformTld/<publicPathPrefix>/..., matching any
+# tenant via the Gateway's own wildcard listener (no per-tenant DNS/cert
+# needed). publicPathPrefix is replaced with backendPathPrefix (Gateway API
+# ReplacePrefixMatch) before forwarding, so the public scheme stays
+# independent of each service's own real internal routing.
+#
+# serviceNamePrefix + "-" + workflowPlatformFramework is the actual Service name, e.g.
+# openworkflow-studio-quarkus.
+routes:
+  studio:
+    publicPathPrefix: /owf/studio
+    # The Studio SPA's own build (vite.config.ts base: "/studio/") hardcodes
+    # this - not overridable without a rebuild.
+    backendPathPrefix: /studio
+    serviceNamePrefix: openworkflow-studio
+    port: 8080
+  definitions:
+    publicPathPrefix: /owf/definitions
+    # definition-management has no single base path of its own - it's two
+    # separate API roots (/v1/workflows, /v1/workflow-definitions), identical
+    # across all framework bindings. Stripping to "" leaves requests at their
+    # real /v1/... paths unchanged.
+    backendPathPrefix: ""
+    serviceNamePrefix: openworkflow-definition-management
+    port: 8080
+  execution:
+    publicPathPrefix: /owf/executions
+    # Quarkus and Micronaut serve execution-management at /api/v1/executions;
+    # the Spring binding serves the same API at /v1/executions instead (no
+    # /api prefix) - a real inconsistency in the Spring binding's own
+    # @RequestMapping, not something fixed here. This value is only correct
+    # while workflowPlatformFramework is quarkus or micronaut - switching to spring
+    # would silently 404 every route until that binding is fixed to match.
+    backendPathPrefix: /api/v1/executions
+    serviceNamePrefix: openworkflow-execution-management
+    port: 8080

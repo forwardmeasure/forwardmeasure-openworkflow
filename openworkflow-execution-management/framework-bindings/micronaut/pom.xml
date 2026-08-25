@@ -59,6 +59,14 @@
       <artifactId>micronaut-http</artifactId>
     </dependency>
     <dependency>
+      <groupId>io.micronaut.jaxrs</groupId>
+      <artifactId>micronaut-jaxrs-server</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micronaut.jaxrs</groupId>
+      <artifactId>micronaut-jaxrs-server-security</artifactId>
+    </dependency>
+    <dependency>
       <groupId>io.micronaut.sql</groupId>
       <artifactId>micronaut-hibernate-jpa</artifactId>
     </dependency>

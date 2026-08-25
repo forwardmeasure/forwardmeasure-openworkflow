@@ -10,6 +10,8 @@
  */
 package com.forwardmeasure.openworkflow.execution.management;
 
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
+import com.forwardmeasure.jpa.tenancy.TenantScope;
 import com.forwardmeasure.openworkflow.engine.api.CommandAcknowledgement;
 import com.forwardmeasure.openworkflow.engine.api.EngineCommandException;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionCommand;
@@ -37,6 +39,8 @@ public final class ExecutionManagementService {
   private final ExecutionEngineSelector selector;
   private final Clock clock;
   private final Supplier<UUID> executionIds;
+  private final TenantScope tenants;
+  private final ExecutionTransactionExecutor transactions;
 
   public ExecutionManagementService(
       PublishedWorkflowResolver publications,
@@ -45,7 +49,9 @@ public final class ExecutionManagementService {
       ExecutionEngineProviders providers,
       ExecutionEngineSelector selector,
       Clock clock,
-      Supplier<UUID> executionIds) {
+      Supplier<UUID> executionIds,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions) {
     this(
         ignored -> Objects.requireNonNull(publications, "publications"),
         authorizer,
@@ -53,7 +59,9 @@ public final class ExecutionManagementService {
         providers,
         selector,
         clock,
-        executionIds);
+        executionIds,
+        tenants,
+        transactions);
   }
 
   public ExecutionManagementService(
@@ -63,7 +71,9 @@ public final class ExecutionManagementService {
       ExecutionEngineProviders providers,
       ExecutionEngineSelector selector,
       Clock clock,
-      Supplier<UUID> executionIds) {
+      Supplier<UUID> executionIds,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions) {
     this.publications = Objects.requireNonNull(publications, "publications");
     this.authorizer = Objects.requireNonNull(authorizer, "authorizer");
     this.executions = Objects.requireNonNull(executions, "executions");
@@ -71,73 +81,87 @@ public final class ExecutionManagementService {
     this.selector = Objects.requireNonNull(selector, "selector");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.executionIds = Objects.requireNonNull(executionIds, "executionIds");
+    this.tenants = Objects.requireNonNull(tenants, "tenants");
+    this.transactions = Objects.requireNonNull(transactions, "transactions");
+  }
+
+  private <T> T inTenant(
+      com.forwardmeasure.openworkflow.engine.api.TenantId tenantId, Supplier<T> operation) {
+    var schema =
+        TenantSchema.forTenant(new com.forwardmeasure.jpa.tenancy.TenantId(tenantId.value()));
+    return tenants.call(schema, () -> transactions.execute(operation));
   }
 
   public CompletionStage<CanonicalExecution> start(ExecutionAdmissionRequest request) {
     Objects.requireNonNull(request, "request");
-    authorizer.authorize(
-        request.context(),
-        ExecutionAuthorizer.Action.START,
-        request.revisionId().toString(),
-        request.correlationId());
-    ExecutionRepository repository = executions.forTenant(request.context().tenantId());
-    var duplicate =
-        repository.findByIdempotencyKey(request.context().tenantId(), request.idempotencyKey());
-    if (duplicate.isPresent()) {
-      return java.util.concurrent.CompletableFuture.completedFuture(duplicate.orElseThrow());
-    }
-    PublishedWorkflow publication =
-        publications
-            .resolverForTenant(request.context().tenantId())
-            .resolveAuthorizedPublished(
-                request.context(), request.revisionId(), request.correlationId());
-    ExecutionEngineProvider provider =
-        providers.select(request.context(), publication.revision(), selector);
-    Instant now = clock.instant();
-    var executionId = new ExecutionId(request.context().tenantId(), executionIds.get());
-    var candidate =
-        new CanonicalExecution(
-            executionId,
-            publication.revision(),
-            provider.engineId(),
-            ExecutionLifecycleState.NEW,
-            0,
-            request.idempotencyKey(),
-            request.correlationId(),
-            request.context().actorId(),
-            request.input(),
-            now,
-            now);
-    ExecutionRepository.Admission admission = repository.admit(candidate);
-    if (!admission.created()) {
-      return java.util.concurrent.CompletableFuture.completedFuture(admission.execution());
-    }
-    repository.recordCommand(
-        new CommandReceipt(
-            request.commandId(),
-            executionId,
-            "START",
-            0,
-            true,
-            null,
-            request.context().actorId(),
-            request.correlationId(),
-            now));
-    var envelope =
-        new ExecutionCommandEnvelope(
-            request.commandId(),
-            request.correlationId(),
-            request.context(),
-            provider.engineId(),
-            0,
-            now,
-            new ExecutionCommand.Start(
-                executionId,
-                publication.revision(),
-                publication.plan(),
-                publication.sourceDocument(),
-                request.input()));
-    return dispatch(repository, provider, envelope, admission.execution(), 0);
+    return inTenant(
+        request.context().tenantId(),
+        () -> {
+          authorizer.authorize(
+              request.context(),
+              ExecutionAuthorizer.Action.START,
+              request.revisionId().toString(),
+              request.correlationId());
+          ExecutionRepository repository = executions.forTenant(request.context().tenantId());
+          var duplicate =
+              repository.findByIdempotencyKey(
+                  request.context().tenantId(), request.idempotencyKey());
+          if (duplicate.isPresent()) {
+            return java.util.concurrent.CompletableFuture.completedFuture(duplicate.orElseThrow());
+          }
+          PublishedWorkflow publication =
+              publications
+                  .resolverForTenant(request.context().tenantId())
+                  .resolveAuthorizedPublished(
+                      request.context(), request.revisionId(), request.correlationId());
+          ExecutionEngineProvider provider =
+              providers.select(request.context(), publication.revision(), selector);
+          Instant now = clock.instant();
+          var executionId = new ExecutionId(request.context().tenantId(), executionIds.get());
+          var candidate =
+              new CanonicalExecution(
+                  executionId,
+                  publication.revision(),
+                  provider.engineId(),
+                  ExecutionLifecycleState.NEW,
+                  0,
+                  request.idempotencyKey(),
+                  request.correlationId(),
+                  request.context().actorId(),
+                  request.input(),
+                  now,
+                  now);
+          ExecutionRepository.Admission admission = repository.admit(candidate);
+          if (!admission.created()) {
+            return java.util.concurrent.CompletableFuture.completedFuture(admission.execution());
+          }
+          repository.recordCommand(
+              new CommandReceipt(
+                  request.commandId(),
+                  executionId,
+                  "START",
+                  0,
+                  true,
+                  null,
+                  request.context().actorId(),
+                  request.correlationId(),
+                  now));
+          var envelope =
+              new ExecutionCommandEnvelope(
+                  request.commandId(),
+                  request.correlationId(),
+                  request.context(),
+                  provider.engineId(),
+                  0,
+                  now,
+                  new ExecutionCommand.Start(
+                      executionId,
+                      publication.revision(),
+                      publication.plan(),
+                      publication.sourceDocument(),
+                      request.input()));
+          return dispatch(repository, provider, envelope, admission.execution(), 0);
+        });
   }
 
   public CompletionStage<CanonicalExecution> pause(
@@ -190,69 +214,89 @@ public final class ExecutionManagementService {
       String correlationId,
       ExecutionCommand command) {
     Objects.requireNonNull(context, "context");
-    if (!context.tenantId().equals(command.executionId().tenantId())) {
-      throw new ExecutionManagementException(
-          ExecutionManagementException.Kind.NOT_FOUND, "execution does not exist");
-    }
-    authorizer.authorize(
-        context, action(command), command.executionId().value().toString(), correlationId);
-    ExecutionRepository repository = executions.forTenant(context.tenantId());
-    CanonicalExecution execution =
-        repository
-            .find(context.tenantId(), command.executionId())
-            .orElseThrow(
-                () ->
-                    new ExecutionManagementException(
-                        ExecutionManagementException.Kind.NOT_FOUND, "execution does not exist"));
-    var receipt =
-        new CommandReceipt(
-            commandId,
-            execution.executionId(),
-            command.getClass().getSimpleName().toUpperCase(java.util.Locale.ROOT),
-            expectedVersion,
-            execution.version() == expectedVersion,
-            execution.version() == expectedVersion ? null : "stale execution version",
-            context.actorId(),
-            correlationId,
-            clock.instant());
-    CommandReceipt recorded = repository.recordCommand(receipt);
-    if (!recorded.accepted()) {
-      throw new ExecutionManagementException(
-          ExecutionManagementException.Kind.STALE_VERSION, "stale execution version");
-    }
-    var envelope =
-        new ExecutionCommandEnvelope(
-            commandId,
-            correlationId,
-            context,
-            execution.engineId(),
-            expectedVersion,
-            clock.instant(),
-            command);
-    return dispatch(
-        repository, providers.require(execution.engineId()), envelope, execution, expectedVersion);
+    return inTenant(
+        context.tenantId(),
+        () -> {
+          if (!context.tenantId().equals(command.executionId().tenantId())) {
+            throw new ExecutionManagementException(
+                ExecutionManagementException.Kind.NOT_FOUND, "execution does not exist");
+          }
+          authorizer.authorize(
+              context, action(command), command.executionId().value().toString(), correlationId);
+          ExecutionRepository repository = executions.forTenant(context.tenantId());
+          CanonicalExecution execution =
+              repository
+                  .find(context.tenantId(), command.executionId())
+                  .orElseThrow(
+                      () ->
+                          new ExecutionManagementException(
+                              ExecutionManagementException.Kind.NOT_FOUND,
+                              "execution does not exist"));
+          var receipt =
+              new CommandReceipt(
+                  commandId,
+                  execution.executionId(),
+                  command.getClass().getSimpleName().toUpperCase(java.util.Locale.ROOT),
+                  expectedVersion,
+                  execution.version() == expectedVersion,
+                  execution.version() == expectedVersion ? null : "stale execution version",
+                  context.actorId(),
+                  correlationId,
+                  clock.instant());
+          CommandReceipt recorded = repository.recordCommand(receipt);
+          if (!recorded.accepted()) {
+            throw new ExecutionManagementException(
+                ExecutionManagementException.Kind.STALE_VERSION, "stale execution version");
+          }
+          var envelope =
+              new ExecutionCommandEnvelope(
+                  commandId,
+                  correlationId,
+                  context,
+                  execution.engineId(),
+                  expectedVersion,
+                  clock.instant(),
+                  command);
+          return dispatch(
+              repository,
+              providers.require(execution.engineId()),
+              envelope,
+              execution,
+              expectedVersion);
+        });
   }
 
+  /**
+   * Blocks for the engine's acknowledgement and writes it synchronously on the calling thread,
+   * rather than in an async {@code thenApply} callback. {@code provider.submit(...)} is a real
+   * network call (see {@code HttpExecutionEngineProvider}); its completion callback would otherwise
+   * run on the HTTP client's own executor thread, which has neither the transaction nor the {@link
+   * com.forwardmeasure.jpa.tenancy.TenantScope} that {@code repository.acknowledge} needs - both
+   * are bound to the thread that's inside this method's caller's {@code inTenant} scope, not to
+   * whichever thread happens to complete the HTTP response. The only caller ({@code
+   * ExecutionResource}) already blocks on {@code .join()} for the whole chain, so this changes
+   * nothing observable - it just does the same blocking one level higher, where the thread is still
+   * the right one.
+   */
   private CompletionStage<CanonicalExecution> dispatch(
       ExecutionRepository repository,
       ExecutionEngineProvider provider,
       ExecutionCommandEnvelope envelope,
       CanonicalExecution execution,
       long expectedVersion) {
-    return provider
-        .submit(envelope)
-        .thenApply(
-            acknowledgement -> acknowledge(repository, execution, expectedVersion, acknowledgement))
-        .exceptionally(
-            failure -> {
-              Throwable cause =
-                  failure instanceof CompletionException ? failure.getCause() : failure;
-              if (cause instanceof RuntimeException runtime) {
-                throw runtime;
-              }
-              throw new EngineCommandException(
-                  EngineCommandException.FailureKind.UNAVAILABLE, cause.getMessage());
-            });
+    CommandAcknowledgement acknowledgement;
+    try {
+      acknowledgement = provider.submit(envelope).toCompletableFuture().join();
+    } catch (CompletionException failure) {
+      Throwable cause = failure.getCause();
+      if (cause instanceof RuntimeException runtime) {
+        throw runtime;
+      }
+      throw new EngineCommandException(
+          EngineCommandException.FailureKind.UNAVAILABLE, cause.getMessage());
+    }
+    return java.util.concurrent.CompletableFuture.completedFuture(
+        acknowledge(repository, execution, expectedVersion, acknowledgement));
   }
 
   private static ExecutionAuthorizer.Action action(ExecutionCommand command) {

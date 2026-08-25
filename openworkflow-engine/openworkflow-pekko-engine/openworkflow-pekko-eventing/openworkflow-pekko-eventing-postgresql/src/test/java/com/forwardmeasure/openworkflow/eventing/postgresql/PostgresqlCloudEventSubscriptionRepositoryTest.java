@@ -34,7 +34,8 @@ class PostgresqlCloudEventSubscriptionRepositoryTest {
   @Test
   void storesMonotonicTenantIsolatedSubscriptionsInMigratedSchemas(
       PostgreSqlTestContainer database) {
-    var migrator = new OpenWorkflowTenantMigrator(database.dataSource());
+    var migrator = new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+    migrator.ensureRuntimeRole(database.password());
     migrator.provisionAndMigrate(jpaTenant(TENANT_A));
     migrator.provisionAndMigrate(jpaTenant(TENANT_B));
 

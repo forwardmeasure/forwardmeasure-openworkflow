@@ -15,7 +15,19 @@
 # limitations under the License.
 #
 
-# All OpenWorkflow charts are currently repository-local. Their Chart.yaml files are
-# authoritative, so this inventory remains intentionally empty until a repository
-# chart is introduced.
-chartVersions: {}
+# OpenWorkflow's own charts are repository-local; their Chart.yaml files are
+# authoritative and not listed here. istio/cert-manager/external-secrets/
+# keycloak used to be pinned here for a core-infrastructure release group
+# this repo installed standalone - that group is gone (see
+# helmfiles/core-infrastructure.yaml.gotmpl). forwardmeasure-platform (or an
+# equivalent already-provisioned cluster) owns those versions now.
+#
+# k8ssandraOperator/k8ssandraCluster are different: Cassandra is
+# OpenWorkflow's own persistence store (production-multi-engine profile only),
+# not shared platform infrastructure, so OpenWorkflow pins these itself -
+# see helmfiles/cassandra.yaml.gotmpl. Versions mirror data-fabric's own
+# working k8ssandra deployment (data-fabric-devops/platform-helmlines-setup)
+# exactly, not independently chosen.
+chartVersions:
+  k8ssandraOperator: "v1.31.0"
+  k8ssandraCluster: "0.1.7"

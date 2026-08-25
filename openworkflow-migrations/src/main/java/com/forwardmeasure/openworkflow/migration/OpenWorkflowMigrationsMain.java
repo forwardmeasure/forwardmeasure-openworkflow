@@ -29,17 +29,56 @@ public final class OpenWorkflowMigrationsMain {
   private OpenWorkflowMigrationsMain() {}
 
   public static void main(String[] arguments) {
+    // Administrator credential - this process's own connection. Creates/rotates the runtime
+    // role below and applies schema migrations; never the role application services connect as.
     String url = required("OPENWORKFLOW_DATABASE_URL");
     String username = required("OPENWORKFLOW_DATABASE_USERNAME");
     String password = required("OPENWORKFLOW_DATABASE_PASSWORD");
+    // Runtime credential - never connected as here, only used to create/rotate that role and
+    // grant it scoped, per-tenant-schema privileges. See
+    // openworkflow-k8s-setup/docs/operations.md's "Database role provisioning" section.
+    String runtimeUsername = required("OPENWORKFLOW_RUNTIME_DATABASE_USERNAME");
+    String runtimePassword = required("OPENWORKFLOW_RUNTIME_DATABASE_PASSWORD");
     OpenWorkflowTenantMigrator migrator =
-        new OpenWorkflowTenantMigrator(new DriverManagerDataSource(url, username, password));
+        new OpenWorkflowTenantMigrator(
+            new DriverManagerDataSource(url, username, password), runtimeUsername);
+    migrator.ensureRuntimeRole(runtimePassword);
     Arrays.stream(required("OPENWORKFLOW_TENANT_IDS").split(","))
         .map(String::trim)
         .filter(value -> !value.isEmpty())
         .map(TenantId::parse)
         .forEach(migrator::provisionAndMigrate);
+    provisionAdditionalRuntimeDatabasesIfConfigured(migrator);
     migrateCassandraIfConfigured();
+  }
+
+  // This admin credential's workload identity is authorized (administrator_database_keys in
+  // Terraform) to provision every declared runtime database's role, not just openworkflow's own
+  // - see openworkflow-k8s-setup/docs/operations.md's "Database role provisioning" section. Other
+  // applications on this same Cloud SQL instance (Keycloak, Superset) fully own and migrate their
+  // own database themselves once their role exists - unlike openworkflow's per-tenant-schema
+  // grants, they just need CREATE ROLE + ALTER DATABASE ... OWNER TO, once, here. Username always
+  // equals the database name, matching Terraform's own runtime_username = database convention for
+  // every entry in var.databases (confirmed directly against terraform.tfvars).
+  private static void provisionAdditionalRuntimeDatabasesIfConfigured(
+      OpenWorkflowTenantMigrator migrator) {
+    String databases = optional("OPENWORKFLOW_ADDITIONAL_RUNTIME_DATABASES");
+    if (databases == null) {
+      return;
+    }
+    Arrays.stream(databases.split(","))
+        .map(String::trim)
+        .filter(value -> !value.isEmpty())
+        .forEach(
+            database -> {
+              String passwordEnvVar =
+                  "OPENWORKFLOW_RUNTIME_DATABASE_"
+                      + database.toUpperCase(java.util.Locale.ROOT).replace('-', '_')
+                      + "_PASSWORD";
+              String databasePassword = required(passwordEnvVar);
+              migrator.ensureRuntimeRole(database, databasePassword);
+              migrator.ensureDatabaseOwnership(database, database);
+            });
   }
 
   private static void migrateCassandraIfConfigured() {

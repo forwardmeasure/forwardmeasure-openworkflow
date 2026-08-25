@@ -31,3 +31,14 @@ releases:
     labels:
       stage: foundation
       checkpoint: k1
+
+  # openworkflow-identity (the shared ServiceAccounts release) moved to
+  # helmfiles/migrations.yaml.gotmpl - it's labeled stage: migrations, not
+  # this file's own stage: foundation (see its own comment there for why),
+  # and a helmfile 1.3.2 `needs:` reference across two different *.gotmpl
+  # files doesn't reliably resolve the target's `installed` default
+  # (confirmed directly: `helmfile build` renders it as an unresolved nil,
+  # not `true`, only when the referrer and target live in different files -
+  # every other needs: in this repo and forwardmeasure-platform's references
+  # a release defined in the same file). Keeping the release and the thing
+  # that needs: it in the same file avoids relying on that.

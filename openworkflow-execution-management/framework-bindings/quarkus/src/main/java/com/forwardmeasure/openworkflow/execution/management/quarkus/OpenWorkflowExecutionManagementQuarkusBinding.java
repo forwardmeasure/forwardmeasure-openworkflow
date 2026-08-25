@@ -11,16 +11,20 @@
 package com.forwardmeasure.openworkflow.execution.management.quarkus;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.forwardmeasure.jpa.tenancy.TenantScope;
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.engine.api.EngineId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProviders;
 import com.forwardmeasure.openworkflow.engine.http.HttpExecutionEngineProvider;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
+import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionResource;
 import com.forwardmeasure.openworkflow.execution.management.AuthzenExecutionAuthorizer;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
+import com.forwardmeasure.openworkflow.execution.management.ExecutionTransactionExecutor;
 import com.forwardmeasure.openworkflow.execution.persistence.JpaExecutionPersistenceFactory;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
+import com.forwardmeasure.openworkflow.execution.query.TenantScopedExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.execution.query.persistence.JpaTenantRoutingExecutionStore;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.inject.Produces;
@@ -31,15 +35,30 @@ import java.time.Clock;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Quarkus composition for the query-side store and the actor-context bridge used by {@link
- * QuarkusExecutionResource}. The engine/command-orchestration wiring lives in {@code
- * openworkflow-engine-quarkus-binding} instead - not capability-specific.
+ * Quarkus composition for the persistence, query-side store, actor-context bridge, and REST
+ * resource itself. The engine/command-orchestration runtime for each execution engine is wired up
+ * in that engine's own deployable module instead (e.g. {@code PekkoEngineQuarkusBinding}) - not
+ * capability-specific.
  */
 @ApplicationScoped
 public class OpenWorkflowExecutionManagementQuarkusBinding {
+
+  /**
+   * Satisfies Arc's own, separate discovery of {@link ExecutionResource} as a JAX-RS resource class
+   * bean (RESTEasy Reactive auto-beanifies unannotated {@code @Path}-carrying classes, independent
+   * of the {@code executionResource} producer method below) - without this, Arc cannot resolve the
+   * {@code commandIds} constructor parameter and validation fails. Reused below for {@code
+   * executionManagement}'s {@code executionIds} rather than duplicating the {@code
+   * UUID::randomUUID} literal.
+   */
+  @Produces
+  Supplier<UUID> randomUuids() {
+    return UUID::randomUUID;
+  }
 
   @Produces
   @ApplicationScoped
@@ -55,6 +74,9 @@ public class OpenWorkflowExecutionManagementQuarkusBinding {
       AuthorizationService authorization,
       ActiveOrganizationProvider organizations,
       ObjectMapper mapper,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions,
+      Supplier<UUID> executionIds,
       @ConfigProperty(name = "openworkflow.engines.kafka-streams.url") URI kafkaUrl,
       @ConfigProperty(name = "openworkflow.engines.pekko.url") URI pekkoUrl,
       @ConfigProperty(name = "openworkflow.engines.default") String defaultEngine,
@@ -71,14 +93,20 @@ public class OpenWorkflowExecutionManagementQuarkusBinding {
         new ExecutionEngineProviders(List.of(kafka, pekko)),
         ignored -> selected,
         Clock.systemUTC(),
-        UUID::randomUUID);
+        executionIds,
+        tenants,
+        transactions);
   }
 
   @Produces
   @ApplicationScoped
   ExecutionQueryRepository executionQueries(
-      EntityManager entityManager, ObjectMapper objectMapper) {
-    return new JpaTenantRoutingExecutionStore(entityManager, objectMapper);
+      EntityManager entityManager,
+      ObjectMapper objectMapper,
+      TenantScope tenants,
+      ExecutionTransactionExecutor transactions) {
+    return new TenantScopedExecutionQueryRepository(
+        new JpaTenantRoutingExecutionStore(entityManager, objectMapper), tenants, transactions);
   }
 
   @Produces
@@ -92,5 +120,16 @@ public class OpenWorkflowExecutionManagementQuarkusBinding {
           new com.forwardmeasure.openworkflow.engine.api.ActorId(organization.actorId()),
           organization.organizationRoles());
     };
+  }
+
+  @Produces
+  @ApplicationScoped
+  ExecutionResource executionResource(
+      ExecutionManagementService management,
+      ExecutionQueryRepository queries,
+      ExecutionContextProvider contexts,
+      ObjectMapper objectMapper,
+      Supplier<UUID> commandIds) {
+    return new ExecutionResource(management, queries, contexts, objectMapper, commandIds);
   }
 }

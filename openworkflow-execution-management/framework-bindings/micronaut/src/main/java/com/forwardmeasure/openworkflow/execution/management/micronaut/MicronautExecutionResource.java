@@ -11,72 +11,35 @@
 package com.forwardmeasure.openworkflow.execution.management.micronaut;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.forwardmeasure.openworkflow.execution.api.model.ExecutionControl;
-import com.forwardmeasure.openworkflow.execution.api.model.ExecutionStart;
-import com.forwardmeasure.openworkflow.execution.api.model.ExecutionState;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionContextProvider;
 import com.forwardmeasure.openworkflow.execution.jaxrs.ExecutionResource;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionManagementService;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
+import io.micronaut.security.annotation.Secured;
+import io.micronaut.security.rules.SecurityRule;
 import jakarta.inject.Singleton;
-import jakarta.transaction.Transactional;
-import jakarta.ws.rs.core.Response;
-import java.util.Date;
-import java.util.List;
 import java.util.UUID;
 
-/** Micronaut transaction boundary around the portable execution resource. */
+/**
+ * Micronaut compile-time discovery edge for the shared portable execution resource. Path is
+ * inherited from {@code ExecutionsApi} via {@code micronaut-jaxrs-server} - must not be
+ * hand-declared here, matching {@link com.forwardmeasure.openworkflow.definition.management
+ * .micronaut.MicronautWorkflowDefinitionResource}'s pattern. Extends {@link ExecutionResource}
+ * rather than composing it - path is inherited unchanged; this class adds nothing but the CDI scope
+ * Micronaut needs to discover it as a bean at all. Neither tenant-schema binding nor the
+ * transaction boundary is this class's concern - both happen in {@code management} and (via {@code
+ * TenantScopedExecutionQueryRepository}) in {@code queries} themselves; see this module's binding
+ * factory for that wiring.
+ */
 @Singleton
-public class MicronautExecutionResource {
-  private final ExecutionResource delegate;
+@Secured(SecurityRule.IS_AUTHENTICATED)
+public class MicronautExecutionResource extends ExecutionResource {
 
-  MicronautExecutionResource(
+  public MicronautExecutionResource(
       ExecutionManagementService management,
       ExecutionQueryRepository queries,
       ExecutionContextProvider contexts,
       ObjectMapper objectMapper) {
-    delegate = new ExecutionResource(management, queries, contexts, objectMapper, UUID::randomUUID);
-  }
-
-  @Transactional
-  public Response start(String key, String correlation, ExecutionStart request) {
-    return delegate.startExecution(key, correlation, request);
-  }
-
-  @Transactional
-  public Response pause(UUID id, String ifMatch, String correlation, ExecutionControl request) {
-    return delegate.pauseExecution(ifMatch, correlation, id, request);
-  }
-
-  @Transactional
-  public Response resume(UUID id, String ifMatch, String correlation, ExecutionControl request) {
-    return delegate.resumeExecution(ifMatch, correlation, id, request);
-  }
-
-  @Transactional
-  public Response cancel(UUID id, String ifMatch, String correlation, ExecutionControl request) {
-    return delegate.cancelExecution(ifMatch, correlation, id, request);
-  }
-
-  @Transactional
-  public Response get(UUID id) {
-    return delegate.getExecution(id);
-  }
-
-  @Transactional
-  public Response history(UUID id, Long after, Integer limit) {
-    return delegate.getExecutionHistory(id, after, limit);
-  }
-
-  @Transactional
-  public Response list(
-      List<ExecutionState> states,
-      String engine,
-      String correlation,
-      Date from,
-      Date until,
-      String cursor,
-      Integer limit) {
-    return delegate.listExecutions(states, engine, correlation, from, until, cursor, limit);
+    super(management, queries, contexts, objectMapper, UUID::randomUUID);
   }
 }

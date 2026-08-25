@@ -4,13 +4,33 @@ framework: quarkus
 engine: ""
 replicas: 1
 image: {repository: "", tag: 1.0.0-SNAPSHOT, digest: "", pullPolicy: IfNotPresent}
+# docker.io/forwardmeasure (every image this chart deploys - definition
+# management, execution management, engines, operation adapter, studio) is
+# a private org, not a public one - confirmed directly (an anonymous
+# registry token still gets 401, not 404, pulling from it). platform-secrets
+# already syncs this Secret into every namespace this chart deploys into.
+imagePullSecrets: [{name: docker-io-credentials}]
 service: {enabled: true, port: 8080, clusterIP: "", extraPorts: []}
 containerPorts: []
 env: []
 secretEnv: []
 credentialsSecretName: openworkflow-foundation
-serviceAccount: {create: true, name: ""}
+serviceAccount: {create: true, name: "", automount: false}
 podSecurityContext: {runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, fsGroup: 10001, seccompProfile: {type: RuntimeDefault}}
 containerSecurityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
 resources: {requests: {cpu: 100m, memory: 384Mi}, limits: {cpu: "2", memory: 1Gi}}
 terminationGracePeriodSeconds: 60
+# Cloud SQL Auth Proxy sidecar - same pattern as the shared
+# quarkus-service-helm-chart's cloudSqlProxySidecar helper (gcr.io/cloud-
+# sql-connectors/cloud-sql-proxy, modern v2 CLI). Disabled by default since
+# most environments (kind, ci, local) run their own in-cluster postgresql
+# via openworkflow-foundation instead.
+cloudSqlProxy:
+  enabled: false
+  # Version matches data-fabric's own proven pin (platform-helmlines-setup/
+  # environments/gcp.yaml) rather than an independently chosen tag.
+  image: {repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy, tag: "2.21.1", digest: ""}
+  port: 5432
+  privateIp: true
+  instanceConnectionName: ""
+  resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}

@@ -20,6 +20,11 @@ image:
   digest: ""
   pullPolicy: IfNotPresent
 
+# docker.io/forwardmeasure is a private org, not a public one - confirmed
+# directly (an anonymous registry token still gets 401, not 404, pulling
+# from it). platform-secrets already syncs this Secret into this namespace.
+imagePullSecrets: [{name: docker-io-credentials}]
+
 tenantIds: []
 
 database:
@@ -27,7 +32,30 @@ database:
   username: openworkflow
   passwordSecret:
     name: openworkflow-foundation
-    key: KC_DB_PASSWORD
+    # Was KC_DB_PASSWORD - a copy-paste artifact from Keycloak's own env var
+    # convention, wrongly reused here. Every other consumer of this same
+    # secret (execution-services, definition-services, execution-engines,
+    # operation-adapters) expects OPENWORKFLOW_DATABASE_PASSWORD.
+    key: OPENWORKFLOW_DATABASE_PASSWORD
+
+# Bare chart defaults only - real environments override both database
+# (administrator) and runtimeDatabase (runtime) via
+# releases/openworkflow-migrations/base.yaml.gotmpl, which always layers on
+# top of this file. Kept distinct even here (rather than omitted) so `helm
+# lint` and any standalone render of this chart don't nil-pointer on
+# runtimeDatabase.username.
+runtimeDatabase:
+  username: openworkflow
+  passwordSecret:
+    name: openworkflow-foundation
+    key: OPENWORKFLOW_DATABASE_PASSWORD
+
+# Other applications' runtime database roles this Job's admin identity is
+# also authorized to provision (real environments override via
+# environments/gcp-openworkflow-prod.yaml.gotmpl) - see
+# openworkflow-k8s-setup/docs/operations.md's "Database role provisioning"
+# section for why this Job, specifically, is the one that does it.
+additionalRuntimeDatabases: []
 
 cassandra:
   enabled: true
@@ -60,3 +88,22 @@ containerSecurityContext:
 resources:
   requests: {cpu: 50m, memory: 128Mi}
   limits: {cpu: "1", memory: 512Mi}
+
+# Cloud SQL Auth Proxy - same pattern/version as openworkflow-service's
+# cloudSqlProxy (see that chart's values.yaml for why). Rendered as a
+# native K8s sidecar (initContainers entry with restartPolicy: Always, GA
+# since 1.29) rather than a regular container - a Job only completes once
+# every regular container exits, and the proxy never exits on its own, so a
+# plain sidecar container would hang this Job (and helmfile's
+# waitForJobs) forever.
+serviceAccount:
+  name: ""
+  automount: false
+
+cloudSqlProxy:
+  enabled: false
+  image: {repository: gcr.io/cloud-sql-connectors/cloud-sql-proxy, tag: "2.21.1", digest: ""}
+  port: 5432
+  privateIp: true
+  instanceConnectionName: ""
+  resources: {requests: {cpu: 100m, memory: 128Mi}, limits: {cpu: 500m, memory: 256Mi}}

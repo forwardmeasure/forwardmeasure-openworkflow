@@ -1,0 +1,64 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+helmDefaults:
+  wait: true
+  timeout: 900
+  atomic: true
+
+# Cassandra is OpenWorkflow's own persistence store for the pekko-cassandra
+# engine (production-multi-engine profile), not shared tenant infrastructure -
+# unlike istio/cert-manager/external-secrets/keycloak (see
+# core-infrastructure.yaml.gotmpl's own comment), forwardmeasure-platform
+# never provisions this for any consumer, so there's no duplication risk in
+# OpenWorkflow provisioning it itself. Mirrors data-fabric's own working
+# k8ssandra deployment for its itineris app
+# (data-fabric-devops/platform-helmlines-setup) - same charts, same
+# versions, only cluster name/sizing differ.
+{{- if dig "engines" "pekkoCassandra" false .Values }}
+releases:
+  - name: k8ssandra-operator
+    namespace: {{ .Values.k8ssandraOperatorNamespace }}
+    chart: k8ssandra/k8ssandra-operator
+    version: {{ .Values.chartVersions.k8ssandraOperator | quote }}
+    missingFileHandler: Error
+    # cert-manager itself is not this release's concern - it's shared
+    # platform infrastructure forwardmeasure-platform already provides
+    # (unlike Cassandra itself). No `needs` reference to it: it isn't a
+    # release in this repo's own helmfile state (cross-repo `needs` isn't
+    # something helmfile resolves at all), and ordering is already
+    # guaranteed by install-platform.sh always running before this repo's
+    # own install.sh - same pattern already relied on for istio/keycloak.
+    labels: {stage: cassandra, component: k8ssandra-operator}
+    values:
+      - ../releases/k8ssandra-operator/base.yaml.gotmpl
+
+  - name: k8ssandra-cluster
+    # Not a separate k8ssandra-cluster namespace - see environments/base.yaml's
+    # comment on why the CR (and its auto-generated superuser Secret) needs
+    # to live in openworkflowNamespace itself.
+    namespace: {{ .Values.openworkflowNamespace }}
+    chart: forwardmeasure/k8ssandra-cluster
+    version: {{ .Values.chartVersions.k8ssandraCluster | quote }}
+    missingFileHandler: Error
+    needs:
+      - {{ .Values.k8ssandraOperatorNamespace }}/k8ssandra-operator
+    labels: {stage: cassandra, component: k8ssandra-cluster}
+    values:
+      - ../releases/k8ssandra-cluster/base.yaml.gotmpl
+{{- else }}
+releases: []
+{{- end }}

@@ -54,7 +54,9 @@ class JpaExecutionProjectionStoreTest {
   @Test
   void projectsInOrderIdempotentlyAndRejectsGapsAndEngineMismatch(PostgreSqlTestContainer database)
       throws Exception {
-    new OpenWorkflowTenantMigrator(database.dataSource()).provisionAndMigrate(TENANT);
+    var migrator = new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+    migrator.ensureRuntimeRole(database.password());
+    migrator.provisionAndMigrate(TENANT);
     seedExecution(database);
     try (SessionFactory factory = sessionFactory(database);
         EntityManager entityManager = factory.createEntityManager()) {

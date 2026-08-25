@@ -24,10 +24,37 @@ tenantIds:
   - {{ .Values.tenantBId | quote }}
 database:
   url: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" .Values | quote }}
+  # Administrator credential - this Job's PRIMARY connection. Creates/
+  # rotates the runtime role, applies schema migrations, and grants runtime
+  # privileges. On a real cloud cluster this is a distinct user
+  # (openworkflow_migration by convention, matching openworkflow-k8s-setup's
+  # Terraform default - see environments/gcp-openworkflow-prod.yaml.gotmpl's
+  # explicit override) - see openworkflow-k8s-setup/docs/operations.md's
+  # "Database role provisioning" section for why. Defaults to the SAME value
+  # as the runtime username below when not overridden, matching
+  # local/ci/kind's disposable dev Postgres fixture, which only ever
+  # provisions one all-powerful user - there, admin and runtime end up being
+  # the same connection, which degrades safely (a role can always ALTER its
+  # own password and GRANT to itself).
+  username: {{ dig "database" "administratorUsername" (dig "database" "username" "openworkflow" .Values) .Values | quote }}
+  passwordSecret:
+    name: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
+    # Was KC_DB_PASSWORD - see openworkflow-migrations/values.yaml's own
+    # comment on this same fix; this file's literal was overriding that
+    # chart default, so both needed the same correction.
+    key: OPENWORKFLOW_ADMIN_DATABASE_PASSWORD
+# Runtime credential (role: openworkflow) - the migrations Job never
+# connects as this role; it only uses these values to create/rotate the
+# role and grant it scoped, tenant-schema-limited privileges.
+runtimeDatabase:
   username: {{ dig "database" "username" "openworkflow" .Values | quote }}
   passwordSecret:
     name: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
-    key: KC_DB_PASSWORD
+    key: OPENWORKFLOW_DATABASE_PASSWORD
+# Passed through from the top-level environment value (set on
+# gcp-openworkflow-prod specifically) - see values.yaml's own comment on
+# why this Job provisions roles for more than just its own database.
+additionalRuntimeDatabases: {{ dig "additionalRuntimeDatabases" (list) .Values | toYaml | nindent 2 }}
 cassandra:
   enabled: {{ dig "engines" "pekkoCassandra" true .Values }}
   contactPoints: {{ dig "pekko" "cassandraEndpoint" "cassandra:9042" .Values | quote }}
@@ -39,3 +66,12 @@ cassandra:
     name: {{ dig "credentialsSecretName" "openworkflow-foundation" .Values | quote }}
     usernameKey: OPENWORKFLOW_CASSANDRA_USERNAME
     passwordKey: OPENWORKFLOW_CASSANDRA_PASSWORD
+cloudSqlProxy:
+  enabled: {{ dig "cloudSqlProxy" "enabled" false .Values }}
+  instanceConnectionName: {{ dig "cloudSqlProxy" "instanceConnectionName" "" .Values | quote }}
+  image:
+    repository: {{ .Values.imageVersions.cloudSqlProxy.repository | quote }}
+    tag: {{ .Values.imageVersions.cloudSqlProxy.tag | quote }}
+{{- if dig "cloudSqlProxy" "enabled" false .Values }}
+serviceAccount: {name: openworkflow-database-migration, automount: true}
+{{- end }}

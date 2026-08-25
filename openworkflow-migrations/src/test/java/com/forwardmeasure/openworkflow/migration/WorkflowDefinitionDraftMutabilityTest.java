@@ -41,7 +41,10 @@ class WorkflowDefinitionDraftMutabilityTest {
   void contentIsMutableInDraftAndLockedOnceSubmittedIdentityAndAuthorNeverChange(
       PostgreSqlTestContainer database) throws Exception {
     TenantId tenantId = new TenantId(UUID.fromString("33333333-3333-3333-3333-333333333333"));
-    new OpenWorkflowTenantMigrator(database.dataSource()).provisionAndMigrate(tenantId);
+    OpenWorkflowTenantMigrator migrator =
+        new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+    migrator.ensureRuntimeRole(database.password());
+    migrator.provisionAndMigrate(tenantId);
     String schema = TenantSchema.forTenant(tenantId).value();
 
     try (Connection connection = database.dataSource().getConnection()) {

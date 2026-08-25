@@ -38,7 +38,12 @@ if yq -o=json '.imageVersions' "${SCRIPT_DIR}/environments/image-versions.yaml" 
   exit 1
 fi
 
+# Not every releases/ subdirectory is a local chart - cert-manager,
+# external-secrets, istio-base, istio-istiod, and keycloak are values-only
+# directories referencing upstream/repository charts (jetstack/cert-manager
+# and similar), with no Chart.yaml of their own to lint.
 while IFS= read -r chart; do
+  [[ -f "${chart}/Chart.yaml" ]] || continue
   helm lint "${chart}"
 done < <(find "${SCRIPT_DIR}/releases" -mindepth 1 -maxdepth 1 -type d -print | sort)
 
@@ -54,7 +59,13 @@ for stage in foundation definitions execution studio acceptance; do
   }
 done
 
-if [[ "${ENVIRONMENT}" == production-* ]]; then
+# Explicit list, not a name-prefix match - a prefix match silently stops
+# firing under any rename that changes the matched prefix (confirmed: this
+# is exactly what would have happened to production-* here when
+# production-postgresql was renamed to gcp-openworkflow-prod, missing this
+# safety check entirely under the new name).
+production_environments=(gcp-openworkflow-prod production-multi-engine)
+if printf '%s\n' "${production_environments[@]}" | grep -qx "${ENVIRONMENT}"; then
   for forbidden_name in openworkflow-acceptance-fixtures openworkflow-k2-security redpanda postgresql cassandra; do
     if grep -Eq "^[[:space:]]*name:[[:space:]]+${forbidden_name}$" "${TEMPLATE_OUTPUT}"; then
       echo "Production render contains a development fixture: ${forbidden_name}" >&2

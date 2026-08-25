@@ -29,6 +29,10 @@
       <artifactId>openworkflow-authorization-api</artifactId>
     </dependency>
     <dependency>
+      <groupId>com.forwardmeasure.jpa</groupId>
+      <artifactId>forwardmeasure-jpa-tenancy</artifactId>
+    </dependency>
+    <dependency>
       <groupId>org.junit.jupiter</groupId>
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>

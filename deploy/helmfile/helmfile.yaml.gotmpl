@@ -21,6 +21,23 @@ helmDefaults:
   atomic: true
   createNamespace: true
 
+# Third-party and first-party chart sources for the core-infrastructure
+# release group (deploy/helmfile/helmfiles/core-infrastructure.yaml.gotmpl).
+# Coordinates match what data-fabric's platform-helmlines-setup already
+# resolves these charts from - no vendoring needed.
+repositories:
+  - name: forwardmeasure
+    url: https://forwardmeasure.github.io/helm-charts
+  - name: cert-manager
+    url: https://charts.jetstack.io
+  - name: external-secrets
+    url: https://charts.external-secrets.io
+  - name: istio
+    url: https://istio-release.storage.googleapis.com/charts
+  - name: k8ssandra
+    url: https://helm.k8ssandra.io/stable
+    skipTLSVerify: true
+
 environments:
   local:
     values:
@@ -33,7 +50,8 @@ environments:
       - environments/chart-versions.yaml
       - environments/image-versions.yaml
       - environments/base.yaml
-      - environments/development.yaml
+      - environments/gcp.yaml
+      - environments/development.yaml.gotmpl
   ci:
     values:
       - environments/chart-versions.yaml
@@ -46,71 +64,74 @@ environments:
       - environments/image-versions.yaml
       - environments/base.yaml
       - environments/kind.yaml
-  production-postgresql:
+  # Named gcp-openworkflow-prod (cloud-cluster), not just production - must
+  # match forwardmeasure-platform's own environment name exactly, since
+  # install-platform.sh/validate-platform.sh pass one environment name to
+  # both repos' installs. The postgresql-vs-cassandra persistence-profile
+  # choice for this cluster lives inside gcp-openworkflow-prod.yaml.gotmpl
+  # itself (deploymentProfile: production-postgresql), not in this name.
+  gcp-openworkflow-prod:
     values:
       - environments/chart-versions.yaml
       - environments/image-versions.yaml
       - environments/base.yaml
-      - environments/production-postgresql.yaml.gotmpl
-  production-cassandra:
+      - environments/gcp.yaml
+      - environments/gcp-openworkflow-prod.yaml.gotmpl
+  # No concrete second cluster exists yet for this profile, so it keeps its
+  # profile-only name for now rather than inventing a gcp-{cluster} name for
+  # infrastructure that doesn't exist - rename it the same way once one does.
+  # Still layers on environments/gcp.yaml since it already independently
+  # requires OPENWORKFLOW_GCP_PROJECT_ID.
+  production-multi-engine:
     values:
       - environments/chart-versions.yaml
       - environments/image-versions.yaml
       - environments/base.yaml
-      - environments/production-cassandra.yaml.gotmpl
+      - environments/gcp.yaml
+      - environments/production-multi-engine.yaml.gotmpl
+
+# Explicit per-environment file list, mirroring the environments: block
+# above exactly - replaces a Go-template expression that used to be
+# repeated verbatim across all 11 helmfiles: entries below
+# (hasPrefix "production-" .Environment.Name / eq .Environment.Name
+# "development"). That inference broke silently under any environment
+# rename that changed its name's prefix (e.g. production-postgresql ->
+# gcp-openworkflow-prod), since hasPrefix "production-" would then no
+# longer match and every entry would fall through to the wrong (non-
+# .gotmpl) file. Keep this in sync with environments: by hand - same
+# trade-off data-fabric's own reference implementation accepts.
+{{- $envLayers := dict
+  "local" (list "environments/chart-versions.yaml" "environments/image-versions.yaml" "environments/base.yaml" "environments/local.yaml")
+  "ci" (list "environments/chart-versions.yaml" "environments/image-versions.yaml" "environments/base.yaml" "environments/ci.yaml")
+  "kind" (list "environments/chart-versions.yaml" "environments/image-versions.yaml" "environments/base.yaml" "environments/kind.yaml")
+  "development" (list "environments/chart-versions.yaml" "environments/image-versions.yaml" "environments/base.yaml" "environments/gcp.yaml" "environments/development.yaml.gotmpl")
+  "gcp-openworkflow-prod" (list "environments/chart-versions.yaml" "environments/image-versions.yaml" "environments/base.yaml" "environments/gcp.yaml" "environments/gcp-openworkflow-prod.yaml.gotmpl")
+  "production-multi-engine" (list "environments/chart-versions.yaml" "environments/image-versions.yaml" "environments/base.yaml" "environments/gcp.yaml" "environments/production-multi-engine.yaml.gotmpl")
+}}
+{{- $envFiles := index $envLayers .Environment.Name | default (list) }}
 
 helmfiles:
+  - path: helmfiles/core-infrastructure.yaml.gotmpl
+    values: {{ toYaml $envFiles | nindent 6 }}
+  - path: helmfiles/cassandra.yaml.gotmpl
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/foundation.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/migrations.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/security.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/definition-services.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/execution-services.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/execution-engines.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/operation-adapters.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/studios.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
   - path: helmfiles/acceptance-fixtures.yaml.gotmpl
-    values:
-      - environments/chart-versions.yaml
-      - environments/image-versions.yaml
-      - environments/base.yaml
-      - environments/{{ .Environment.Name }}{{ if hasPrefix "production-" .Environment.Name }}.yaml.gotmpl{{ else }}.yaml{{ end }}
+    values: {{ toYaml $envFiles | nindent 6 }}
+  - path: helmfiles/routing.yaml.gotmpl
+    values: {{ toYaml $envFiles | nindent 6 }}

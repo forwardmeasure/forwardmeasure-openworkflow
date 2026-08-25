@@ -21,11 +21,47 @@ helmDefaults:
   atomic: true
 
 releases:
+  # Shared ServiceAccounts referenced by name (serviceAccount.create: false)
+  # from multiple openworkflow-service/openworkflow-migrations releases -
+  # owned here, independent of foundation.enabled, so no single app release
+  # tearing down its own ServiceAccount can take these out from under the
+  # others. Empty/no-op unless an environment sets identity.serviceAccounts.
+  #
+  # Lives in this file (stage: migrations), not helmfiles/foundation.yaml.gotmpl
+  # despite the name - openworkflow-database-migration (this release's only
+  # reason a cloud environment needs it) is what the migrations Job's Cloud
+  # SQL Auth Proxy sidecar authenticates as, so migrations can't run
+  # standalone without it. Grouping it under stage: foundation instead would
+  # force forwardmeasure-platform's install.sh (which runs migrations before
+  # apply_stage identity - see that script's own comment) to also apply
+  # openworkflow-foundation's Keycloak-dependent tenant-reconciliation hook
+  # (templates/jobs.yaml's wait-for-keycloak) - reintroducing the exact
+  # deadlock that ordering exists to avoid. Kept in the same file as
+  # openworkflow-migrations below (rather than its own stage: migrations
+  # release in foundation.yaml.gotmpl) because a helmfile 1.3.2 needs:
+  # reference across two different *.gotmpl files doesn't reliably resolve
+  # the target's installed default - confirmed directly.
+  - name: openworkflow-identity
+    namespace: {{ .Values.openworkflowNamespace }}
+    createNamespace: true
+    chart: ../releases/openworkflow-identity
+    {{- $identityServiceAccounts := dig "identity" "serviceAccounts" (list) .Values }}
+    values:
+      - serviceAccounts:
+        {{- if $identityServiceAccounts }}
+        {{- toYaml $identityServiceAccounts | nindent 10 }}
+        {{- else }} []
+        {{- end }}
+    labels:
+      stage: migrations
+      component: identity
+
   - name: openworkflow-migrations
     namespace: {{ .Values.openworkflowNamespace }}
     createNamespace: false
     chart: ../releases/openworkflow-migrations
     installed: {{ dig "migrations" "enabled" true .Values }}
+    needs: [{{ .Values.openworkflowNamespace }}/openworkflow-identity]
     values:
       - ../releases/openworkflow-migrations/base.yaml.gotmpl
     labels:

@@ -1,0 +1,70 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+helmDefaults:
+  wait: true
+  waitForJobs: true
+  timeout: 600
+  atomic: true
+
+{{- $cloud := .Values | get "cloudProvider" "" }}
+
+# OpenWorkflow's own public HTTPRoutes for platformTld (studio, definitions,
+# execution). Only relevant where a real public domain points at the cluster
+# - gated on ingressEnabled.
+#
+# On a real cloud cluster ($cloud set), these routes attach to
+# forwardmeasure-platform's own shared Gateway (its platform-routing
+# release already has a wildcard `tenant-https` listener, backed by a real
+# wildcard cert - `*.{{ .Values.platformTld }}` matches it exactly) instead
+# of creating a second, competing Gateway. Two independent public Gateways
+# in istio-system meant two separate LoadBalancer IPs and two separate
+# ClusterIssuers doing the identical GCP DNS-01 solve for one cluster,
+# confirmed via real values comparison this session.
+#
+# Standalone clusters (local/ci/kind/development, $cloud unset) still
+# default to gateway.enabled: true (their own self-contained Gateway),
+# addressed into istioSystemNamespace and annotated with
+# letsencryptClusterIssuerName - both of which this repo no longer installs
+# itself (see helmfiles/core-infrastructure.yaml.gotmpl). Only "development"
+# currently has ingressEnabled: true among the standalone profiles, so this
+# is a live gap, not yet resolved: that Gateway needs istio and a
+# letsencrypt-dns01 ClusterIssuer already present on whatever cluster
+# "development" targets, or it's inert.
+releases:
+{{ if .Values.ingressEnabled }}
+  - name: openworkflow-gateway
+    namespace: {{ .Values.istioSystemNamespace }}
+    chart: ../charts/openworkflow-gateway
+    missingFileHandler: Error
+    labels: {stage: routing}
+    values:
+      - platformTld: {{ .Values.platformTld }}
+        istioSystemNamespace: {{ .Values.istioSystemNamespace }}
+        openworkflowNamespace: {{ .Values.openworkflowNamespace }}
+        workflowPlatformFramework: {{ .Values.workflowPlatformFramework }}
+        {{- if eq $cloud "gcp" }}
+        gateway:
+          enabled: false
+          # forwardmeasure-platform's platform-routing release - name and
+          # wildcard listener name are fixed conventions there, not
+          # per-environment values (confirmed: never overridden across any
+          # of its registered environments).
+          name: platform-gateway
+          namespace: {{ .Values.istioSystemNamespace }}
+          sectionName: tenant-https
+        {{- end }}
+{{ end }}

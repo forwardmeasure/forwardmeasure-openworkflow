@@ -67,7 +67,8 @@ class JpaExecutionRepositoryTest {
   @Test
   void admitsOncePinsTheEngineAndRejectsCrossTenantAccess(PostgreSqlTestContainer database)
       throws Exception {
-    var migrator = new OpenWorkflowTenantMigrator(database.dataSource());
+    var migrator = new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+    migrator.ensureRuntimeRole(database.password());
     migrator.provisionAndMigrate(TENANT_A);
     migrator.provisionAndMigrate(TENANT_B);
     var plan = new OpenWorkflowCompiler().compile(SOURCE.getBytes(StandardCharsets.UTF_8));
@@ -121,7 +122,9 @@ class JpaExecutionRepositoryTest {
   @Test
   void resolvesOnlyAnActiveDigestConsistentPublishedRevision(PostgreSqlTestContainer database)
       throws Exception {
-    new OpenWorkflowTenantMigrator(database.dataSource()).provisionAndMigrate(TENANT_A);
+    var migrator = new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+    migrator.ensureRuntimeRole(database.password());
+    migrator.provisionAndMigrate(TENANT_A);
     var plan = new OpenWorkflowCompiler().compile(SOURCE.getBytes(StandardCharsets.UTF_8));
     seedPublishedRevision(database, TENANT_A, plan);
 

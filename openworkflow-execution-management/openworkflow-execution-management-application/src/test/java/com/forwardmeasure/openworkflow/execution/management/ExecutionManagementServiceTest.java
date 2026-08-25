@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.forwardmeasure.jpa.tenancy.ThreadBoundTenantScope;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.engine.api.ActorId;
 import com.forwardmeasure.openworkflow.engine.api.CommandAcknowledgement;
@@ -39,6 +40,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 class ExecutionManagementServiceTest {
@@ -147,7 +149,14 @@ class ExecutionManagementServiceTest {
             new ExecutionEngineProviders(providers),
             request -> EngineId.PEKKO,
             Clock.fixed(NOW, ZoneOffset.UTC),
-            () -> EXECUTION_UUID);
+            () -> EXECUTION_UUID,
+            new ThreadBoundTenantScope(),
+            new ExecutionTransactionExecutor() {
+              @Override
+              public <T> T execute(Supplier<T> work) {
+                return work.get();
+              }
+            });
     return new Fixture(service);
   }
 

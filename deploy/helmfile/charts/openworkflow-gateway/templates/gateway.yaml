@@ -1,0 +1,51 @@
+{{- if .Values.gateway.enabled }}
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: {{ .Values.gateway.name }}
+  namespace: {{ .Values.istioSystemNamespace }}
+  annotations:
+    # cert-manager's Gateway API Shim: watches Gateways carrying this
+    # annotation and auto-creates a Certificate per unique certificateRefs
+    # name below, in this Gateway's own namespace, using each HTTPS
+    # listener's hostname as the Certificate's dnsNames. No separate
+    # Certificate resource needed.
+    cert-manager.io/cluster-issuer: {{ .Values.letsencryptClusterIssuerName }}
+spec:
+  gatewayClassName: istio
+  listeners:
+    - name: https
+      protocol: HTTPS
+      port: 443
+      hostname: {{ printf "*.%s" .Values.platformTld | quote }}
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - name: {{ .Values.wildcardCertSecretName }}
+      allowedRoutes:
+        namespaces:
+          from: All
+    - name: http
+      protocol: HTTP
+      port: 80
+      hostname: {{ printf "*.%s" .Values.platformTld | quote }}
+      allowedRoutes:
+        namespaces:
+          from: All
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: {{ .Values.gateway.name }}-http-redirect
+  namespace: {{ .Values.istioSystemNamespace }}
+spec:
+  parentRefs:
+    - name: {{ .Values.gateway.name }}
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+{{- end }}

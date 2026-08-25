@@ -1,0 +1,158 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+deploymentProfile: production-postgresql
+
+imageVersions:
+  definitionManagement:
+    tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+  executionManagement:
+    tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+  studio:
+    tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+  engines:
+    kafka-streams:
+      tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+    pekko:
+      tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+  operationAdapter:
+    tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+  tenantProvisioning:
+    tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+  migrations:
+    tag: {{ requiredEnv "OPENWORKFLOW_VERSION" | quote }}
+
+imagePullPolicy: Always
+
+ingressEnabled: true
+
+# Fixed, not requiredEnv - matches forwardmeasure-platform's own
+# gcp.projectId for this exact cluster (genai-llm-393115), confirmed live
+# via gcloud - a fixed fact of this named cluster, not a per-deployment
+# value.
+gcpProjectId: genai-llm-393115
+# Fixed, not requiredEnv - this is forwardmeasure-platform's own
+# platform-secrets release's openworkflowCredentialsSecret name
+# (identity.openworkflowCredentialsSecret in its base.yaml.gotmpl), already
+# synced into this namespace with OPENWORKFLOW_CLIENT_SECRET and
+# OPENWORKFLOW_DATABASE_PASSWORD. A per-deployment override would only ever
+# be wrong, not variable.
+
+credentialsSecretName: openworkflow-identity-credentials
+# Keycloak's and Superset's own runtime database roles - this Job's admin
+# workload identity is the only one in this cluster authorized to
+# provision them (namespace-locked; see
+# releases/openworkflow-migrations/values.yaml's own comment on why).
+# Passwords come from OPENWORKFLOW_RUNTIME_DATABASE_<NAME>_PASSWORD keys on
+# credentialsSecretName above, synced there from forwardmeasure-platform's
+# own platform-secrets release.
+additionalRuntimeDatabases:
+  - keycloak
+  - superset
+foundation:
+  enabled: false
+securityBootstrap:
+  enabled: false
+acceptanceFixtures:
+  enabled: false
+replicas:
+  definition: 2
+  executionManagement: 2
+  engine: 3
+  operationAdapter: 3
+  studio: 2
+engines:
+  pekkoPostgresql: true
+  pekkoCassandra: false
+  kafkaStreams: true
+  default: kafka-streams
+hardening:
+  networkPolicyEnabled: true
+# Not requiredEnv - matches local/ci/kind/development, which never set this
+# at all and get the chart's own default ("", no extra egress beyond
+# baseline). Studio doesn't need an extra external destination until you
+# actually have one - optionally set OPENWORKFLOW_EXTERNAL_EGRESS_CIDR to
+# override once you do (env, not requiredEnv, so unset just means "").
+networkPolicy:
+  externalEgressCidr: {{ env "OPENWORKFLOW_EXTERNAL_EGRESS_CIDR" | quote }}
+
+# Parked, not wired up yet - no OTel collector is deployed anywhere in this
+# cluster. Matches local/ci's own disabled state (otlpEndpoint: "",
+# injectJava defaulting to false) rather than pointing at a collector that
+# doesn't exist.
+telemetry:
+  otlpEndpoint: ""
+database:
+  # localhost, not requiredEnv - this profile always talks to Postgres
+  # through its own Cloud SQL Auth Proxy sidecar (see cloudSqlProxy below),
+  # so the endpoint is a fixed fact of the profile, not a per-deployment
+  # value. Only the *username* still varies by deployment.
+  url: jdbc:postgresql://localhost:5432/openworkflow
+  # Fixed, not requiredEnv - matches terraform.tfvars' databases.openworkflow.
+  # runtime_username for this cluster exactly. Same reasoning as
+  # administratorUsername below and gcpProjectId above.
+  username: openworkflow
+  # Matches openworkflow-k8s-setup/terraform/gcp's
+  # var.database_administrator_username default - a fixed convention, not
+  # requiredEnv, same reasoning as forwardmeasure-platform's own
+  # identity.openworkflowAdministratorUsername.
+  administratorUsername: openworkflow_migration
+# keycloak.url/issuer deliberately not overridden here - base.yaml's value
+# (built from keycloakNamespace/keycloakRealm) is already correct and the
+# same platform Keycloak regardless of persistence profile. Requiring a
+# manually re-typed value here was pure risk with no benefit: nothing
+# validated it, and a wrong entry would only surface later when a live
+# authorization check failed at runtime.
+# Fixed, not requiredEnv - forwardmeasure-platform's own in-cluster Kafka
+# (releases/kafka's clusterName, namespace "kafka") is a fixed fact of this
+# cluster now that platform reconciliation is done, not a per-deployment
+# value. Same reasoning as credentialsSecretName/database.url above.
+kafka:
+  bootstrapServers: kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092
+pekko:
+  postgresqlEndpoint: jdbc:postgresql://localhost:5432/openworkflow
+# Cloud SQL Auth Proxy sidecar - every openworkflow-service/migrations
+# release that talks to Postgres runs one, authenticating via the shared
+# openworkflow-runtime/openworkflow-database-migration KSAs created by
+# openworkflow-identity (see helmfiles/foundation.yaml.gotmpl). Mirrors
+# data-fabric's proven per-app-sidecar pattern rather than raw verify-ca
+# JDBC parameters.
+# Fixed, not requiredEnv - confirmed live via gcloud/tofu output this
+# session: project:region:instance for this exact cluster's Cloud SQL
+# instance. Same reasoning as gcpProjectId above.
+cloudSqlProxy:
+  enabled: true
+  instanceConnectionName: genai-llm-393115:us-central1:openworkflow-prod-postgres
+# Fixed, not requiredEnv - matches openworkflow-k8s-setup terraform's
+# workload_identities "runtime"/"migrations" GSA emails for this cluster
+# exactly (same "${var.name}-${key}" convention forwardmeasure-platform's
+# own gcp.*ServiceAccountEmail values already use for this same cluster).
+identity:
+  serviceAccounts:
+    - name: openworkflow-runtime
+      gcpServiceAccountEmail: openworkflow-prod-runtime@genai-llm-393115.iam.gserviceaccount.com
+    - name: openworkflow-database-migration
+      gcpServiceAccountEmail: openworkflow-prod-migrations@genai-llm-393115.iam.gserviceaccount.com
+# Not requiredEnv - matches local/ci/kind/development's own default (""),
+# which fails closed (denies every outbound call/fetch, confirmed by
+# reading the actual enforcement code - not "allow all"). Set the real
+# env vars once you have real tenant UUIDs and real hosts to allow, rather
+# than inventing values now just to satisfy a required-value check.
+operations:
+  httpEgressAllowlist: {{ env "OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST" | quote }}
+definitionResources:
+  allowedHosts: {{ env "OPENWORKFLOW_DEFINITION_RESOURCE_ALLOWED_HOSTS" | quote }}

@@ -207,21 +207,6 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-engine-quarkus-binding</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-engine-spring-binding</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.forwardmeasure.openworkflow</groupId>
-                <artifactId>openworkflow-engine-micronaut-binding</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-execution-management-quarkus-binding</artifactId>
                 <version>${project.version}</version>
             </dependency>

@@ -1,0 +1,35 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Cloud-wide GCP layer: safe, inert defaults for values every GCP cluster
+# needs, so a cluster leaf file that forgets to override cloudSqlProxy/
+# identity.serviceAccounts doesn't hit an undefined dig fallback instead it
+# just renders as disabled. Real per-cluster values (project ID, GSA emails,
+# Cloud SQL instance name) come from the cluster leaf file layered on top of
+# this one (e.g. gcp-openworkflow-prod.yaml.gotmpl). Plain YAML, not
+# .gotmpl - nothing here needs templating.
+cloudProvider: gcp
+
+cloudSqlProxy:
+  enabled: false
+  instanceConnectionName: placeholder-project:placeholder-region:placeholder-instance
+
+identity:
+  serviceAccounts:
+    - name: openworkflow-runtime
+      gcpServiceAccountEmail: placeholder-openworkflow-runtime@placeholder-project.iam.gserviceaccount.com
+    - name: openworkflow-database-migration
+      gcpServiceAccountEmail: placeholder-openworkflow-database-migration@placeholder-project.iam.gserviceaccount.com

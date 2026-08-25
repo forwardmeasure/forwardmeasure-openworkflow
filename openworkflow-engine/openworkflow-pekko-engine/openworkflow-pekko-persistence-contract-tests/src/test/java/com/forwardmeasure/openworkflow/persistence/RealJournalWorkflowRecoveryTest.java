@@ -63,8 +63,9 @@ class RealJournalWorkflowRecoveryTest {
       var dataSource =
           new DriverDataSource(
               postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
-      new OpenWorkflowTenantMigrator(dataSource)
-          .provisionAndMigrate(new TenantId(ENGINE_TENANT.value()));
+      var migrator = new OpenWorkflowTenantMigrator(dataSource, postgres.getUsername());
+      migrator.ensureRuntimeRole(postgres.getPassword());
+      migrator.provisionAndMigrate(new TenantId(ENGINE_TENANT.value()));
       Config config =
           PersistenceConfigLoader.withConnection(
               PersistenceConfigLoader.select(ConfigFactory.load(), PersistenceProfile.POSTGRESQL),

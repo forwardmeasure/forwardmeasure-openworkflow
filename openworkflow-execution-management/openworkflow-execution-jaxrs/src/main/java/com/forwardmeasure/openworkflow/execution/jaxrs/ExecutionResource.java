@@ -35,7 +35,19 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Supplier;
 
-/** Portable implementation shared unchanged by Quarkus, Spring, and Micronaut. */
+/**
+ * Portable implementation shared unchanged by Quarkus, Spring, and Micronaut, matching {@code
+ * WorkflowDefinitionResource}'s pattern (definition-management's own equivalent) exactly: Quarkus
+ * and Spring register this class directly via a producer method, no subclass at all - the only
+ * exception is Micronaut, whose bean discovery needs a class-level {@code @Singleton}, so a thin,
+ * override-free {@code MicronautExecutionResource extends ExecutionResource} still exists there.
+ *
+ * <p>Neither tenant-schema binding nor the transaction boundary is this class's concern: {@link
+ * ExecutionManagementService} binds both around every write, and {@code queries} is expected to be
+ * a {@code TenantScopedExecutionQueryRepository} that binds both around every read. This class must
+ * not open its own TenantScope or transaction - that would just be a redundant binding point for a
+ * future author to get out of sync with the other one.
+ */
 public class ExecutionResource implements ExecutionsApi {
   private final ExecutionManagementService management;
   private final ExecutionQueryRepository queries;

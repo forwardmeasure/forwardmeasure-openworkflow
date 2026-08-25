@@ -5,12 +5,46 @@ helmDefaults:
   atomic: true
 
 releases:
-{{- range $engine := list "kafka-streams" "pekko" }}
-{{- range $framework := list "quarkus" "spring" "micronaut" }}
+{{- /*
+Three independent engine flavors, not two - kafka-streams, pekko+postgresql,
+and pekko+cassandra are separate release identities so all 3 can be
+deployed and running simultaneously (each independently gated on its own
+engines.* flag below), not a single "pekko" release whose persistence
+backend was picked by a ternary on engines.pekkoCassandra - that ternary
+silently chose cassandra whenever both engines.pekkoPostgresql and
+engines.pekkoCassandra were true, making true 3-way coexistence impossible:
+there was never a way to actually get two independent pekko deployments
+(one per persistence backend) running side by side.
+
+$imageEngine decouples this from imageVersions.engines, which only has
+"kafka-streams"/"pekko" keys - both pekko flavors are the same image,
+configured for a different persistence backend at runtime (same as
+before), not two different builds.
+*/}}
+{{- range $engine := list "kafka-streams" "pekko-postgresql" "pekko-cassandra" }}
+{{- $imageEngine := ternary "pekko" $engine (ne $engine "kafka-streams") }}
+{{- $isPekko := ne $engine "kafka-streams" }}
+{{- $isCassandra := eq $engine "pekko-cassandra" }}
+{{- /*
+Pinned to workflowPlatformFramework, not all 3 - these are 3 equivalent framework
+ports of the same logic, not different capabilities, so deploying all 3
+always meant 3x the pods/images for no behavioral gain. routing.yaml.gotmpl
+already used workflowPlatformFramework to pick which one gets exposed publicly;
+nothing gated which ones actually got deployed until now.
+*/}}
+{{- range $framework := list $.Values.workflowPlatformFramework }}
   - name: openworkflow-engine-{{ $engine }}-{{ $framework }}
     namespace: {{ $.Values.openworkflowNamespace }}
     chart: ../releases/openworkflow-service
-    installed: {{ if eq $engine "kafka-streams" }}{{ dig "engines" "kafkaStreams" true $.Values }}{{ else }}{{ or (dig "engines" "pekkoPostgresql" true $.Values) (dig "engines" "pekkoCassandra" false $.Values) }}{{ end }}
+    installed: {{ if eq $engine "kafka-streams" }}{{ dig "engines" "kafkaStreams" true $.Values }}{{ else if $isCassandra }}{{ dig "engines" "pekkoCassandra" false $.Values }}{{ else }}{{ dig "engines" "pekkoPostgresql" true $.Values }}{{ end }}
+    # No explicit `needs` on k8ssandra-cluster even when pekko-cassandra -
+    # helmfile 1.3.2 cannot reliably resolve a `needs` reference across
+    # separate top-level helmfiles: entries (same documented limitation as
+    # openworkflow-k2-security's own `needs`-free dependency on
+    # security.yaml.gotmpl). Ordering is still guaranteed without it:
+    # helmfile.yaml.gotmpl's helmfiles: list runs cassandra.yaml.gotmpl
+    # before this file, so k8ssandra-cluster (and its superuser Secret)
+    # always finishes applying first.
     values:
       - name: openworkflow-engine-{{ $engine }}-{{ $framework }}
         capability: workflow-engine
@@ -19,35 +53,68 @@ releases:
         service:
           enabled: true
           port: 8080
-          {{- if eq $engine "pekko" }}
+          {{- if $isPekko }}
           clusterIP: None
           extraPorts: [{name: artery, port: 25520, targetPort: artery}, {name: management, port: 8558, targetPort: management}]
           {{- end }}
-        {{- if eq $engine "pekko" }}
+        {{- if $isPekko }}
         containerPorts: [{name: artery, containerPort: 25520}, {name: management, containerPort: 8558}]
         {{- end }}
         replicas: {{ dig "replicas" "engine" 1 $.Values }}
         image:
-          repository: {{ index (index $.Values.imageVersions.engines $engine).repositories $framework | quote }}
-          tag: {{ (index $.Values.imageVersions.engines $engine).tag | quote }}
-          digest: {{ index (index $.Values.imageVersions.engines $engine).digests $framework | quote }}
+          repository: {{ index (index $.Values.imageVersions.engines $imageEngine).repositories $framework | quote }}
+          tag: {{ (index $.Values.imageVersions.engines $imageEngine).tag | quote }}
+          digest: {{ index (index $.Values.imageVersions.engines $imageEngine).digests $framework | quote }}
           pullPolicy: {{ $.Values.imagePullPolicy }}
         env:
           - {name: OPENWORKFLOW_EXECUTION_EVENTS_URL, value: {{ printf "http://openworkflow-execution-management-%s:8080/internal/v1/execution-events/" $framework | quote }}}
           {{- if eq $engine "kafka-streams" }}
           - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ dig "kafka" "bootstrapServers" "redpanda:9092" $.Values | quote }}}
           {{- else }}
-          - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ ternary "cassandra" "postgresql" (dig "engines" "pekkoCassandra" false $.Values) | quote }}}
-          - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if dig "engines" "pekkoCassandra" false $.Values }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ if $isCassandra }}cassandra{{ else }}postgresql{{ end }}}
+          - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if $isCassandra }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
+          {{- if not $isCassandra }}
           - {name: OPENWORKFLOW_PERSISTENCE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          {{- end }}
           - {name: OPENWORKFLOW_PERSISTENCE_LOCAL_DATACENTER, value: {{ dig "pekko" "cassandraLocalDatacenter" "datacenter1" $.Values | quote }}}
-          - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-pekko-%s" $framework | quote }}}
+          # Includes $engine, not just $framework - pekko-postgresql and
+          # pekko-cassandra must never compute the same discovery service
+          # name. They're independent actor systems over independent
+          # persistence backends; if both resolved to
+          # "openworkflow-engine-pekko-{framework}" they'd attempt to form
+          # one Pekko cluster together across two different data stores,
+          # which is wrong, not just redundant.
+          - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-%s-%s" $engine $framework | quote }}}
           - {name: OPENWORKFLOW_CLUSTER_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
           - {name: OPENWORKFLOW_CLUSTER_REQUIRED_CONTACT_POINTS, value: {{ dig "replicas" "engine" 1 $.Values | quote }}}
           {{- end }}
-        {{- if eq $engine "pekko" }}
+        {{- if $isPekko }}
         secretEnv:
+        {{- if $isCassandra }}
+          # Was unconditionally sourced from the Postgres password secret
+          # even when running against Cassandra - confirmed the hard way
+          # this repo had no Cassandra auth wiring for the runtime pekko
+          # pods at all (only the migrations Job had optional
+          # username/password). Sourced from k8ssandra-operator's own
+          # auto-generated superuser Secret now - see
+          # environments/production-multi-engine.yaml.gotmpl's
+          # pekko.cassandraCredentialsSecret.
+          - {name: OPENWORKFLOW_PERSISTENCE_USERNAME, valueFrom: {secretKeyRef: {name: {{ dig "pekko" "cassandraCredentialsSecret" "name" "openworkflow-superuser" $.Values | quote }}, key: {{ dig "pekko" "cassandraCredentialsSecret" "usernameKey" "username" $.Values | quote }}}}}
+          - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "pekko" "cassandraCredentialsSecret" "name" "openworkflow-superuser" $.Values | quote }}, key: {{ dig "pekko" "cassandraCredentialsSecret" "passwordKey" "password" $.Values | quote }}}}}
+        {{- else }}
           - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+        {{- end }}
+        {{- if not $isCassandra }}
+        cloudSqlProxy:
+          enabled: {{ dig "cloudSqlProxy" "enabled" false $.Values }}
+          instanceConnectionName: {{ dig "cloudSqlProxy" "instanceConnectionName" "" $.Values | quote }}
+          image:
+            repository: {{ $.Values.imageVersions.cloudSqlProxy.repository | quote }}
+            tag: {{ $.Values.imageVersions.cloudSqlProxy.tag | quote }}
+        {{- if dig "cloudSqlProxy" "enabled" false $.Values }}
+        serviceAccount: {create: false, name: openworkflow-runtime, automount: true}
+        {{- end }}
+        {{- end }}
         {{- end }}
     labels: {stage: execution, capability: workflow-engine, engine: {{ $engine }}, framework: {{ $framework }}}
 {{- end }}

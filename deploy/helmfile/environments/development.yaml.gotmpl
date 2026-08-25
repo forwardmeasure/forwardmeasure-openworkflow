@@ -1,0 +1,37 @@
+deploymentProfile: development
+imagePullPolicy: IfNotPresent
+# Layered on environments/gcp.yaml (see helmfile.yaml.gotmpl) - this profile
+# always targets an already-provisioned cluster (forwardmeasure-platform or
+# equivalent), never a genuinely standalone one. That's what makes
+# ingressEnabled: true safe here: routing.yaml.gotmpl's $cloud=="gcp" gate
+# attaches to the existing platform Gateway instead of creating a
+# self-contained one, so this doesn't depend on istio/cert-manager being
+# installed by this repo (it no longer is, for any environment).
+ingressEnabled: true
+# Shared with production - real Cloud DNS zone/Let's Encrypt certs, not a
+# per-environment value, so it isn't hardcoded here.
+gcpProjectId: {{ requiredEnv "OPENWORKFLOW_GCP_PROJECT_ID" | quote }}
+operations:
+  httpEgressAllowlist: ""
+definitionResources:
+  allowedHosts: ""
+hardening:
+  networkPolicyEnabled: false
+telemetry:
+  otlpEndpoint: "http://otel-collector:4317"
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements. See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License. You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#

@@ -17,6 +17,11 @@
 
 namespace: forwardmeasure-openworkflow
 imagePullPolicy: IfNotPresent
+# docker.io/forwardmeasure (images.tenantProvisioning) is a private org, not
+# a public one - see openworkflow-service/values.yaml's identical comment.
+# postgresql/cassandra/redpanda/curl are all public and don't need this, but
+# a single imagePullSecrets on the pod covers every container regardless.
+imagePullSecrets: [{name: docker-io-credentials}]
 images:
   postgresql: {repository: postgres, tag: "18.0", digest: ""}
   cassandra: {repository: cassandra, tag: "5.0", digest: ""}
