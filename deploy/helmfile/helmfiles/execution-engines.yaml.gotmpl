@@ -111,6 +111,7 @@ nothing gated which ones actually got deployed until now.
           image:
             repository: {{ $.Values.imageVersions.cloudSqlProxy.repository | quote }}
             tag: {{ $.Values.imageVersions.cloudSqlProxy.tag | quote }}
+            digest: {{ $.Values.imageVersions.cloudSqlProxy.digest | quote }}
         {{- if dig "cloudSqlProxy" "enabled" false $.Values }}
         serviceAccount: {create: false, name: openworkflow-runtime, automount: true}
         {{- end }}

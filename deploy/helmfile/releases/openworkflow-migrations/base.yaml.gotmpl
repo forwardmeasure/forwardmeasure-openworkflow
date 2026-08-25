@@ -72,6 +72,7 @@ cloudSqlProxy:
   image:
     repository: {{ .Values.imageVersions.cloudSqlProxy.repository | quote }}
     tag: {{ .Values.imageVersions.cloudSqlProxy.tag | quote }}
+    digest: {{ .Values.imageVersions.cloudSqlProxy.digest | quote }}
 {{- if dig "cloudSqlProxy" "enabled" false .Values }}
 serviceAccount: {name: openworkflow-database-migration, automount: true}
 {{- end }}
