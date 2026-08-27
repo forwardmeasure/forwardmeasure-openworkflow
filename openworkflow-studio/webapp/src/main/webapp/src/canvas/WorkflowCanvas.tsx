@@ -14,9 +14,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
+import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
+import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
@@ -301,6 +303,16 @@ export function WorkflowCanvas({
   }
 
   const selectedTask = tasksInView.find((t) => t.name === selectedTaskName);
+  // React Flow already tracks per-node multi-selection (shift/ctrl-click,
+  // or a drag-selection box) in node.selected - onNodesChange already
+  // applies those "select" NodeChanges via applyNodeChanges, so this is
+  // purely a read, no separate tracking needed. Independent of
+  // selectedTaskName (which still drives the single-task Inspector) -
+  // multi-selecting doesn't change which task's Inspector is open, it only
+  // enables "Group into Do" below.
+  const selectedTaskIds = nodes
+    .filter((node) => node.type === "task" && node.selected)
+    .map((node) => node.id);
 
   const commitTasks = useCallback(
     (tasks: Task[]) =>
@@ -309,6 +321,37 @@ export function WorkflowCanvas({
       ),
     [source, onSourceChange, parsed.tasks, path],
   );
+
+  /**
+   * Wraps every selected task into one new "do" task, in their original
+   * order - not necessarily contiguous in tasksInView (nothing here
+   * requires or checks that). A non-contiguous selection still groups
+   * cleanly: every non-selected task keeps its own relative order, and the
+   * new group task is inserted where the FIRST selected task used to sit
+   * among what's left - but this does mean grouping tasks A and C while
+   * skipping B moves B to now run after the new group instead of between
+   * A and C, since a "do" task can't interleave with tasks outside it.
+   * That's a real behavior change worth knowing about, not silently masked.
+   */
+  function groupSelectedIntoDo() {
+    if (selectedTaskIds.length < 2) return;
+    const selected = new Set(selectedTaskIds);
+    const grouped = tasksInView.filter((t) => selected.has(t.name));
+    const remaining = tasksInView.filter((t) => !selected.has(t.name));
+    const firstSelectedIndex = tasksInView.findIndex((t) => selected.has(t.name));
+    const insertAt = tasksInView
+      .slice(0, firstSelectedIndex)
+      .filter((t) => !selected.has(t.name)).length;
+    const groupName = uniqueTaskName(tasksInView.map((t) => t.name));
+    const groupTask: Task = { kind: "do", name: groupName, children: grouped };
+    const next = [
+      ...remaining.slice(0, insertAt),
+      groupTask,
+      ...remaining.slice(insertAt),
+    ];
+    commitTasks(next);
+    setSelectedTaskName(groupName);
+  }
 
   function addTask(kind: Task["kind"], position?: { x: number; y: number }) {
     const name = uniqueTaskName(tasksInView.map((t) => t.name));
@@ -378,6 +421,17 @@ export function WorkflowCanvas({
             <AddCommentOutlinedIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        {selectedTaskIds.length >= 2 && (
+          <Button
+            size="small"
+            variant="contained"
+            startIcon={<GroupWorkOutlinedIcon fontSize="small" />}
+            onClick={groupSelectedIntoDo}
+            sx={{ position: "absolute", top: 8, left: "50%", transform: "translateX(-50%)", zIndex: 1 }}
+          >
+            Group {selectedTaskIds.length} tasks into Do
+          </Button>
+        )}
         {path.length > 0 && (
           <Breadcrumbs
             sx={{
