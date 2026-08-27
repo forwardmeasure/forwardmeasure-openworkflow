@@ -3,6 +3,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import CallMadeIcon from "@mui/icons-material/CallMade";
+import CallSplitIcon from "@mui/icons-material/CallSplit";
 import CampaignIcon from "@mui/icons-material/Campaign";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
@@ -31,6 +32,7 @@ const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
   emit: CampaignIcon,
   do: AccountTreeIcon,
   for: LoopIcon,
+  fork: CallSplitIcon,
 };
 
 export function TaskNode({
@@ -114,6 +116,13 @@ export function TaskNode({
             {task.itemVariable} in {task.collection || "…"} ·{" "}
             {task.children.length} task{task.children.length === 1 ? "" : "s"}{" "}
             — double-click to open
+          </Typography>
+        )}
+        {task.kind === "fork" && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.children.length} parallel branch
+            {task.children.length === 1 ? "" : "es"}
+            {task.compete ? " (first wins)" : ""} — double-click to open
           </Typography>
         )}
       </CardContent>

@@ -28,7 +28,8 @@ export type TaskType =
   | "wait"
   | "emit"
   | "do"
-  | "for";
+  | "for"
+  | "fork";
 
 // All optional: a task with none of these set is the common case, and
 // omitting an unset property from the serialized YAML (rather than writing
@@ -132,6 +133,20 @@ export type ForTask = CommonTaskProps & {
   children: Task[];
 };
 
+// The third container kind: runs every branch in "children" concurrently,
+// each branch rejoining at one shared continuation once done ("compete:
+// true" means the first branch to finish wins and the rest are cancelled,
+// the default is every branch must finish). Spec-wise, "fork.branches" is
+// structurally just another task list - the same shape as "do"'s children -
+// so each branch here is one child task's own name/body, not a separate
+// named-branch wrapper.
+export type ForkTask = CommonTaskProps & {
+  kind: "fork";
+  name: string;
+  compete: boolean;
+  children: Task[];
+};
+
 export type Task =
   | SetTask
   | CallTask
@@ -140,7 +155,8 @@ export type Task =
   | WaitTask
   | EmitTask
   | DoTask
-  | ForTask;
+  | ForTask
+  | ForkTask;
 
 export type TaskGraph = {
   tasks: Task[];
@@ -270,6 +286,19 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       ...common,
     };
   }
+  if ("fork" in body) {
+    const forkBody = (body.fork ?? {}) as Record<string, unknown>;
+    const rawBranches = Array.isArray(forkBody.branches) ? forkBody.branches : [];
+    return {
+      kind: "fork",
+      name,
+      compete: forkBody.compete === true,
+      children: taskListFromYamlEntries(
+        rawBranches as Array<Record<string, unknown>>,
+      ),
+      ...common,
+    };
+  }
   if ("do" in body) {
     const rawChildren = Array.isArray(body.do) ? body.do : [];
     return {
@@ -295,8 +324,9 @@ export class UnsupportedTaskError extends Error {
   constructor(public readonly taskName: string) {
     super(
       `Task "${taskName}" uses a construct the canvas doesn't support yet ` +
-        `(only "set", "call", "switch", "raise", "wait", "emit", "do", and ` +
-        `"for" tasks are editable here) - edit it in Source view instead.`,
+        `(only "set", "call", "switch", "raise", "wait", "emit", "do", ` +
+        `"for", and "fork" tasks are editable here) - edit it in Source ` +
+        `view instead.`,
     );
   }
 }
@@ -375,6 +405,13 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
     entry.do = taskListToYamlEntries(task.children);
     return { [task.name]: entry };
   }
+  if (task.kind === "fork") {
+    const forkObj: Record<string, unknown> = {
+      branches: taskListToYamlEntries(task.children),
+    };
+    if (task.compete) forkObj.compete = true;
+    return { [task.name]: { ...common, fork: forkObj } };
+  }
   return {
     [task.name]: { ...common, do: taskListToYamlEntries(task.children) },
   };
@@ -412,6 +449,9 @@ export function emptyTask(kind: TaskType, name: string): Task {
   if (kind === "emit") return { kind: "emit", name, with: {} };
   if (kind === "for") {
     return { kind: "for", name, itemVariable: "item", collection: "", children: [] };
+  }
+  if (kind === "fork") {
+    return { kind: "fork", name, compete: false, children: [] };
   }
   return { kind: "do", name, children: [] };
 }

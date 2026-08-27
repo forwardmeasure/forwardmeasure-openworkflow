@@ -418,9 +418,91 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     expect(rewritten).not.toContain("while:");
   });
 
+  it("parses a fork task's branches (structurally a task list, same as do)", () => {
+    const source = [
+      "do:",
+      "  - branch:",
+      "      fork:",
+      "        compete: true",
+      "        branches:",
+      "          - left:",
+      "              set:",
+      "                a: 1",
+      "          - right:",
+      "              call: http",
+      "              with: {}",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "fork",
+        name: "branch",
+        compete: true,
+        children: [
+          { kind: "set", name: "left", set: { a: 1 } },
+          { kind: "call", name: "right", call: "http", with: {} },
+        ],
+      },
+    ]);
+  });
+
+  it("parses a fork task with compete omitted as false", () => {
+    const source =
+      "do:\n  - branch:\n      fork:\n        branches:\n          - only:\n              set: {}\n";
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "fork",
+        name: "branch",
+        compete: false,
+        children: [{ kind: "set", name: "only", set: {} }],
+      },
+    ]);
+  });
+
+  it("round-trips a fork task's branches and compete flag", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "fork",
+          name: "branch",
+          compete: true,
+          children: [
+            { kind: "set", name: "left", set: { a: 1 } },
+            { kind: "set", name: "right", set: { b: 2 } },
+          ],
+        },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "fork",
+        name: "branch",
+        compete: true,
+        children: [
+          { kind: "set", name: "left", set: { a: 1 } },
+          { kind: "set", name: "right", set: { b: 2 } },
+        ],
+      },
+    ]);
+  });
+
+  it('omits "compete" from the serialized YAML when false (the default)', () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "fork",
+          name: "branch",
+          compete: false,
+          children: [{ kind: "set", name: "only", set: {} }],
+        },
+      ],
+    });
+    expect(rewritten).not.toContain("compete:");
+  });
+
   it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
     const source =
-      "do:\n  - branch:\n      fork:\n        branches: []\n";
+      "do:\n  - step:\n      try:\n        - default:\n            set: {}\n";
     expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
   });
 });

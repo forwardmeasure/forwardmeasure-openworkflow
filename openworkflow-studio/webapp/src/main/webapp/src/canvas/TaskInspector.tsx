@@ -6,6 +6,8 @@ import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
@@ -32,6 +34,7 @@ const KIND_LABEL: Record<Task["kind"], string> = {
   emit: "Emit task",
   do: "Do task",
   for: "For task",
+  fork: "Fork task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -151,6 +154,9 @@ export function TaskInspector({
   const [forWhile, setForWhile] = useState(
     task.kind === "for" ? (task.whileCondition ?? "") : "",
   );
+  const [forkCompete, setForkCompete] = useState(
+    task.kind === "fork" ? task.compete : false,
+  );
   const [advanced, setAdvanced] = useState<AdvancedState>(() =>
     advancedStateOf(task),
   );
@@ -174,6 +180,7 @@ export function TaskInspector({
     setForCollection(task.kind === "for" ? task.collection : "");
     setForIndexVariable(task.kind === "for" ? (task.indexVariable ?? "") : "");
     setForWhile(task.kind === "for" ? (task.whileCondition ?? "") : "");
+    setForkCompete(task.kind === "fork" ? task.compete : false);
     setAdvanced(advancedStateOf(task));
     setAdvancedErrors({});
   }, [task]);
@@ -183,7 +190,12 @@ export function TaskInspector({
   }
 
   function commit(
-    next: Partial<{ name: string; callTarget: string; paramsText: string }>,
+    next: Partial<{
+      name: string;
+      callTarget: string;
+      paramsText: string;
+      forkCompete: boolean;
+    }>,
   ) {
     if (task.kind === "switch") return;
     const resolvedName = next.name ?? name;
@@ -236,6 +248,22 @@ export function TaskInspector({
         collection: forCollection,
         indexVariable: forIndexVariable.trim() || undefined,
         whileCondition: forWhile.trim() || undefined,
+        children: task.children,
+        ...commonProps,
+      });
+      return;
+    }
+    if (task.kind === "fork") {
+      // "children" (the branches) is edited by drilling into this task on
+      // canvas, same as "do"/"for" - only compete/name/common props here.
+      // Unlike the text fields above, the checkbox below commits from its
+      // own onChange (no blur to wait on for a boolean toggle), so it must
+      // pass its new value through `next` rather than read the (still
+      // stale, pre-re-render) `forkCompete` closure directly.
+      onChange({
+        kind: "fork",
+        name: resolvedName,
+        compete: next.forkCompete ?? forkCompete,
         children: task.children,
         ...commonProps,
       });
@@ -429,6 +457,28 @@ export function TaskInspector({
             value={forWhile}
             onChange={(event) => setForWhile(event.target.value)}
             onBlur={() => commit({})}
+          />
+        </Box>
+      )}
+      {task.kind === "fork" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Double-click this task on canvas to edit its parallel branches -
+            each task inside runs as its own branch.
+          </Typography>
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={forkCompete}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setForkCompete(checked);
+                  commit({ forkCompete: checked });
+                }}
+              />
+            }
+            label="Compete (first branch to finish wins, others are cancelled)"
           />
         </Box>
       )}
