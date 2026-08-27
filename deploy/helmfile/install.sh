@@ -12,6 +12,7 @@ for command in kubectl helm helmfile yq jq; do
   }
 done
 
+"${SCRIPT_DIR}/scripts/resolve-image-digests.sh" "${ENVIRONMENT}"
 "${SCRIPT_DIR}/validate.sh" "${ENVIRONMENT}"
 "${SCRIPT_DIR}/scripts/preflight.sh" "${ENVIRONMENT}" "${REQUESTED_STAGE}"
 kubectl apply -k "${SCRIPT_DIR}/manifests/base"
