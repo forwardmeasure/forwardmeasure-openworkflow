@@ -790,6 +790,88 @@ export function toYaml(source: string, graph: TaskGraph): string {
   return dump(parsed, { lineWidth: -1 });
 }
 
+// Document-level (not per-task) properties: a workflow-level "timeout"/
+// "schedule", and the "use:" catalog of reusable, named components other
+// tasks reference by name - "authentications" (bearer/basic/oauth2/oidc/
+// digest schemes), "errors" (Problem Details templates "raise" can
+// reference), "extensions" (before/after/when hooks around a task kind),
+// "retries" (what "try"'s catch.retry can reference by name - see
+// RetryPolicy in TaskInspector.tsx), "functions" (custom function
+// definitions "call" can invoke by name), "timeouts" (what a task's own
+// "timeout" can reference by name), and "catalogs" (external workflow
+// catalog registrations "run.workflow" resolves against). Confirmed this
+// exact field list directly against OpenWorkflowCompiler.java's
+// reusableComponents() - the CNCF spec-summary term "resources" some
+// earlier planning used doesn't actually exist here; "secrets" also isn't
+// a "use:" map (unlike the other seven), it's a flat array of secret
+// names, referenced from these definitions rather than defining anything
+// itself.
+export type WorkflowSettings = {
+  timeout?: unknown;
+  schedule?: unknown;
+  authentications?: unknown;
+  errors?: unknown;
+  extensions?: unknown;
+  retries?: unknown;
+  functions?: unknown;
+  timeouts?: unknown;
+  catalogs?: unknown;
+  secrets?: unknown;
+};
+
+export function parseWorkflowSettings(source: string): WorkflowSettings {
+  const parsed = (load(source) as Record<string, unknown>) ?? {};
+  const use = (parsed.use ?? {}) as Record<string, unknown>;
+  return {
+    timeout: parsed.timeout,
+    schedule: parsed.schedule,
+    authentications: use.authentications,
+    errors: use.errors,
+    extensions: use.extensions,
+    retries: use.retries,
+    functions: use.functions,
+    timeouts: use.timeouts,
+    catalogs: use.catalogs,
+    secrets: use.secrets,
+  };
+}
+
+/**
+ * The WorkflowSettings analogue of toYaml above: replaces only the
+ * document-level "timeout"/"schedule" keys and the "use:" catalog's own
+ * sub-keys, leaving "do:" and everything else in `source` untouched.
+ */
+export function applyWorkflowSettings(
+  source: string,
+  settings: WorkflowSettings,
+): string {
+  const parsed = (load(source) as Record<string, unknown>) ?? {};
+  if (settings.timeout !== undefined) parsed.timeout = settings.timeout;
+  else delete parsed.timeout;
+  if (settings.schedule !== undefined) parsed.schedule = settings.schedule;
+  else delete parsed.schedule;
+
+  const use = { ...((parsed.use as Record<string, unknown>) ?? {}) };
+  const useKeys: Array<keyof WorkflowSettings> = [
+    "authentications",
+    "errors",
+    "extensions",
+    "retries",
+    "functions",
+    "timeouts",
+    "catalogs",
+    "secrets",
+  ];
+  for (const key of useKeys) {
+    if (settings[key] !== undefined) use[key] = settings[key];
+    else delete use[key];
+  }
+  if (Object.keys(use).length > 0) parsed.use = use;
+  else delete parsed.use;
+
+  return dump(parsed, { lineWidth: -1 });
+}
+
 export function emptyTask(kind: TaskType, name: string): Task {
   if (kind === "set") return { kind: "set", name, set: {} };
   if (kind === "call") return { kind: "call", name, call: "", with: {} };

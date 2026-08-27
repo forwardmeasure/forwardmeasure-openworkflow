@@ -10,6 +10,7 @@ import type {
 } from "@forwardmeasure/openworkflow-execution-client";
 import { authorizationDecisions, clients, correlationId } from "./api";
 import { WorkflowCanvas } from "./canvas/WorkflowCanvas";
+import { WorkflowSettingsPanel } from "./canvas/WorkflowSettingsPanel";
 import type { StudioIdentity } from "./runtime";
 import { tenantFromToken } from "./session";
 import { createStudioMuiTheme } from "./theme";
@@ -20,7 +21,7 @@ import { canPause, diagnostic, lineDiff, SAMPLE, taskNames } from "./workflow";
 const muiTheme = createStudioMuiTheme();
 
 type View = "author" | "executions";
-type EditorView = "source" | "canvas";
+type EditorView = "source" | "canvas" | "settings";
 type GovernanceAction = "submit" | "approve" | "reject" | "publish";
 type ExecutionControlAction = "pause" | "resume" | "cancel";
 
@@ -410,6 +411,12 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 >
                   Canvas
                 </button>
+                <button
+                  className={editorView === "settings" ? "active" : "secondary"}
+                  onClick={() => setEditorView("settings")}
+                >
+                  Settings
+                </button>
                 <label className="button-label">
                   Import
                   <input
@@ -469,9 +476,13 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 value={source}
                 onChange={(event) => setSource(event.target.value)}
               />
-            ) : (
+            ) : editorView === "canvas" ? (
               <div className="canvas-shell">
                 <WorkflowCanvas source={source} onSourceChange={setSource} />
+              </div>
+            ) : (
+              <div className="canvas-shell">
+                <WorkflowSettingsPanel source={source} onSourceChange={setSource} />
               </div>
             )}
             {previousSource && previousSource !== source && (

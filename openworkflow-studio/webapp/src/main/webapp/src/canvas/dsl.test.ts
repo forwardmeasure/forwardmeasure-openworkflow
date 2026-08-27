@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyWorkflowSettings,
   fromYaml,
+  parseWorkflowSettings,
   setChildrenAtPath,
   tasksAtPath,
   toYaml,
@@ -899,6 +901,115 @@ describe("drill-down navigation helpers (tasksAtPath / setChildrenAtPath)", () =
       set: {},
     });
     expect(updated[0]).toEqual({ kind: "set", name: "before", set: {} });
+  });
+});
+
+describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings)", () => {
+  it("parses workflow-level timeout/schedule and every use.* catalog", () => {
+    const source = [
+      "document:",
+      "  dsl: '1.0.0'",
+      "  namespace: examples",
+      "  name: with-settings",
+      "  version: '0.1.0'",
+      "timeout: PT1H",
+      "schedule:",
+      "  cron: 0 0 * * *",
+      "use:",
+      "  authentications:",
+      "    petStoreAuth:",
+      "      bearer:",
+      "        token: ${ .token }",
+      "  errors:",
+      "    notFound:",
+      "      type: https://example.com/errors/not-found",
+      "      status: 404",
+      "  extensions:",
+      "    - mock:",
+      "        extend: call",
+      "  retries:",
+      "    default:",
+      "      backoff:",
+      "        exponential: {}",
+      "  functions:",
+      "    getPetById:",
+      "      call: http",
+      "      with: {}",
+      "  timeouts:",
+      "    short: PT5S",
+      "  catalogs:",
+      "    shared:",
+      "      endpoint: https://example.com/catalog",
+      "  secrets:",
+      "    - petStoreSecret",
+      "do:",
+      "  - greet:",
+      "      set:",
+      "        message: hi",
+      "",
+    ].join("\n");
+    expect(parseWorkflowSettings(source)).toEqual({
+      timeout: "PT1H",
+      schedule: { cron: "0 0 * * *" },
+      authentications: {
+        petStoreAuth: { bearer: { token: "${ .token }" } },
+      },
+      errors: {
+        notFound: { type: "https://example.com/errors/not-found", status: 404 },
+      },
+      extensions: [{ mock: { extend: "call" } }],
+      retries: { default: { backoff: { exponential: {} } } },
+      functions: { getPetById: { call: "http", with: {} } },
+      timeouts: { short: "PT5S" },
+      catalogs: { shared: { endpoint: "https://example.com/catalog" } },
+      secrets: ["petStoreSecret"],
+    });
+  });
+
+  it("parses a document with no settings as all-undefined, not throwing", () => {
+    expect(parseWorkflowSettings(SAMPLE)).toEqual({
+      timeout: undefined,
+      schedule: undefined,
+      authentications: undefined,
+      errors: undefined,
+      extensions: undefined,
+      retries: undefined,
+      functions: undefined,
+      timeouts: undefined,
+      catalogs: undefined,
+      secrets: undefined,
+    });
+  });
+
+  it("round-trips settings while leaving do: and document metadata untouched", () => {
+    const rewritten = applyWorkflowSettings(SAMPLE, {
+      timeout: "PT1H",
+      functions: { getPetById: { call: "http", with: {} } },
+    });
+    expect(parseWorkflowSettings(rewritten)).toEqual({
+      timeout: "PT1H",
+      schedule: undefined,
+      authentications: undefined,
+      errors: undefined,
+      extensions: undefined,
+      retries: undefined,
+      functions: { getPetById: { call: "http", with: {} } },
+      timeouts: undefined,
+      catalogs: undefined,
+      secrets: undefined,
+    });
+    // Document metadata and the task list survive untouched.
+    expect(rewritten).toContain("namespace: forwardmeasure");
+    expect(rewritten).toContain("name: hello-studio");
+    expect(fromYaml(rewritten).tasks).toEqual(fromYaml(SAMPLE).tasks);
+  });
+
+  it("omits use: entirely once every catalog is cleared, rather than leaving an empty map", () => {
+    const withSettings = applyWorkflowSettings(SAMPLE, {
+      functions: { getPetById: { call: "http", with: {} } },
+    });
+    const cleared = applyWorkflowSettings(withSettings, {});
+    expect(cleared).not.toContain("use:");
   });
 });
 /*
