@@ -6,6 +6,7 @@ import CallMadeIcon from "@mui/icons-material/CallMade";
 import CallSplitIcon from "@mui/icons-material/CallSplit";
 import CampaignIcon from "@mui/icons-material/Campaign";
 import EditNoteIcon from "@mui/icons-material/EditNote";
+import HealingIcon from "@mui/icons-material/Healing";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import LoopIcon from "@mui/icons-material/Loop";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
@@ -33,6 +34,7 @@ const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
   do: AccountTreeIcon,
   for: LoopIcon,
   fork: CallSplitIcon,
+  try: HealingIcon,
 };
 
 export function TaskNode({
@@ -123,6 +125,14 @@ export function TaskNode({
             {task.children.length} parallel branch
             {task.children.length === 1 ? "" : "es"}
             {task.compete ? " (first wins)" : ""} — double-click to open
+          </Typography>
+        )}
+        {task.kind === "try" && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.children.length} task{task.children.length === 1 ? "" : "s"}{" "}
+            · catches{" "}
+            {task.catchClause.errors?.type ?? task.catchClause.errors?.status ?? "any error"}{" "}
+            — double-click to open
           </Typography>
         )}
       </CardContent>

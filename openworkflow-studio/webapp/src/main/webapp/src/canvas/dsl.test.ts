@@ -500,9 +500,200 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     expect(rewritten).not.toContain("compete:");
   });
 
+  it("parses a try task's block and a fully inline catch clause", () => {
+    const source = [
+      "do:",
+      "  - tryGetPet:",
+      "      try:",
+      "        - getPet:",
+      "            call: http",
+      "            with:",
+      "              method: get",
+      "              endpoint: https://example.com/pet",
+      "      catch:",
+      "        errors:",
+      "          with:",
+      "            status: 503",
+      "        as: err",
+      "        when: ${ .retryable }",
+      "        exceptWhen: ${ .fatal }",
+      "        retry:",
+      "          delay:",
+      "            seconds: 3",
+      "          backoff:",
+      "            exponential: {}",
+      "          limit:",
+      "            attempt:",
+      "              count: 5",
+      "              duration: PT30S",
+      "            duration: PT2M",
+      "          jitter:",
+      "            from: PT1S",
+      "            to: PT3S",
+      "        then: exit",
+      "        do:",
+      "          - notifySupport:",
+      "              emit:",
+      "                event:",
+      "                  with:",
+      "                    type: com.example.failure",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "try",
+        name: "tryGetPet",
+        children: [
+          {
+            kind: "call",
+            name: "getPet",
+            call: "http",
+            with: { method: "get", endpoint: "https://example.com/pet" },
+          },
+        ],
+        catchClause: {
+          errors: {
+            type: undefined,
+            status: 503,
+            instance: undefined,
+            title: undefined,
+            detail: undefined,
+          },
+          as: "err",
+          when: "${ .retryable }",
+          exceptWhen: "${ .fatal }",
+          retry: {
+            delay: { seconds: 3 },
+            backoff: "exponential",
+            attemptCount: 5,
+            attemptDuration: "PT30S",
+            totalDuration: "PT2M",
+            jitterFrom: "PT1S",
+            jitterTo: "PT3S",
+            when: undefined,
+            exceptWhen: undefined,
+          },
+          then: "exit",
+          children: [
+            {
+              kind: "emit",
+              name: "notifySupport",
+              with: { type: "com.example.failure" },
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it("parses a try task with a named (reusable) retry policy reference", () => {
+    const source = [
+      "do:",
+      "  - tryGetPet:",
+      "      try:",
+      "        - getPet:",
+      "            call: http",
+      "            with: {}",
+      "      catch:",
+      "        retry: default",
+      "",
+    ].join("\n");
+    const tasks = fromYaml(source).tasks;
+    expect(tasks[0].kind).toBe("try");
+    expect((tasks[0] as { catchClause: { retry: unknown } }).catchClause.retry).toBe(
+      "default",
+    );
+  });
+
+  it("parses a try task with a minimal catch clause (no errors/retry)", () => {
+    const source =
+      "do:\n  - step:\n      try:\n        - inner:\n            set: {}\n      catch: {}\n";
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "try",
+        name: "step",
+        children: [{ kind: "set", name: "inner", set: {} }],
+        catchClause: {
+          errors: undefined,
+          as: undefined,
+          when: undefined,
+          exceptWhen: undefined,
+          retry: undefined,
+          then: undefined,
+          children: [],
+        },
+      },
+    ]);
+  });
+
+  it("round-trips a try task's block and inline retry policy, omitting a default (constant) backoff", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "try",
+          name: "step",
+          children: [{ kind: "set", name: "inner", set: {} }],
+          catchClause: {
+            errors: { status: 503 },
+            as: "err",
+            retry: { backoff: "constant", attemptCount: 3 },
+            children: [],
+          },
+        },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "try",
+        name: "step",
+        children: [{ kind: "set", name: "inner", set: {} }],
+        catchClause: {
+          errors: {
+            type: undefined,
+            status: 503,
+            instance: undefined,
+            title: undefined,
+            detail: undefined,
+          },
+          as: "err",
+          when: undefined,
+          exceptWhen: undefined,
+          retry: {
+            delay: undefined,
+            backoff: "constant",
+            attemptCount: 3,
+            attemptDuration: undefined,
+            totalDuration: undefined,
+            jitterFrom: undefined,
+            jitterTo: undefined,
+            when: undefined,
+            exceptWhen: undefined,
+          },
+          then: undefined,
+          children: [],
+        },
+      },
+    ]);
+    expect(rewritten).not.toContain("backoff:");
+  });
+
+  it("round-trips a named retry policy reference as a plain string", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "try",
+          name: "step",
+          children: [],
+          catchClause: { retry: "default", children: [] },
+        },
+      ],
+    });
+    expect(rewritten).toContain("retry: default");
+  });
+
   it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
     const source =
-      "do:\n  - step:\n      try:\n        - default:\n            set: {}\n";
+      "do:\n  - step:\n      listen:\n        to:\n          one:\n            with: {}\n";
     expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
   });
 });

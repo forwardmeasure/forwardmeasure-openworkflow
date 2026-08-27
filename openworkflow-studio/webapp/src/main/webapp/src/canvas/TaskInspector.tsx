@@ -7,11 +7,22 @@ import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
+import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import type { CommonTaskProps, SwitchCase, Task } from "./dsl";
+import type {
+  CatchClause,
+  CommonTaskProps,
+  ErrorFilter,
+  RetryPolicy,
+  SwitchCase,
+  Task,
+} from "./dsl";
 
 // A raw JSON textarea for "set"/"with"/"emit"'s event properties, not a
 // generated form per task type - pragmatic for this slice (every shape is
@@ -35,6 +46,7 @@ const KIND_LABEL: Record<Task["kind"], string> = {
   do: "Do task",
   for: "For task",
   fork: "Fork task",
+  try: "Try task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -104,6 +116,157 @@ function resolveCommonProps(state: AdvancedState): {
   return { props, errors };
 }
 
+function parseMaybeJson(text: string): unknown {
+  if (!text.trim()) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+// "try"'s retry policy is either a plain string naming a "use.retries"
+// entry, or an inline policy - one bundled state (like AdvancedState above)
+// rather than ~10 separate useState calls. `refName` non-empty means "use
+// the reference," ignoring every other field; empty means "build an inline
+// policy from the rest" (or none at all, if every field is also empty).
+type RetryState = {
+  refName: string;
+  delay: string;
+  backoff: RetryPolicy["backoff"];
+  attemptCount: string;
+  attemptDuration: string;
+  totalDuration: string;
+  jitterFrom: string;
+  jitterTo: string;
+  when: string;
+  exceptWhen: string;
+};
+
+function retryStateOf(retry: string | RetryPolicy | undefined): RetryState {
+  if (typeof retry === "string") {
+    return {
+      refName: retry,
+      delay: "",
+      backoff: "constant",
+      attemptCount: "",
+      attemptDuration: "",
+      totalDuration: "",
+      jitterFrom: "",
+      jitterTo: "",
+      when: "",
+      exceptWhen: "",
+    };
+  }
+  return {
+    refName: "",
+    delay: toText(retry?.delay),
+    backoff: retry?.backoff ?? "constant",
+    attemptCount: retry?.attemptCount !== undefined ? String(retry.attemptCount) : "",
+    attemptDuration: toText(retry?.attemptDuration),
+    totalDuration: toText(retry?.totalDuration),
+    jitterFrom: toText(retry?.jitterFrom),
+    jitterTo: toText(retry?.jitterTo),
+    when: retry?.when ?? "",
+    exceptWhen: retry?.exceptWhen ?? "",
+  };
+}
+
+function resolveRetry(state: RetryState): string | RetryPolicy | undefined {
+  if (state.refName.trim()) return state.refName.trim();
+  const hasInlineField =
+    state.delay.trim() ||
+    state.attemptCount.trim() ||
+    state.attemptDuration.trim() ||
+    state.totalDuration.trim() ||
+    state.jitterFrom.trim() ||
+    state.jitterTo.trim() ||
+    state.when.trim() ||
+    state.exceptWhen.trim() ||
+    state.backoff !== "constant";
+  if (!hasInlineField) return undefined;
+  return {
+    delay: parseMaybeJson(state.delay),
+    backoff: state.backoff,
+    attemptCount: state.attemptCount.trim() ? Number(state.attemptCount) : undefined,
+    attemptDuration: parseMaybeJson(state.attemptDuration),
+    totalDuration: parseMaybeJson(state.totalDuration),
+    jitterFrom: parseMaybeJson(state.jitterFrom),
+    jitterTo: parseMaybeJson(state.jitterTo),
+    when: state.when.trim() || undefined,
+    exceptWhen: state.exceptWhen.trim() || undefined,
+  };
+}
+
+// The rest of "try"'s catch clause, bundled the same way. "errorsText" and
+// "doText" are raw JSON (an error filter and a recovery task list
+// respectively) - the same pragmatic default as "set"/"with" elsewhere in
+// this file, and (for "doText") a deliberate v1 simplification: catch.do
+// is a second nested task list "try" carries, and building real dual
+// canvas drill-down for it (path segments disambiguating a task's try
+// block from its catch block) is out of scope here - see CatchClause's own
+// comment in dsl.ts.
+type CatchState = {
+  errorsText: string;
+  as: string;
+  when: string;
+  exceptWhen: string;
+  then: string;
+  retry: RetryState;
+  doText: string;
+};
+
+function catchStateOf(task: Task): CatchState {
+  const catchClause: CatchClause =
+    task.kind === "try" ? task.catchClause : { children: [] };
+  return {
+    errorsText: catchClause.errors
+      ? JSON.stringify(catchClause.errors, null, 2)
+      : "",
+    as: catchClause.as ?? "",
+    when: catchClause.when ?? "",
+    exceptWhen: catchClause.exceptWhen ?? "",
+    then: catchClause.then ?? "",
+    retry: retryStateOf(catchClause.retry),
+    doText: JSON.stringify(catchClause.children, null, 2),
+  };
+}
+
+function resolveCatchClause(state: CatchState): {
+  catchClause: CatchClause;
+  errors: Partial<Record<"errorsText" | "doText", string>>;
+} {
+  const errors: Partial<Record<"errorsText" | "doText", string>> = {};
+  let errorFilter: ErrorFilter | undefined;
+  if (state.errorsText.trim()) {
+    try {
+      errorFilter = JSON.parse(state.errorsText) as ErrorFilter;
+    } catch (error) {
+      errors.errorsText = error instanceof Error ? error.message : String(error);
+    }
+  }
+  let children: Task[] = [];
+  if (state.doText.trim()) {
+    try {
+      children = JSON.parse(state.doText) as Task[];
+    } catch (error) {
+      errors.doText = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return {
+    catchClause: {
+      errors: errorFilter,
+      as: state.as.trim() || undefined,
+      when: state.when.trim() || undefined,
+      exceptWhen: state.exceptWhen.trim() || undefined,
+      retry: resolveRetry(state.retry),
+      then: state.then.trim() || undefined,
+      children,
+    },
+    errors,
+  };
+}
+
 export function TaskInspector({
   task,
   onChange,
@@ -157,6 +320,12 @@ export function TaskInspector({
   const [forkCompete, setForkCompete] = useState(
     task.kind === "fork" ? task.compete : false,
   );
+  const [catchState, setCatchState] = useState<CatchState>(() =>
+    catchStateOf(task),
+  );
+  const [catchErrors, setCatchErrors] = useState<
+    Partial<Record<"errorsText" | "doText", string>>
+  >({});
   const [advanced, setAdvanced] = useState<AdvancedState>(() =>
     advancedStateOf(task),
   );
@@ -181,9 +350,22 @@ export function TaskInspector({
     setForIndexVariable(task.kind === "for" ? (task.indexVariable ?? "") : "");
     setForWhile(task.kind === "for" ? (task.whileCondition ?? "") : "");
     setForkCompete(task.kind === "fork" ? task.compete : false);
+    setCatchState(catchStateOf(task));
+    setCatchErrors({});
     setAdvanced(advancedStateOf(task));
     setAdvancedErrors({});
   }, [task]);
+
+  function setCatchField<K extends keyof CatchState>(field: K, value: CatchState[K]) {
+    setCatchState((current) => ({ ...current, [field]: value }));
+  }
+
+  function setRetryField<K extends keyof RetryState>(field: K, value: RetryState[K]) {
+    setCatchState((current) => ({
+      ...current,
+      retry: { ...current.retry, [field]: value },
+    }));
+  }
 
   function setAdvancedField(field: keyof AdvancedState, value: string) {
     setAdvanced((current) => ({ ...current, [field]: value }));
@@ -265,6 +447,24 @@ export function TaskInspector({
         name: resolvedName,
         compete: next.forkCompete ?? forkCompete,
         children: task.children,
+        ...commonProps,
+      });
+      return;
+    }
+    if (task.kind === "try") {
+      // "children" (the try block) is edited by drilling into this task on
+      // canvas, same as every other container kind - only the catch clause
+      // (errors/as/when/exceptWhen/retry/then, plus catch.do as raw JSON)
+      // is edited here.
+      const { catchClause, errors: catchClauseErrors } =
+        resolveCatchClause(catchState);
+      setCatchErrors(catchClauseErrors);
+      if (Object.keys(catchClauseErrors).length > 0) return;
+      onChange({
+        kind: "try",
+        name: resolvedName,
+        children: task.children,
+        catchClause,
         ...commonProps,
       });
       return;
@@ -479,6 +679,170 @@ export function TaskInspector({
               />
             }
             label="Compete (first branch to finish wins, others are cancelled)"
+          />
+        </Box>
+      )}
+      {task.kind === "try" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Double-click this task on canvas to edit its try block.
+          </Typography>
+          <TextField
+            label="Catch: errors filter (JSON, optional)"
+            multiline
+            minRows={2}
+            size="small"
+            placeholder={'{ "status": 503 }'}
+            value={catchState.errorsText}
+            error={Boolean(catchErrors.errorsText)}
+            helperText={catchErrors.errorsText}
+            onChange={(event) => setCatchField("errorsText", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label='Catch: bind error to variable (default "error")'
+            size="small"
+            value={catchState.as}
+            onChange={(event) => setCatchField("as", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Catch: when (optional)"
+            size="small"
+            value={catchState.when}
+            onChange={(event) => setCatchField("when", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Catch: except when (optional)"
+            size="small"
+            value={catchState.exceptWhen}
+            onChange={(event) => setCatchField("exceptWhen", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Catch: then (optional)"
+            size="small"
+            placeholder="another task's name, or exit"
+            value={catchState.then}
+            onChange={(event) => setCatchField("then", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <Typography variant="caption" color="text.secondary">
+            Retry policy (optional)
+          </Typography>
+          <TextField
+            label="Retry: named policy from use.retries"
+            size="small"
+            placeholder="leave blank for an inline policy below"
+            value={catchState.retry.refName}
+            onChange={(event) => setRetryField("refName", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          {!catchState.retry.refName.trim() && (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 1.5,
+                pl: 1.5,
+                borderLeft: 2,
+                borderColor: "divider",
+              }}
+            >
+              <TextField
+                label="Retry: delay"
+                size="small"
+                placeholder='PT1S, or {"seconds": 3}'
+                value={catchState.retry.delay}
+                onChange={(event) => setRetryField("delay", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <FormControl size="small">
+                <InputLabel id="retry-backoff-label">Backoff</InputLabel>
+                <Select
+                  labelId="retry-backoff-label"
+                  label="Backoff"
+                  value={catchState.retry.backoff}
+                  onChange={(event) =>
+                    setRetryField(
+                      "backoff",
+                      event.target.value as RetryState["backoff"],
+                    )
+                  }
+                  onClose={() => commit({})}
+                >
+                  <MenuItem value="constant">Constant</MenuItem>
+                  <MenuItem value="linear">Linear</MenuItem>
+                  <MenuItem value="exponential">Exponential</MenuItem>
+                </Select>
+              </FormControl>
+              <TextField
+                label="Retry: attempt count"
+                size="small"
+                type="number"
+                value={catchState.retry.attemptCount}
+                onChange={(event) => setRetryField("attemptCount", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Retry: attempt duration"
+                size="small"
+                value={catchState.retry.attemptDuration}
+                onChange={(event) =>
+                  setRetryField("attemptDuration", event.target.value)
+                }
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Retry: total duration"
+                size="small"
+                value={catchState.retry.totalDuration}
+                onChange={(event) =>
+                  setRetryField("totalDuration", event.target.value)
+                }
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Retry: jitter from"
+                size="small"
+                value={catchState.retry.jitterFrom}
+                onChange={(event) => setRetryField("jitterFrom", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Retry: jitter to"
+                size="small"
+                value={catchState.retry.jitterTo}
+                onChange={(event) => setRetryField("jitterTo", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Retry: when"
+                size="small"
+                value={catchState.retry.when}
+                onChange={(event) => setRetryField("when", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Retry: except when"
+                size="small"
+                value={catchState.retry.exceptWhen}
+                onChange={(event) => setRetryField("exceptWhen", event.target.value)}
+                onBlur={() => commit({})}
+              />
+            </Box>
+          )}
+          <TextField
+            label="Catch: recovery tasks (JSON, catch.do)"
+            multiline
+            minRows={4}
+            size="small"
+            value={catchState.doText}
+            error={Boolean(catchErrors.doText)}
+            helperText={catchErrors.doText}
+            onChange={(event) => setCatchField("doText", event.target.value)}
+            onBlur={() => commit({})}
           />
         </Box>
       )}

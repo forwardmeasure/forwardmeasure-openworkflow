@@ -29,7 +29,8 @@ export type TaskType =
   | "emit"
   | "do"
   | "for"
-  | "fork";
+  | "fork"
+  | "try";
 
 // All optional: a task with none of these set is the common case, and
 // omitting an unset property from the serialized YAML (rather than writing
@@ -147,6 +148,69 @@ export type ForkTask = CommonTaskProps & {
   children: Task[];
 };
 
+// A Problem Details filter - unlike RaiseError, every field here is
+// optional (an unset field matches any value on the actual error).
+export type ErrorFilter = {
+  type?: string;
+  status?: number;
+  instance?: string;
+  title?: string;
+  detail?: string;
+};
+
+// "delay"/"attemptDuration"/"totalDuration"/"jitterFrom"/"jitterTo" stay
+// opaque (string or parsed JSON), same treatment as CommonTaskProps.timeout
+// and WaitTask.wait - real values are almost always a plain ISO-8601
+// duration string ("delay: {seconds: 3}" is the one fixture-confirmed
+// object shape), and this survives whichever shape shows up without this
+// canvas needing to model every duration variant the spec allows.
+export type RetryPolicy = {
+  delay?: unknown;
+  backoff: "constant" | "linear" | "exponential";
+  attemptCount?: number;
+  attemptDuration?: unknown;
+  totalDuration?: unknown;
+  jitterFrom?: unknown;
+  jitterTo?: unknown;
+  when?: string;
+  exceptWhen?: string;
+};
+
+export type CatchClause = {
+  errors?: ErrorFilter;
+  // Defaults to "error" server-side when omitted - kept undefined here
+  // rather than writing that default in, so an untouched catch clause
+  // round-trips without inventing a field the user never set.
+  as?: string;
+  when?: string;
+  exceptWhen?: string;
+  // Either a plain string naming a policy in "use.retries", or an inline
+  // policy object.
+  retry?: string | RetryPolicy;
+  then?: string;
+  // catch.do's recovery tasks - edited as raw JSON in the Inspector, NOT a
+  // second canvas drill-down target the way "try"'s own block is. Doing
+  // real dual drill-down would mean path segments needing to disambiguate
+  // "task X's try block" from "task X's catch block", touching
+  // tasksAtPath/setChildrenAtPath/the breadcrumb for every container kind,
+  // not just try - deliberately out of scope here. Still parsed into real
+  // Task[] (taskListFromYamlEntries), so nothing about it is opaque, only
+  // how it's edited.
+  children: Task[];
+};
+
+// The fourth container kind, and the only one with two task lists: its own
+// "try:" block (children below, drillable exactly like do/for/fork) plus a
+// "catch:" clause describing what to do if that block raises - which error
+// to catch (errors), what variable to bind it to (as), optional retry
+// policy, and its own recovery tasks (catchClause.children, see above).
+export type TryTask = CommonTaskProps & {
+  kind: "try";
+  name: string;
+  children: Task[];
+  catchClause: CatchClause;
+};
+
 export type Task =
   | SetTask
   | CallTask
@@ -156,7 +220,8 @@ export type Task =
   | EmitTask
   | DoTask
   | ForTask
-  | ForkTask;
+  | ForkTask
+  | TryTask;
 
 export type TaskGraph = {
   tasks: Task[];
@@ -190,6 +255,63 @@ function commonPropsFromYamlEntry(body: Record<string, unknown>): CommonTaskProp
   if ("timeout" in body) props.timeout = body.timeout;
   if ("metadata" in body) props.metadata = body.metadata;
   return props;
+}
+
+function errorFilterFromYamlBody(
+  errorsBody: Record<string, unknown> | undefined,
+): ErrorFilter | undefined {
+  const withBody = errorsBody?.with as Record<string, unknown> | undefined;
+  if (!withBody) return undefined;
+  return {
+    type: typeof withBody.type === "string" ? withBody.type : undefined,
+    status: typeof withBody.status === "number" ? withBody.status : undefined,
+    instance: typeof withBody.instance === "string" ? withBody.instance : undefined,
+    title: typeof withBody.title === "string" ? withBody.title : undefined,
+    detail: typeof withBody.detail === "string" ? withBody.detail : undefined,
+  };
+}
+
+function retryFromYamlValue(
+  rawRetry: unknown,
+): string | RetryPolicy | undefined {
+  if (typeof rawRetry === "string") return rawRetry;
+  if (!rawRetry || typeof rawRetry !== "object") return undefined;
+  const retryBody = rawRetry as Record<string, unknown>;
+  const backoffBody = (retryBody.backoff ?? {}) as Record<string, unknown>;
+  const limitBody = (retryBody.limit ?? {}) as Record<string, unknown>;
+  const attemptBody = (limitBody.attempt ?? {}) as Record<string, unknown>;
+  const jitterBody = (retryBody.jitter ?? {}) as Record<string, unknown>;
+  return {
+    delay: retryBody.delay,
+    backoff:
+      "linear" in backoffBody
+        ? "linear"
+        : "exponential" in backoffBody
+          ? "exponential"
+          : "constant",
+    attemptCount: typeof attemptBody.count === "number" ? attemptBody.count : undefined,
+    attemptDuration: attemptBody.duration,
+    totalDuration: limitBody.duration,
+    jitterFrom: jitterBody.from,
+    jitterTo: jitterBody.to,
+    when: typeof retryBody.when === "string" ? retryBody.when : undefined,
+    exceptWhen: typeof retryBody.exceptWhen === "string" ? retryBody.exceptWhen : undefined,
+  };
+}
+
+function catchClauseFromYamlBody(catchBody: Record<string, unknown>): CatchClause {
+  const rawCatchDo = Array.isArray(catchBody.do) ? catchBody.do : [];
+  return {
+    errors: errorFilterFromYamlBody(catchBody.errors as Record<string, unknown> | undefined),
+    as: typeof catchBody.as === "string" ? catchBody.as : undefined,
+    when: typeof catchBody.when === "string" ? catchBody.when : undefined,
+    exceptWhen: typeof catchBody.exceptWhen === "string" ? catchBody.exceptWhen : undefined,
+    retry: retryFromYamlValue(catchBody.retry),
+    then: typeof catchBody.then === "string" ? catchBody.then : undefined,
+    children: taskListFromYamlEntries(
+      rawCatchDo as Array<Record<string, unknown>>,
+    ),
+  };
 }
 
 function taskFromYamlEntry(entry: Record<string, unknown>): Task {
@@ -299,6 +421,19 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       ...common,
     };
   }
+  if ("try" in body) {
+    const rawTrySteps = Array.isArray(body.try) ? body.try : [];
+    const catchBody = (body.catch ?? {}) as Record<string, unknown>;
+    return {
+      kind: "try",
+      name,
+      children: taskListFromYamlEntries(
+        rawTrySteps as Array<Record<string, unknown>>,
+      ),
+      catchClause: catchClauseFromYamlBody(catchBody),
+      ...common,
+    };
+  }
   if ("do" in body) {
     const rawChildren = Array.isArray(body.do) ? body.do : [];
     return {
@@ -325,8 +460,8 @@ export class UnsupportedTaskError extends Error {
     super(
       `Task "${taskName}" uses a construct the canvas doesn't support yet ` +
         `(only "set", "call", "switch", "raise", "wait", "emit", "do", ` +
-        `"for", and "fork" tasks are editable here) - edit it in Source ` +
-        `view instead.`,
+        `"for", "fork", and "try" tasks are editable here) - edit it in ` +
+        `Source view instead.`,
     );
   }
 }
@@ -412,9 +547,69 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
     if (task.compete) forkObj.compete = true;
     return { [task.name]: { ...common, fork: forkObj } };
   }
+  if (task.kind === "try") {
+    return {
+      [task.name]: {
+        ...common,
+        try: taskListToYamlEntries(task.children),
+        catch: catchClauseToYamlBody(task.catchClause),
+      },
+    };
+  }
   return {
     [task.name]: { ...common, do: taskListToYamlEntries(task.children) },
   };
+}
+
+function errorFilterToYamlBody(errors: ErrorFilter): Record<string, unknown> | undefined {
+  const withObj: Record<string, unknown> = {};
+  if (errors.type !== undefined) withObj.type = errors.type;
+  if (errors.status !== undefined) withObj.status = errors.status;
+  if (errors.instance !== undefined) withObj.instance = errors.instance;
+  if (errors.title !== undefined) withObj.title = errors.title;
+  if (errors.detail !== undefined) withObj.detail = errors.detail;
+  return Object.keys(withObj).length > 0 ? { with: withObj } : undefined;
+}
+
+function retryToYamlValue(retry: string | RetryPolicy): unknown {
+  if (typeof retry === "string") return retry;
+  const retryObj: Record<string, unknown> = {};
+  if (retry.delay !== undefined) retryObj.delay = retry.delay;
+  // "constant" is the server-side default when backoff is omitted entirely.
+  if (retry.backoff !== "constant") retryObj.backoff = { [retry.backoff]: {} };
+  const limit: Record<string, unknown> = {};
+  if (retry.attemptCount !== undefined || retry.attemptDuration !== undefined) {
+    const attempt: Record<string, unknown> = {};
+    if (retry.attemptCount !== undefined) attempt.count = retry.attemptCount;
+    if (retry.attemptDuration !== undefined) attempt.duration = retry.attemptDuration;
+    limit.attempt = attempt;
+  }
+  if (retry.totalDuration !== undefined) limit.duration = retry.totalDuration;
+  if (Object.keys(limit).length > 0) retryObj.limit = limit;
+  if (retry.jitterFrom !== undefined || retry.jitterTo !== undefined) {
+    const jitter: Record<string, unknown> = {};
+    if (retry.jitterFrom !== undefined) jitter.from = retry.jitterFrom;
+    if (retry.jitterTo !== undefined) jitter.to = retry.jitterTo;
+    retryObj.jitter = jitter;
+  }
+  if (retry.when !== undefined) retryObj.when = retry.when;
+  if (retry.exceptWhen !== undefined) retryObj.exceptWhen = retry.exceptWhen;
+  return retryObj;
+}
+
+function catchClauseToYamlBody(catchClause: CatchClause): Record<string, unknown> {
+  const catchObj: Record<string, unknown> = {};
+  const errorsYaml = catchClause.errors && errorFilterToYamlBody(catchClause.errors);
+  if (errorsYaml) catchObj.errors = errorsYaml;
+  if (catchClause.as !== undefined) catchObj.as = catchClause.as;
+  if (catchClause.when !== undefined) catchObj.when = catchClause.when;
+  if (catchClause.exceptWhen !== undefined) catchObj.exceptWhen = catchClause.exceptWhen;
+  if (catchClause.retry !== undefined) {
+    catchObj.retry = retryToYamlValue(catchClause.retry);
+  }
+  if (catchClause.then !== undefined) catchObj.then = catchClause.then;
+  catchObj.do = taskListToYamlEntries(catchClause.children);
+  return catchObj;
 }
 
 // Shared by toYaml (the top-level "do:" list) and taskToYamlEntry's own
@@ -452,6 +647,9 @@ export function emptyTask(kind: TaskType, name: string): Task {
   }
   if (kind === "fork") {
     return { kind: "fork", name, compete: false, children: [] };
+  }
+  if (kind === "try") {
+    return { kind: "try", name, children: [], catchClause: { children: [] } };
   }
   return { kind: "do", name, children: [] };
 }
