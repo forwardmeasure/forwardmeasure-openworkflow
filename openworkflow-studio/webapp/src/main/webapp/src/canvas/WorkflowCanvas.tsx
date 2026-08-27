@@ -3,6 +3,7 @@ import {
   applyNodeChanges,
   Background,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
@@ -12,14 +13,18 @@ import {
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
+import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useTheme } from "@mui/material/styles";
 import { AnchorNode, type AnchorNodeData } from "./AnchorNode";
 import { NodePalette, PALETTE_DRAG_MIME } from "./NodePalette";
+import { StickyNoteNode, type StickyNoteData } from "./StickyNoteNode";
 import { CATEGORY_COLOR, KIND_CATEGORY } from "./taskKindMeta";
 import { TaskInspector } from "./TaskInspector";
 import { TaskNode, type TaskNodeData } from "./TaskNode";
@@ -33,7 +38,8 @@ import {
   type Task,
 } from "./dsl";
 
-const NODE_TYPES = { task: TaskNode, anchor: AnchorNode };
+const NODE_TYPES = { task: TaskNode, anchor: AnchorNode, sticky: StickyNoteNode };
+type CanvasNodeData = TaskNodeData | AnchorNodeData | StickyNoteData;
 const COLUMN_WIDTH = 260;
 const ROW_HEIGHT = 130;
 // Sentinel ids for the Start/End anchors - unlikely enough not to collide
@@ -218,7 +224,7 @@ export function WorkflowCanvas({
   // only placing genuinely new nodes algorithmically. Position is lost if
   // this component unmounts (e.g. switching to Source view and back) -
   // known first-slice limitation, not a persisted layout.
-  const [nodes, setNodes] = useState<Node<TaskNodeData | AnchorNodeData>[]>(
+  const [nodes, setNodes] = useState<Node<CanvasNodeData>[]>(
     () => layout(tasksInView).nodes,
   );
   const [edges, setEdges] = useState<Edge[]>(() => layout(tasksInView).edges);
@@ -232,14 +238,19 @@ export function WorkflowCanvas({
     { name: string; position: { x: number; y: number } } | undefined
   >(undefined);
   const reactFlowInstanceRef = useRef<
-    ReactFlowInstance<Node<TaskNodeData | AnchorNodeData>, Edge> | undefined
+    ReactFlowInstance<Node<CanvasNodeData>, Edge> | undefined
   >(undefined);
 
   useEffect(() => {
     const computed = layout(tasksInView);
     setNodes((current) => {
       const existingById = new Map(current.map((node) => [node.id, node]));
-      return computed.nodes.map((node) => {
+      // Sticky notes are pure canvas-layer annotations layout() knows
+      // nothing about (see StickyNoteNode.tsx) - carried forward as-is
+      // across every resync rather than being wiped out by
+      // computed.nodes, which only ever contains task/anchor nodes.
+      const stickyNodes = current.filter((node) => node.type === "sticky");
+      const taskAndAnchorNodes = computed.nodes.map((node) => {
         const pending = pendingPositionRef.current;
         if (pending && node.id === pending.name) {
           pendingPositionRef.current = undefined;
@@ -248,6 +259,7 @@ export function WorkflowCanvas({
         const existing = existingById.get(node.id);
         return existing ? { ...node, position: existing.position } : node;
       });
+      return [...taskAndAnchorNodes, ...stickyNodes];
     });
     setEdges(computed.edges);
     // Deliberately keyed only on tasksInView, not on nodes/setNodes - a
@@ -255,10 +267,38 @@ export function WorkflowCanvas({
   }, [tasksInView]);
 
   const onNodesChange = useCallback(
-    (changes: NodeChange<Node<TaskNodeData | AnchorNodeData>>[]) =>
+    (changes: NodeChange<Node<CanvasNodeData>>[]) =>
       setNodes((current) => applyNodeChanges(changes, current)),
     [],
   );
+
+  const updateStickyText = useCallback((id: string, text: string) => {
+    setNodes((current) =>
+      current.map((node) =>
+        node.id === id ? { ...node, data: { ...node.data, text } } : node,
+      ),
+    );
+  }, []);
+
+  const deleteSticky = useCallback((id: string) => {
+    setNodes((current) => current.filter((node) => node.id !== id));
+  }, []);
+
+  function addStickyNote() {
+    const position = reactFlowInstanceRef.current
+      ? reactFlowInstanceRef.current.screenToFlowPosition({ x: 320, y: 160 })
+      : { x: 0, y: 0 };
+    const id = `sticky-${Date.now()}`;
+    const data: StickyNoteData = {
+      text: "",
+      onTextChange: updateStickyText,
+      onDelete: deleteSticky,
+    };
+    setNodes((current) => [
+      ...current,
+      { id, type: "sticky", position, data, draggable: true },
+    ]);
+  }
 
   const selectedTask = tasksInView.find((t) => t.name === selectedTaskName);
 
@@ -320,6 +360,24 @@ export function WorkflowCanvas({
     <Box sx={{ display: "flex", height: "100%", minHeight: 480 }}>
       <NodePalette onAddTask={(kind) => addTask(kind)} />
       <Box sx={{ flex: 1, position: "relative" }}>
+        <Tooltip title="Add a sticky note">
+          <IconButton
+            size="small"
+            onClick={addStickyNote}
+            sx={{
+              position: "absolute",
+              top: 8,
+              right: 8,
+              zIndex: 1,
+              bgcolor: "background.paper",
+              border: 1,
+              borderColor: "divider",
+              "&:hover": { bgcolor: "action.hover" },
+            }}
+          >
+            <AddCommentOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         {path.length > 0 && (
           <Breadcrumbs
             sx={{
@@ -393,6 +451,11 @@ export function WorkflowCanvas({
             }}
             fitView
             proOptions={{ hideAttribution: true }}
+            defaultEdgeOptions={{
+              type: "smoothstep",
+              markerEnd: { type: MarkerType.ArrowClosed, color: theme.palette.text.secondary },
+              style: { stroke: theme.palette.text.secondary, strokeWidth: 1.5 },
+            }}
           >
             <Background />
             <Controls />
