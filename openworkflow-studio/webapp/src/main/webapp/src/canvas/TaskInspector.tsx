@@ -31,6 +31,7 @@ const KIND_LABEL: Record<Task["kind"], string> = {
   wait: "Wait task",
   emit: "Emit task",
   do: "Do task",
+  for: "For task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -138,6 +139,18 @@ export function TaskInspector({
   const [waitText, setWaitText] = useState(() =>
     task.kind === "wait" ? toText(task.wait) : "",
   );
+  const [forItemVariable, setForItemVariable] = useState(
+    task.kind === "for" ? task.itemVariable : "",
+  );
+  const [forCollection, setForCollection] = useState(
+    task.kind === "for" ? task.collection : "",
+  );
+  const [forIndexVariable, setForIndexVariable] = useState(
+    task.kind === "for" ? (task.indexVariable ?? "") : "",
+  );
+  const [forWhile, setForWhile] = useState(
+    task.kind === "for" ? (task.whileCondition ?? "") : "",
+  );
   const [advanced, setAdvanced] = useState<AdvancedState>(() =>
     advancedStateOf(task),
   );
@@ -157,6 +170,10 @@ export function TaskInspector({
     setRaiseInstance(task.kind === "raise" ? (task.error.instance ?? "") : "");
     setRaiseDetail(task.kind === "raise" ? (task.error.detail ?? "") : "");
     setWaitText(task.kind === "wait" ? toText(task.wait) : "");
+    setForItemVariable(task.kind === "for" ? task.itemVariable : "");
+    setForCollection(task.kind === "for" ? task.collection : "");
+    setForIndexVariable(task.kind === "for" ? (task.indexVariable ?? "") : "");
+    setForWhile(task.kind === "for" ? (task.whileCondition ?? "") : "");
     setAdvanced(advancedStateOf(task));
     setAdvancedErrors({});
   }, [task]);
@@ -206,6 +223,19 @@ export function TaskInspector({
       onChange({
         kind: "do",
         name: resolvedName,
+        children: task.children,
+        ...commonProps,
+      });
+      return;
+    }
+    if (task.kind === "for") {
+      onChange({
+        kind: "for",
+        name: resolvedName,
+        itemVariable: forItemVariable || "item",
+        collection: forCollection,
+        indexVariable: forIndexVariable.trim() || undefined,
+        whileCondition: forWhile.trim() || undefined,
         children: task.children,
         ...commonProps,
       });
@@ -362,6 +392,45 @@ export function TaskInspector({
           onChange={(event) => setWaitText(event.target.value)}
           onBlur={() => commit({})}
         />
+      )}
+      {task.kind === "for" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Double-click this task on canvas to edit its loop body.
+          </Typography>
+          <TextField
+            label="Item variable"
+            size="small"
+            placeholder="item"
+            value={forItemVariable}
+            onChange={(event) => setForItemVariable(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Collection (expression)"
+            size="small"
+            placeholder="${ .items }"
+            value={forCollection}
+            onChange={(event) => setForCollection(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Index variable (optional)"
+            size="small"
+            placeholder="index"
+            value={forIndexVariable}
+            onChange={(event) => setForIndexVariable(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="While condition (optional)"
+            size="small"
+            placeholder="${ .continue }"
+            value={forWhile}
+            onChange={(event) => setForWhile(event.target.value)}
+            onBlur={() => commit({})}
+          />
+        </Box>
       )}
       {task.kind === "switch" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>

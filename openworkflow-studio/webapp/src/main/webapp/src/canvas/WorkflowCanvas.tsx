@@ -329,6 +329,7 @@ export function WorkflowCanvas({
             <MenuItem onClick={() => addTask("wait")}>Wait</MenuItem>
             <MenuItem onClick={() => addTask("emit")}>Emit</MenuItem>
             <MenuItem onClick={() => addTask("do")}>Do (group)</MenuItem>
+            <MenuItem onClick={() => addTask("for")}>For (loop)</MenuItem>
           </Menu>
         </Box>
         {path.length > 0 && (
@@ -376,7 +377,10 @@ export function WorkflowCanvas({
             }
             onNodeDoubleClick={(_event, node) => {
               const task = tasksInView.find((t) => t.name === node.id);
-              if (task?.kind === "do") drillInto(task.name);
+              // Any container kind ("do", "for", ...) drills in - checking
+              // for "children" generically mirrors dsl.ts's own
+              // hasChildren, so a new container kind needs no change here.
+              if (task && "children" in task) drillInto(task.name);
             }}
             onPaneClick={() => setSelectedTaskName(undefined)}
             fitView

@@ -27,7 +27,8 @@ export type TaskType =
   | "raise"
   | "wait"
   | "emit"
-  | "do";
+  | "do"
+  | "for";
 
 // All optional: a task with none of these set is the common case, and
 // omitting an unset property from the serialized YAML (rather than writing
@@ -115,6 +116,22 @@ export type DoTask = CommonTaskProps & {
   children: Task[];
 };
 
+// The second container kind: iterates "collection" (an expression yielding
+// an array), binding each element to "itemVariable" (and, optionally, its
+// index to "indexVariable") for one run of "children" per element. Spec
+// field names are "each"/"in"/"at" (see taskFromYamlEntry/taskToYamlEntry
+// below) - named itemVariable/collection/indexVariable here instead so the
+// Inspector's field labels aren't cryptic single letters.
+export type ForTask = CommonTaskProps & {
+  kind: "for";
+  name: string;
+  itemVariable: string;
+  collection: string;
+  indexVariable?: string;
+  whileCondition?: string;
+  children: Task[];
+};
+
 export type Task =
   | SetTask
   | CallTask
@@ -122,7 +139,8 @@ export type Task =
   | RaiseTask
   | WaitTask
   | EmitTask
-  | DoTask;
+  | DoTask
+  | ForTask;
 
 export type TaskGraph = {
   tasks: Task[];
@@ -234,6 +252,24 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       ...common,
     };
   }
+  // Checked before "do": a "for" task also carries a "do:" key (its loop
+  // body), so testing "do" first would misparse every "for" as a plain "do".
+  if ("for" in body) {
+    const forBody = (body.for ?? {}) as Record<string, unknown>;
+    const rawChildren = Array.isArray(body.do) ? body.do : [];
+    return {
+      kind: "for",
+      name,
+      itemVariable: typeof forBody.each === "string" ? forBody.each : "item",
+      collection: typeof forBody.in === "string" ? forBody.in : "",
+      indexVariable: typeof forBody.at === "string" ? forBody.at : undefined,
+      whileCondition: typeof body.while === "string" ? body.while : undefined,
+      children: taskListFromYamlEntries(
+        rawChildren as Array<Record<string, unknown>>,
+      ),
+      ...common,
+    };
+  }
   if ("do" in body) {
     const rawChildren = Array.isArray(body.do) ? body.do : [];
     return {
@@ -259,8 +295,8 @@ export class UnsupportedTaskError extends Error {
   constructor(public readonly taskName: string) {
     super(
       `Task "${taskName}" uses a construct the canvas doesn't support yet ` +
-        `(only "set", "call", "switch", "raise", "wait", "emit", and "do" ` +
-        `tasks are editable here) - edit it in Source view instead.`,
+        `(only "set", "call", "switch", "raise", "wait", "emit", "do", and ` +
+        `"for" tasks are editable here) - edit it in Source view instead.`,
     );
   }
 }
@@ -328,6 +364,17 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
       [task.name]: { ...common, emit: { event: { with: task.with } } },
     };
   }
+  if (task.kind === "for") {
+    const forObj: Record<string, unknown> = {
+      each: task.itemVariable,
+      in: task.collection,
+    };
+    if (task.indexVariable !== undefined) forObj.at = task.indexVariable;
+    const entry: Record<string, unknown> = { ...common, for: forObj };
+    if (task.whileCondition !== undefined) entry.while = task.whileCondition;
+    entry.do = taskListToYamlEntries(task.children);
+    return { [task.name]: entry };
+  }
   return {
     [task.name]: { ...common, do: taskListToYamlEntries(task.children) },
   };
@@ -363,7 +410,19 @@ export function emptyTask(kind: TaskType, name: string): Task {
   }
   if (kind === "wait") return { kind: "wait", name, wait: "" };
   if (kind === "emit") return { kind: "emit", name, with: {} };
+  if (kind === "for") {
+    return { kind: "for", name, itemVariable: "item", collection: "", children: [] };
+  }
   return { kind: "do", name, children: [] };
+}
+
+// Every container kind ("do", "for", and eventually "fork"/"try") has a
+// "children: Task[]" field - checking for that field generically, rather
+// than listing kinds by name, is what lets tasksAtPath/setChildrenAtPath
+// below (and WorkflowCanvas.tsx's drill-in) support a new container kind
+// with no changes here when one lands.
+function hasChildren(task: Task): task is Task & { children: Task[] } {
+  return "children" in task;
 }
 
 /**
@@ -379,7 +438,7 @@ export function tasksAtPath(tasks: Task[], path: string[]): Task[] {
   if (path.length === 0) return tasks;
   const [head, ...rest] = path;
   const container = tasks.find((task) => task.name === head);
-  if (!container || container.kind !== "do") return [];
+  if (!container || !hasChildren(container)) return [];
   return tasksAtPath(container.children, rest);
 }
 
@@ -398,7 +457,7 @@ export function setChildrenAtPath(
   if (path.length === 0) return next;
   const [head, ...rest] = path;
   return tasks.map((task) => {
-    if (task.name !== head || task.kind !== "do") return task;
+    if (task.name !== head || !hasChildren(task)) return task;
     return { ...task, children: setChildrenAtPath(task.children, rest, next) };
   });
 }

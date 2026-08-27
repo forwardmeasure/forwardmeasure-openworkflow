@@ -6,6 +6,7 @@ import CallMadeIcon from "@mui/icons-material/CallMade";
 import CampaignIcon from "@mui/icons-material/Campaign";
 import EditNoteIcon from "@mui/icons-material/EditNote";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import LoopIcon from "@mui/icons-material/Loop";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -29,6 +30,7 @@ const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
   wait: HourglassEmptyIcon,
   emit: CampaignIcon,
   do: AccountTreeIcon,
+  for: LoopIcon,
 };
 
 export function TaskNode({
@@ -105,6 +107,13 @@ export function TaskNode({
           <Typography variant="caption" color="text.secondary" noWrap>
             {task.children.length} task{task.children.length === 1 ? "" : "s"}{" "}
             inside — double-click to open
+          </Typography>
+        )}
+        {task.kind === "for" && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.itemVariable} in {task.collection || "…"} ·{" "}
+            {task.children.length} task{task.children.length === 1 ? "" : "s"}{" "}
+            — double-click to open
           </Typography>
         )}
       </CardContent>

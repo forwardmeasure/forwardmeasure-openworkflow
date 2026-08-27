@@ -347,9 +347,80 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     ]);
   });
 
-  it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
+  it("parses a for task's loop fields and its nested loop body", () => {
+    const source = [
+      "do:",
+      "  - retry:",
+      "      for:",
+      "        each: pet",
+      "        in: ${ .pets }",
+      "        at: index",
+      "      while: ${ .continue }",
+      "      do:",
+      "        - notify:",
+      "            set:",
+      "              message: hi",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "for",
+        name: "retry",
+        itemVariable: "pet",
+        collection: "${ .pets }",
+        indexVariable: "index",
+        whileCondition: "${ .continue }",
+        children: [{ kind: "set", name: "notify", set: { message: "hi" } }],
+      },
+    ]);
+  });
+
+  it("parses a for task with no loop body as an empty children list", () => {
     const source =
       "do:\n  - retry:\n      for:\n        each: item\n        in: ${ .items }\n";
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "for",
+        name: "retry",
+        itemVariable: "item",
+        collection: "${ .items }",
+        indexVariable: undefined,
+        whileCondition: undefined,
+        children: [],
+      },
+    ]);
+  });
+
+  it("round-trips a for task, omitting unset optional fields", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "for",
+          name: "retry",
+          itemVariable: "pet",
+          collection: "${ .pets }",
+          children: [{ kind: "set", name: "notify", set: { message: "hi" } }],
+        },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "for",
+        name: "retry",
+        itemVariable: "pet",
+        collection: "${ .pets }",
+        indexVariable: undefined,
+        whileCondition: undefined,
+        children: [{ kind: "set", name: "notify", set: { message: "hi" } }],
+      },
+    ]);
+    expect(rewritten).not.toContain("at:");
+    expect(rewritten).not.toContain("while:");
+  });
+
+  it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
+    const source =
+      "do:\n  - branch:\n      fork:\n        branches: []\n";
     expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
   });
 });
