@@ -18,7 +18,7 @@ keycloak:
   url: http://keycloak:8080
   realm: openworkflow
   clientUuid: 00000000-0000-0000-0000-000000000001
-  clientId: forwardmeasure-openworkflow
+  clientId: openworkflow
   tenantAlias: tenant-a
   testPassword: openworkflow-k2
 credentialsSecretName: openworkflow-foundation

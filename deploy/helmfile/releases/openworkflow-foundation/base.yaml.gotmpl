@@ -22,8 +22,31 @@ keycloak:
   realm: {{ .Values.keycloakRealm }}
   sharedClientId: {{ .Values.keycloakSharedClientId }}
 identityCredentialsSecretName: {{ .Values.identityCredentialsSecretName | quote }}
+# Chart defaults (values.yaml) are all true - the local/ci/kind fixture
+# profile, which has no other Postgres/Cassandra/Redpanda in the cluster.
+# Real environments (e.g. gcp-openworkflow-prod) override each to false -
+# they use their own real managed infra, wired up separately - while still
+# installing this release for its tenant-reconciliation Job.
+postgresql:
+  enabled: {{ dig "postgresql" "enabled" true .Values }}
+cassandra:
+  enabled: {{ dig "cassandra" "enabled" true .Values }}
+redpanda:
+  enabled: {{ dig "redpanda" "enabled" true .Values }}
 capabilityPacks:
 {{ toYaml .Values.capabilityPacks | indent 2 }}
+{{- /*
+Real environments (e.g. gcp-openworkflow-prod) override .Values.tenants
+directly with their actual tenant(s) - tenantAId/tenantBId's hardcoded
+"tenant-a"/"tenant-b" aliases only fit the local/ci/kind fixture pair, not
+a real tenant whose alias must match its actual hostname (e.g. "lux" for
+lux.kriyagentic.com). Falls back to the fixture pair when .Values.tenants
+is unset, so kind/ci/local/development are unaffected.
+*/}}
+{{- if .Values.tenants }}
+tenants:
+{{ toYaml .Values.tenants | indent 2 }}
+{{- else }}
 tenants:
   - id: {{ .Values.tenantAId }}
     alias: tenant-a
@@ -31,6 +54,7 @@ tenants:
   - id: {{ .Values.tenantBId }}
     alias: tenant-b
     displayName: Tenant B
+{{- end }}
 jobs:
   tenantReconciliation:
     enabled: {{ dig "tenantReconciliation" "enabled" true .Values }}

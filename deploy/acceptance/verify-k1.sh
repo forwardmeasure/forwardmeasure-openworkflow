@@ -76,7 +76,7 @@ test "$actual_schemas" = "$expected_schemas"
 
 printf 'Verifying AuthZEN cross-tenant denial...\n'
 client_token=$(curl -fsS -X POST "${keycloak_url}/realms/openworkflow/protocol/openid-connect/token" \
-  -d client_id=forwardmeasure-openworkflow -d "client_secret=${client_secret}" \
+  -d client_id=openworkflow -d "client_secret=${client_secret}" \
   -d grant_type=client_credentials | jq -er .access_token)
 organization_a_id=$(jq -er '.[] | select(.alias == "tenant-a") | .id' <<<"$organizations")
 correlation_id=k1-cross-tenant-denial

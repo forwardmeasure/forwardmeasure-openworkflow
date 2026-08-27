@@ -46,8 +46,11 @@ spec:
               exec: {command: ["/bin/sh", "-c", "sleep 5"]}
           env:
             - {name: OPENWORKFLOW_STUDIO_API_UPSTREAM, value: {{ .Values.apiUpstream | quote }} }
-            - {name: OPENWORKFLOW_STUDIO_API_BASE_PATH, value: /api}
+            - {name: OPENWORKFLOW_STUDIO_EXECUTION_API_UPSTREAM, value: {{ .Values.executionApiUpstream | quote }} }
             - {name: OPENWORKFLOW_STUDIO_ENVIRONMENT_NAME, value: {{ .Values.environmentName | quote }} }
+            - {name: OPENWORKFLOW_STUDIO_OIDC_URL, value: {{ .Values.oidcUrl | quote }} }
+            - {name: OPENWORKFLOW_STUDIO_OIDC_REALM, value: {{ .Values.oidcRealm | quote }} }
+            - {name: OPENWORKFLOW_STUDIO_OIDC_CLIENT_ID, value: {{ .Values.oidcClientId | quote }} }
             - {name: OTEL_SERVICE_NAME, value: {{ default (printf "openworkflow-studio-%s" .Values.framework) .Values.telemetry.serviceName | quote }} }
             - {name: OTEL_RESOURCE_ATTRIBUTES, value: {{ .Values.telemetry.resourceAttributes | quote }} }
             - {name: OTEL_EXPORTER_OTLP_PROTOCOL, value: {{ .Values.telemetry.protocol | quote }} }

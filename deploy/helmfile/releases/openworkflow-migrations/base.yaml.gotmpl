@@ -19,9 +19,24 @@ image:
   tag: {{ .Values.imageVersions.migrations.tag | quote }}
   digest: {{ .Values.imageVersions.migrations.digest | quote }}
   pullPolicy: {{ .Values.imagePullPolicy }}
+{{- /*
+Real environments (e.g. gcp-openworkflow-prod) override .Values.tenants
+directly with their actual tenant(s) - tenantAId/tenantBId are only the
+local/ci/kind fixture pair. Mirrors
+releases/openworkflow-foundation/base.yaml.gotmpl's identical fallback so
+this Job provisions Postgres schemas for the SAME tenants foundation
+reconciles in Keycloak, rather than silently migrating only the fixture
+pair's schemas while a real tenant's schema is never created.
+*/}}
 tenantIds:
+{{- if .Values.tenants }}
+{{- range .Values.tenants }}
+  - {{ .id | quote }}
+{{- end }}
+{{- else }}
   - {{ .Values.tenantAId | quote }}
   - {{ .Values.tenantBId | quote }}
+{{- end }}
 database:
   url: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" .Values | quote }}
   # Administrator credential - this Job's PRIMARY connection. Creates/

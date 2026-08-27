@@ -80,8 +80,13 @@ keycloakRealm: forwardmeasure
 keycloakSharedClientId: forwardmeasure-public
 identityCredentialsSecretName: openworkflow-identity-credentials
 keycloak:
-  url: http://keycloak.keycloak.svc.cluster.local:8080
-  issuer: http://keycloak.keycloak.svc.cluster.local:8080/realms/forwardmeasure
+  # keycloak-internal, not keycloak - that's the Service the keycloak chart
+  # actually creates (confirmed live: `kubectl get svc -n keycloak` shows
+  # only keycloak-internal). Same fix as forwardmeasure-platform's
+  # platform-routing release, which had the identical bug and caused a
+  # complete auth outage there.
+  url: http://keycloak-internal.keycloak.svc.cluster.local:8080
+  issuer: http://keycloak-internal.keycloak.svc.cluster.local:8080/realms/forwardmeasure
 tenantAId: 11111111-1111-1111-1111-111111111111
 tenantBId: 22222222-2222-2222-2222-222222222222
 capabilityPacks:

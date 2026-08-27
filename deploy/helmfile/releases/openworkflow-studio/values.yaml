@@ -12,7 +12,11 @@ image:
 # openworkflow-service/values.yaml's identical comment.
 imagePullSecrets: [{name: docker-io-credentials}]
 apiUpstream: http://openworkflow-definition-management-quarkus:8080
+executionApiUpstream: http://openworkflow-execution-management-quarkus:8080
 environmentName: Acceptance
+oidcUrl: http://localhost:8180
+oidcRealm: forwardmeasure
+oidcClientId: forwardmeasure-public
 ingress:
   enabled: false
   className: nginx

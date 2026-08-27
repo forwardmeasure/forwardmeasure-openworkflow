@@ -69,7 +69,7 @@ token() {
   local username=$1
   curl -fsS -H 'Host: keycloak:8080' -X POST \
     "http://127.0.0.1:$keycloak_port/realms/openworkflow/protocol/openid-connect/token" \
-    -d client_id=forwardmeasure-openworkflow -d client_secret=openworkflow-k1-client \
+    -d client_id=openworkflow -d client_secret=openworkflow-k1-client \
     -d "username=$username" -d password=openworkflow-k2 -d grant_type=password \
     --data-urlencode 'scope=openid organization:tenant-a' | jq -er .access_token
 }

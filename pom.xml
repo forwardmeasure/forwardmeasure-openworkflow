@@ -566,6 +566,27 @@
     <build>
         <pluginManagement>
             <plugins>
+                <!--
+                forwardmeasure-platform's own pluginManagement entry for this plugin only
+                pins <version> - it declares docker.skip.push (default "true") but nothing
+                anywhere ever wired that property to the plugin's actual skipPush parameter,
+                so the push goal (bound to the package phase by every fabric8-based leaf pom's
+                own container-image profile, e.g. openworkflow-tenant-provisioning and
+                openworkflow-migrations) always ran unconditionally - unlike the Quarkus-based
+                leaf poms, where quarkus.container-image.push genuinely gates push. This merges
+                skipPush in via pluginManagement (Maven merges into each leaf's own
+                <configuration>, no leaf pom changes needed) so `-Pcontainer-image` alone stays
+                build-only and `-Pcontainer-image -Dcontainer-image.push=true` (which already
+                flips docker.skip.push to "false" via the push-container-image profile below)
+                is what actually pushes - matching the Quarkus path's two-flag behavior.
+                -->
+                <plugin>
+                    <groupId>io.fabric8</groupId>
+                    <artifactId>docker-maven-plugin</artifactId>
+                    <configuration>
+                        <skipPush>${docker.skip.push}</skipPush>
+                    </configuration>
+                </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -762,6 +783,15 @@
             <id>container-image</id>
             <properties>
                 <container-image.build>true</container-image.build>
+                <!--
+                Not strictly required - Quarkus auto-detects the docker builder when
+                quarkus-container-image-docker is the only container-image extension on the
+                classpath (true for every Quarkus-flavored leaf module here) - but forwardmeasure-
+                agents' own (working) POMs set this explicitly, so setting it here too removes any
+                ambiguity if another container-image-* extension is ever added to a leaf's
+                dependencies.
+                -->
+                <quarkus.container-image.builder>docker</quarkus.container-image.builder>
             </properties>
         </profile>
         <profile>

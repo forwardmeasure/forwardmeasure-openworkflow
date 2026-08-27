@@ -24,7 +24,16 @@ identical comment for why.
           digest: {{ index $.Values.imageVersions.studio.digests $framework | quote }}
           pullPolicy: {{ $.Values.imagePullPolicy }}
         apiUpstream: http://openworkflow-definition-management-{{ $framework }}:8080
+        executionApiUpstream: http://openworkflow-execution-management-{{ $framework }}:8080
         environmentName: Kind acceptance
+        # Public-facing OIDC provider details for the browser's own login
+        # redirect - deliberately keycloakDnsName/keycloakSharedClientId,
+        # not keycloak.url/keycloak.issuer above (those are the in-cluster
+        # address the backend uses to validate tokens, unreachable from a
+        # browser).
+        oidcUrl: {{ printf "https://%s" $.Values.keycloakDnsName | quote }}
+        oidcRealm: {{ $.Values.keycloakRealm | quote }}
+        oidcClientId: {{ $.Values.keycloakSharedClientId | quote }}
         replicas: {{ dig "replicas" "studio" 1 $.Values }}
         networkPolicy:
           enabled: {{ dig "hardening" "networkPolicyEnabled" false $.Values }}

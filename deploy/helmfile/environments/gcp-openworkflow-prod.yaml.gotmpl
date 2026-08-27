@@ -63,8 +63,30 @@ credentialsSecretName: openworkflow-identity-credentials
 additionalRuntimeDatabases:
   - keycloak
   - superset
+# Installs openworkflow-foundation for its tenant-reconciliation Job only -
+# postgresql/cassandra/redpanda below stay disabled since this cluster uses
+# its own real managed infra (Cloud SQL, in-cluster Kafka), wired up
+# separately, not these fixture instances.
 foundation:
+  enabled: true
+postgresql:
   enabled: false
+cassandra:
+  enabled: false
+redpanda:
+  enabled: false
+capabilityPacks:
+  - openworkflow
+# lux is this cluster's one real tenant (see bootstrapIdentity/tenants
+# above in the sibling forwardmeasure-platform environment file - same
+# tenant, different identifier scheme: OpenWorkflow's own tenant
+# reconciliation is UUID-keyed, the platform dashboard's is DID-keyed).
+# This UUID is freshly generated and recorded here explicitly, not derived -
+# there was no prior UUID for lux anywhere in either repo to reuse.
+tenants:
+  - id: c0d34a2f-387e-4c89-9b84-75c5bbff9a61
+    alias: lux
+    displayName: Lux Tenant
 securityBootstrap:
   enabled: false
 acceptanceFixtures:
