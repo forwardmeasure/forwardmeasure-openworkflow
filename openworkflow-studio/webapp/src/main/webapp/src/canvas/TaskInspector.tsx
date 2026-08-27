@@ -30,6 +30,7 @@ const KIND_LABEL: Record<Task["kind"], string> = {
   raise: "Raise task",
   wait: "Wait task",
   emit: "Emit task",
+  do: "Do task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -197,6 +198,17 @@ export function TaskInspector({
         // Not JSON - keep it as the plain duration-literal/expression string.
       }
       onChange({ kind: "wait", name: resolvedName, wait: waitValue, ...commonProps });
+      return;
+    }
+    if (task.kind === "do") {
+      // "children" is edited by drilling into this task on canvas, not
+      // here - the Inspector only ever touches name/common props for it.
+      onChange({
+        kind: "do",
+        name: resolvedName,
+        children: task.children,
+        ...commonProps,
+      });
       return;
     }
 

@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import CallMadeIcon from "@mui/icons-material/CallMade";
 import CampaignIcon from "@mui/icons-material/Campaign";
@@ -27,6 +28,7 @@ const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
   raise: ReportProblemIcon,
   wait: HourglassEmptyIcon,
   emit: CampaignIcon,
+  do: AccountTreeIcon,
 };
 
 export function TaskNode({
@@ -97,6 +99,12 @@ export function TaskNode({
         {task.kind === "emit" && (
           <Typography variant="caption" color="text.secondary" noWrap>
             {Object.keys(task.with).length} event {Object.keys(task.with).length === 1 ? "property" : "properties"}
+          </Typography>
+        )}
+        {task.kind === "do" && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.children.length} task{task.children.length === 1 ? "" : "s"}{" "}
+            inside — double-click to open
           </Typography>
         )}
       </CardContent>

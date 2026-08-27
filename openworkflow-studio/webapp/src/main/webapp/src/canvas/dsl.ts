@@ -3,11 +3,14 @@ import { dump, load } from "js-yaml";
 // Task vocabulary: "set" (assign variables), "call" (invoke a
 // function/HTTP/OpenAPI operation), "switch" (branch to a named task by a
 // "when" condition), "raise" (terminate with a Problem-Details error),
-// "wait" (pause for a duration), and "emit" (publish a CloudEvent) are
-// modeled here - the Serverless Workflow DSL (https://serverlessworkflow.io,
-// document.dsl "1.0.x") task kinds that need no nested-children support.
-// "do"/"for"/"fork"/"try"/"listen"/"run" all carry nested task lists and are
-// still out of scope until the canvas has a container/drill-down story.
+// "wait" (pause for a duration), "emit" (publish a CloudEvent), and now
+// "do" (a nested, ordered task group) are modeled here - the Serverless
+// Workflow DSL (https://serverlessworkflow.io, document.dsl "1.0.x") task
+// kinds this canvas covers so far. "do" is the first container kind - its
+// "children" are edited by double-clicking into it on canvas (see
+// WorkflowCanvas.tsx's drill-down), not inline in the Inspector, the same
+// way the top-level "do:" list itself is edited. "for"/"fork"/"try" reuse
+// this same drill-down once they land; "listen"/"run" don't need it at all.
 // "switch" case targets ("then") are always either another task's name
 // elsewhere in this flow, or the literal "exit" - a case omitting "then"
 // relies on the spec's positional-fallthrough default, which this slice
@@ -17,7 +20,14 @@ import { dump, load } from "js-yaml";
 // Every task kind also shares a common set of cross-cutting properties
 // ("if"/"input"/"output"/"export"/"timeout"/"metadata") the spec allows on
 // any task - CommonTaskProps below, spread into each kind-specific type.
-export type TaskType = "set" | "call" | "switch" | "raise" | "wait" | "emit";
+export type TaskType =
+  | "set"
+  | "call"
+  | "switch"
+  | "raise"
+  | "wait"
+  | "emit"
+  | "do";
 
 // All optional: a task with none of these set is the common case, and
 // omitting an unset property from the serialized YAML (rather than writing
@@ -94,13 +104,25 @@ export type EmitTask = CommonTaskProps & {
   with: Record<string, unknown>;
 };
 
+// The first container kind: an ordered, nested task group with no other
+// fields of its own. "children" is the same Task[] shape as the top-level
+// "do:" list, so every helper that walks a task list (fromYaml/toYaml's
+// list helpers below, layout/deriveEdges in WorkflowCanvas.tsx) works on it
+// unchanged - the canvas just needs to know which list is "in view."
+export type DoTask = CommonTaskProps & {
+  kind: "do";
+  name: string;
+  children: Task[];
+};
+
 export type Task =
   | SetTask
   | CallTask
   | SwitchTask
   | RaiseTask
   | WaitTask
-  | EmitTask;
+  | EmitTask
+  | DoTask;
 
 export type TaskGraph = {
   tasks: Task[];
@@ -212,15 +234,33 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       ...common,
     };
   }
+  if ("do" in body) {
+    const rawChildren = Array.isArray(body.do) ? body.do : [];
+    return {
+      kind: "do",
+      name,
+      children: taskListFromYamlEntries(
+        rawChildren as Array<Record<string, unknown>>,
+      ),
+      ...common,
+    };
+  }
   throw new UnsupportedTaskError(name);
+}
+
+// Shared by fromYaml (the top-level "do:" list) and taskFromYamlEntry's own
+// "do" branch (a nested list at the same shape) - a task list is a task
+// list regardless of nesting depth.
+function taskListFromYamlEntries(entries: Array<Record<string, unknown>>): Task[] {
+  return entries.map(taskFromYamlEntry);
 }
 
 export class UnsupportedTaskError extends Error {
   constructor(public readonly taskName: string) {
     super(
       `Task "${taskName}" uses a construct the canvas doesn't support yet ` +
-        `(only "set", "call", "switch", "raise", "wait", and "emit" tasks ` +
-        `are editable here) - edit it in Source view instead.`,
+        `(only "set", "call", "switch", "raise", "wait", "emit", and "do" ` +
+        `tasks are editable here) - edit it in Source view instead.`,
     );
   }
 }
@@ -236,7 +276,7 @@ export class UnsupportedTaskError extends Error {
 export function fromYaml(source: string): TaskGraph {
   const parsed = load(source) as { do?: Array<Record<string, unknown>> };
   const entries = Array.isArray(parsed?.do) ? parsed.do : [];
-  return { tasks: entries.map(taskFromYamlEntry) };
+  return { tasks: taskListFromYamlEntries(entries) };
 }
 
 function commonPropsToYamlEntry(task: CommonTaskProps): Record<string, unknown> {
@@ -283,9 +323,20 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
   if (task.kind === "wait") {
     return { [task.name]: { ...common, wait: task.wait } };
   }
+  if (task.kind === "emit") {
+    return {
+      [task.name]: { ...common, emit: { event: { with: task.with } } },
+    };
+  }
   return {
-    [task.name]: { ...common, emit: { event: { with: task.with } } },
+    [task.name]: { ...common, do: taskListToYamlEntries(task.children) },
   };
+}
+
+// Shared by toYaml (the top-level "do:" list) and taskToYamlEntry's own
+// "do" branch - the reverse of taskListFromYamlEntries above.
+function taskListToYamlEntries(tasks: Task[]): Record<string, unknown>[] {
+  return tasks.map(taskToYamlEntry);
 }
 
 /**
@@ -297,7 +348,7 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
  */
 export function toYaml(source: string, graph: TaskGraph): string {
   const parsed = (load(source) as Record<string, unknown>) ?? {};
-  parsed.do = graph.tasks.map(taskToYamlEntry);
+  parsed.do = taskListToYamlEntries(graph.tasks);
   return dump(parsed, { lineWidth: -1 });
 }
 
@@ -311,7 +362,45 @@ export function emptyTask(kind: TaskType, name: string): Task {
     return { kind: "raise", name, error: { type: "", status: 400, title: "" } };
   }
   if (kind === "wait") return { kind: "wait", name, wait: "" };
-  return { kind: "emit", name, with: {} };
+  if (kind === "emit") return { kind: "emit", name, with: {} };
+  return { kind: "do", name, children: [] };
+}
+
+/**
+ * Walks down a path of container-task names to find "the task list
+ * currently in view" for WorkflowCanvas.tsx's drill-down navigation - an
+ * empty path means the top-level list itself. A path segment that no
+ * longer resolves (the container was renamed/deleted/emptied out from
+ * under an open drill-down) returns [] rather than throwing - the same
+ * "best effort" philosophy layout() already applies to a switch case
+ * pointing at a since-removed task, not a new failure mode.
+ */
+export function tasksAtPath(tasks: Task[], path: string[]): Task[] {
+  if (path.length === 0) return tasks;
+  const [head, ...rest] = path;
+  const container = tasks.find((task) => task.name === head);
+  if (!container || container.kind !== "do") return [];
+  return tasksAtPath(container.children, rest);
+}
+
+/**
+ * The inverse of tasksAtPath: replaces the task list at `path` with `next`,
+ * returning a new root list with every container along the way
+ * shallow-copied (so `path`'s container tasks get new object identity, but
+ * everything outside the path is untouched). Used to write a drilled-down
+ * edit back into the full tree before serializing.
+ */
+export function setChildrenAtPath(
+  tasks: Task[],
+  path: string[],
+  next: Task[],
+): Task[] {
+  if (path.length === 0) return next;
+  const [head, ...rest] = path;
+  return tasks.map((task) => {
+    if (task.name !== head || task.kind !== "do") return task;
+    return { ...task, children: setChildrenAtPath(task.children, rest, next) };
+  });
 }
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license

@@ -12,15 +12,20 @@ import {
 import "@xyflow/react/dist/style.css";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
+import Link from "@mui/material/Link";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Typography from "@mui/material/Typography";
 import { AnchorNode, type AnchorNodeData } from "./AnchorNode";
 import { TaskInspector } from "./TaskInspector";
 import { TaskNode, type TaskNodeData } from "./TaskNode";
 import {
   emptyTask,
   fromYaml,
+  setChildrenAtPath,
+  tasksAtPath,
   toYaml,
   UnsupportedTaskError,
   type Task,
@@ -192,9 +197,19 @@ export function WorkflowCanvas({
 
   const [selectedTaskName, setSelectedTaskName] = useState<string>();
   const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement>();
+  // Breadcrumb of "do" task names drilled into - [] means the top-level
+  // "do:" list itself. Every operation below (add/update/delete/layout)
+  // operates on tasksInView, the task list this path currently resolves to,
+  // not always parsed.tasks - that's what makes drilling into a "do" reuse
+  // this same canvas rather than needing a second component.
+  const [path, setPath] = useState<string[]>([]);
+  const tasksInView = useMemo(
+    () => tasksAtPath(parsed.tasks, path),
+    [parsed.tasks, path],
+  );
 
   // Nodes are local, draggable state, not a value re-derived from
-  // parsed.tasks on every render - that's what lets a manual drag stick.
+  // tasksInView on every render - that's what lets a manual drag stick.
   // layout()'s auto-computed positions only seed a node the first time it
   // appears; the effect below re-syncs on every task-list change but keeps
   // each already-known node's current (possibly hand-dragged) position,
@@ -202,12 +217,12 @@ export function WorkflowCanvas({
   // this component unmounts (e.g. switching to Source view and back) -
   // known first-slice limitation, not a persisted layout.
   const [nodes, setNodes] = useState<Node<TaskNodeData | AnchorNodeData>[]>(
-    () => layout(parsed.tasks).nodes,
+    () => layout(tasksInView).nodes,
   );
-  const [edges, setEdges] = useState<Edge[]>(() => layout(parsed.tasks).edges);
+  const [edges, setEdges] = useState<Edge[]>(() => layout(tasksInView).edges);
 
   useEffect(() => {
-    const computed = layout(parsed.tasks);
+    const computed = layout(tasksInView);
     setNodes((current) => {
       const existingById = new Map(current.map((node) => [node.id, node]));
       return computed.nodes.map((node) => {
@@ -216,9 +231,9 @@ export function WorkflowCanvas({
       });
     });
     setEdges(computed.edges);
-    // Deliberately keyed only on parsed.tasks, not on nodes/setNodes - a
+    // Deliberately keyed only on tasksInView, not on nodes/setNodes - a
     // drag's own setNodes call must not re-trigger this resync.
-  }, [parsed.tasks]);
+  }, [tasksInView]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<TaskNodeData | AnchorNodeData>>[]) =>
@@ -226,16 +241,19 @@ export function WorkflowCanvas({
     [],
   );
 
-  const selectedTask = parsed.tasks.find((t) => t.name === selectedTaskName);
+  const selectedTask = tasksInView.find((t) => t.name === selectedTaskName);
 
   const commitTasks = useCallback(
-    (tasks: Task[]) => onSourceChange(toYaml(source, { tasks })),
-    [source, onSourceChange],
+    (tasks: Task[]) =>
+      onSourceChange(
+        toYaml(source, { tasks: setChildrenAtPath(parsed.tasks, path, tasks) }),
+      ),
+    [source, onSourceChange, parsed.tasks, path],
   );
 
   function addTask(kind: Task["kind"]) {
-    const name = uniqueTaskName(parsed.tasks.map((t) => t.name));
-    const next = [...parsed.tasks, emptyTask(kind, name)];
+    const name = uniqueTaskName(tasksInView.map((t) => t.name));
+    const next = [...tasksInView, emptyTask(kind, name)];
     commitTasks(next);
     setSelectedTaskName(name);
     setAddMenuAnchor(undefined);
@@ -243,7 +261,7 @@ export function WorkflowCanvas({
 
   function updateTask(updated: Task) {
     const originalName = selectedTaskName;
-    const next = parsed.tasks.map((t) =>
+    const next = tasksInView.map((t) =>
       t.name === originalName ? updated : t,
     );
     commitTasks(next);
@@ -257,7 +275,17 @@ export function WorkflowCanvas({
     // someone fixes it, in Source view or here. Server-side validation
     // (governance.validateWorkflowDefinition) is the backstop for that, the
     // same way it already is for other hand-editable mistakes.
-    commitTasks(parsed.tasks.filter((t) => t.name !== selectedTaskName));
+    commitTasks(tasksInView.filter((t) => t.name !== selectedTaskName));
+    setSelectedTaskName(undefined);
+  }
+
+  function drillInto(taskName: string) {
+    setPath((current) => [...current, taskName]);
+    setSelectedTaskName(undefined);
+  }
+
+  function drillToDepth(depth: number) {
+    setPath((current) => current.slice(0, depth));
     setSelectedTaskName(undefined);
   }
 
@@ -300,8 +328,43 @@ export function WorkflowCanvas({
             <MenuItem onClick={() => addTask("raise")}>Raise</MenuItem>
             <MenuItem onClick={() => addTask("wait")}>Wait</MenuItem>
             <MenuItem onClick={() => addTask("emit")}>Emit</MenuItem>
+            <MenuItem onClick={() => addTask("do")}>Do (group)</MenuItem>
           </Menu>
         </Box>
+        {path.length > 0 && (
+          <Breadcrumbs
+            sx={{
+              position: "absolute",
+              top: 48,
+              left: 8,
+              zIndex: 1,
+              bgcolor: "background.paper",
+              px: 1,
+              py: 0.5,
+              borderRadius: 1,
+            }}
+          >
+            <Link component="button" underline="hover" onClick={() => drillToDepth(0)}>
+              Top level
+            </Link>
+            {path.map((segment, index) =>
+              index === path.length - 1 ? (
+                <Typography key={segment} variant="body2" color="text.primary">
+                  {segment}
+                </Typography>
+              ) : (
+                <Link
+                  key={segment}
+                  component="button"
+                  underline="hover"
+                  onClick={() => drillToDepth(index + 1)}
+                >
+                  {segment}
+                </Link>
+              ),
+            )}
+          </Breadcrumbs>
+        )}
         <ReactFlowProvider>
           <ReactFlow
             nodes={nodes}
@@ -311,6 +374,10 @@ export function WorkflowCanvas({
             onNodeClick={(_event, node) =>
               setSelectedTaskName(node.type === "task" ? node.id : undefined)
             }
+            onNodeDoubleClick={(_event, node) => {
+              const task = tasksInView.find((t) => t.name === node.id);
+              if (task?.kind === "do") drillInto(task.name);
+            }}
             onPaneClick={() => setSelectedTaskName(undefined)}
             fitView
             proOptions={{ hideAttribution: true }}

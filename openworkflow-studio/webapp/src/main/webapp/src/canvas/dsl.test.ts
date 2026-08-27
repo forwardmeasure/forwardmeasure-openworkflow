@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { fromYaml, toYaml, UnsupportedTaskError } from "./dsl";
+import {
+  fromYaml,
+  setChildrenAtPath,
+  tasksAtPath,
+  toYaml,
+  UnsupportedTaskError,
+  type Task,
+} from "./dsl";
 import { SAMPLE } from "../workflow";
 
 describe("canvas <-> Serverless Workflow DSL conversion", () => {
@@ -286,10 +293,124 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     ]);
   });
 
+  it("parses a do task's nested children recursively, including doubly-nested groups", () => {
+    const source = [
+      "do:",
+      "  - outer:",
+      "      do:",
+      "        - inner:",
+      "            do:",
+      "              - leaf:",
+      "                  set:",
+      "                    message: hi",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "do",
+        name: "outer",
+        children: [
+          {
+            kind: "do",
+            name: "inner",
+            children: [
+              { kind: "set", name: "leaf", set: { message: "hi" } },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("round-trips a do task's children, preserving nesting", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "do",
+          name: "group",
+          children: [
+            { kind: "set", name: "step1", set: { a: 1 } },
+            { kind: "call", name: "step2", call: "http", with: {} },
+          ],
+        },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "do",
+        name: "group",
+        children: [
+          { kind: "set", name: "step1", set: { a: 1 } },
+          { kind: "call", name: "step2", call: "http", with: {} },
+        ],
+      },
+    ]);
+  });
+
   it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
     const source =
       "do:\n  - retry:\n      for:\n        each: item\n        in: ${ .items }\n";
     expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
+  });
+});
+
+describe("drill-down navigation helpers (tasksAtPath / setChildrenAtPath)", () => {
+  const tree: Task[] = [
+    { kind: "set", name: "before", set: {} },
+    {
+      kind: "do",
+      name: "group",
+      children: [
+        { kind: "set", name: "inner1", set: {} },
+        {
+          kind: "do",
+          name: "nested",
+          children: [{ kind: "set", name: "deepest", set: {} }],
+        },
+      ],
+    },
+  ];
+
+  it("resolves the top-level list for an empty path", () => {
+    expect(tasksAtPath(tree, [])).toBe(tree);
+  });
+
+  it("resolves a nested list one level down", () => {
+    expect(tasksAtPath(tree, ["group"])).toEqual([
+      { kind: "set", name: "inner1", set: {} },
+      {
+        kind: "do",
+        name: "nested",
+        children: [{ kind: "set", name: "deepest", set: {} }],
+      },
+    ]);
+  });
+
+  it("resolves a doubly-nested list", () => {
+    expect(tasksAtPath(tree, ["group", "nested"])).toEqual([
+      { kind: "set", name: "deepest", set: {} },
+    ]);
+  });
+
+  it("returns an empty list for a path that no longer resolves, rather than throwing", () => {
+    expect(tasksAtPath(tree, ["doesNotExist"])).toEqual([]);
+    expect(tasksAtPath(tree, ["before"])).toEqual([]); // "before" isn't a "do" task
+  });
+
+  it("writes a new child list back at a nested path, leaving everything else untouched", () => {
+    const updated = setChildrenAtPath(tree, ["group", "nested"], [
+      { kind: "set", name: "replaced", set: {} },
+    ]);
+    expect(tasksAtPath(updated, ["group", "nested"])).toEqual([
+      { kind: "set", name: "replaced", set: {} },
+    ]);
+    // Untouched siblings survive.
+    expect(tasksAtPath(updated, ["group"])[0]).toEqual({
+      kind: "set",
+      name: "inner1",
+      set: {},
+    });
+    expect(updated[0]).toEqual({ kind: "set", name: "before", set: {} });
   });
 });
 /*
