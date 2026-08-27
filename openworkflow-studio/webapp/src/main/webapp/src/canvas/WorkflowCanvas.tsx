@@ -1,24 +1,26 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyNodeChanges,
   Background,
   Controls,
+  MiniMap,
   ReactFlow,
   ReactFlowProvider,
   type Edge,
   type Node,
   type NodeChange,
+  type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
-import Button from "@mui/material/Button";
 import Link from "@mui/material/Link";
-import Menu from "@mui/material/Menu";
-import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
+import { useTheme } from "@mui/material/styles";
 import { AnchorNode, type AnchorNodeData } from "./AnchorNode";
+import { NodePalette, PALETTE_DRAG_MIME } from "./NodePalette";
+import { CATEGORY_COLOR, KIND_CATEGORY } from "./taskKindMeta";
 import { TaskInspector } from "./TaskInspector";
 import { TaskNode, type TaskNodeData } from "./TaskNode";
 import {
@@ -176,6 +178,7 @@ export function WorkflowCanvas({
   source: string;
   onSourceChange: (source: string) => void;
 }) {
+  const theme = useTheme();
   const parsed = useMemo(() => {
     try {
       return {
@@ -196,7 +199,6 @@ export function WorkflowCanvas({
   }, [source]);
 
   const [selectedTaskName, setSelectedTaskName] = useState<string>();
-  const [addMenuAnchor, setAddMenuAnchor] = useState<HTMLElement>();
   // Breadcrumb of "do" task names drilled into - [] means the top-level
   // "do:" list itself. Every operation below (add/update/delete/layout)
   // operates on tasksInView, the task list this path currently resolves to,
@@ -220,12 +222,29 @@ export function WorkflowCanvas({
     () => layout(tasksInView).nodes,
   );
   const [edges, setEdges] = useState<Edge[]>(() => layout(tasksInView).edges);
+  // Set by a palette drag-drop just before commitTasks triggers this
+  // component's own re-render (see onDrop below) - the resync effect below
+  // consumes it once, to seed that one new node at the exact drop position
+  // instead of layout()'s algorithmic column/row placement. A ref, not
+  // state, since it must be readable synchronously inside the very next
+  // effect run without itself causing a render.
+  const pendingPositionRef = useRef<
+    { name: string; position: { x: number; y: number } } | undefined
+  >(undefined);
+  const reactFlowInstanceRef = useRef<
+    ReactFlowInstance<Node<TaskNodeData | AnchorNodeData>, Edge> | undefined
+  >(undefined);
 
   useEffect(() => {
     const computed = layout(tasksInView);
     setNodes((current) => {
       const existingById = new Map(current.map((node) => [node.id, node]));
       return computed.nodes.map((node) => {
+        const pending = pendingPositionRef.current;
+        if (pending && node.id === pending.name) {
+          pendingPositionRef.current = undefined;
+          return { ...node, position: pending.position };
+        }
         const existing = existingById.get(node.id);
         return existing ? { ...node, position: existing.position } : node;
       });
@@ -251,12 +270,12 @@ export function WorkflowCanvas({
     [source, onSourceChange, parsed.tasks, path],
   );
 
-  function addTask(kind: Task["kind"]) {
+  function addTask(kind: Task["kind"], position?: { x: number; y: number }) {
     const name = uniqueTaskName(tasksInView.map((t) => t.name));
+    if (position) pendingPositionRef.current = { name, position };
     const next = [...tasksInView, emptyTask(kind, name)];
     commitTasks(next);
     setSelectedTaskName(name);
-    setAddMenuAnchor(undefined);
   }
 
   function updateTask(updated: Task) {
@@ -299,48 +318,13 @@ export function WorkflowCanvas({
 
   return (
     <Box sx={{ display: "flex", height: "100%", minHeight: 480 }}>
+      <NodePalette onAddTask={(kind) => addTask(kind)} />
       <Box sx={{ flex: 1, position: "relative" }}>
-        <Box
-          sx={{
-            display: "flex",
-            gap: 1,
-            position: "absolute",
-            top: 8,
-            left: 8,
-            zIndex: 1,
-          }}
-        >
-          <Button
-            size="small"
-            variant="contained"
-            onClick={(event) => setAddMenuAnchor(event.currentTarget)}
-          >
-            Add task
-          </Button>
-          <Menu
-            open={Boolean(addMenuAnchor)}
-            anchorEl={addMenuAnchor}
-            onClose={() => setAddMenuAnchor(undefined)}
-          >
-            <MenuItem onClick={() => addTask("set")}>Set</MenuItem>
-            <MenuItem onClick={() => addTask("call")}>Call</MenuItem>
-            <MenuItem onClick={() => addTask("switch")}>Switch</MenuItem>
-            <MenuItem onClick={() => addTask("raise")}>Raise</MenuItem>
-            <MenuItem onClick={() => addTask("wait")}>Wait</MenuItem>
-            <MenuItem onClick={() => addTask("emit")}>Emit</MenuItem>
-            <MenuItem onClick={() => addTask("do")}>Do (group)</MenuItem>
-            <MenuItem onClick={() => addTask("for")}>For (loop)</MenuItem>
-            <MenuItem onClick={() => addTask("fork")}>Fork (parallel)</MenuItem>
-            <MenuItem onClick={() => addTask("try")}>Try (error handling)</MenuItem>
-            <MenuItem onClick={() => addTask("listen")}>Listen (event)</MenuItem>
-            <MenuItem onClick={() => addTask("run")}>Run (container/script/shell/workflow)</MenuItem>
-          </Menu>
-        </Box>
         {path.length > 0 && (
           <Breadcrumbs
             sx={{
               position: "absolute",
-              top: 48,
+              top: 8,
               left: 8,
               zIndex: 1,
               bgcolor: "background.paper",
@@ -375,6 +359,9 @@ export function WorkflowCanvas({
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
+            onInit={(instance) => {
+              reactFlowInstanceRef.current = instance;
+            }}
             onNodesChange={onNodesChange}
             onNodeClick={(_event, node) =>
               setSelectedTaskName(node.type === "task" ? node.id : undefined)
@@ -387,11 +374,37 @@ export function WorkflowCanvas({
               if (task && "children" in task) drillInto(task.name);
             }}
             onPaneClick={() => setSelectedTaskName(undefined)}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes(PALETTE_DRAG_MIME)) return;
+              event.preventDefault();
+              event.dataTransfer.dropEffect = "move";
+            }}
+            onDrop={(event) => {
+              const kind = event.dataTransfer.getData(
+                PALETTE_DRAG_MIME,
+              ) as Task["kind"];
+              if (!kind || !reactFlowInstanceRef.current) return;
+              event.preventDefault();
+              const position = reactFlowInstanceRef.current.screenToFlowPosition({
+                x: event.clientX,
+                y: event.clientY,
+              });
+              addTask(kind, position);
+            }}
             fitView
             proOptions={{ hideAttribution: true }}
           >
             <Background />
             <Controls />
+            <MiniMap
+              pannable
+              zoomable
+              nodeColor={(node) => {
+                const task = tasksInView.find((t) => t.name === node.id);
+                if (!task) return theme.palette.divider;
+                return theme.palette[CATEGORY_COLOR[KIND_CATEGORY[task.kind]]].main;
+              }}
+            />
           </ReactFlow>
         </ReactFlowProvider>
       </Box>

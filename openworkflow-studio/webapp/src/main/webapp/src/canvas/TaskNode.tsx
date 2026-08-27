@@ -1,45 +1,13 @@
-import type { ComponentType } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import AccountTreeIcon from "@mui/icons-material/AccountTree";
-import AltRouteIcon from "@mui/icons-material/AltRoute";
-import CallMadeIcon from "@mui/icons-material/CallMade";
-import CallSplitIcon from "@mui/icons-material/CallSplit";
-import CampaignIcon from "@mui/icons-material/Campaign";
-import EditNoteIcon from "@mui/icons-material/EditNote";
-import HealingIcon from "@mui/icons-material/Healing";
-import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
-import LoopIcon from "@mui/icons-material/Loop";
-import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutlined";
-import ReportProblemIcon from "@mui/icons-material/ReportProblem";
-import SensorsIcon from "@mui/icons-material/Sensors";
+import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Chip from "@mui/material/Chip";
-import type { SvgIconProps } from "@mui/material/SvgIcon";
 import Typography from "@mui/material/Typography";
+import { CATEGORY_COLOR, KIND_CATEGORY, KIND_ICON } from "./taskKindMeta";
 import type { Task } from "./dsl";
 
 export type TaskNodeData = { task: Task };
-
-// Per-kind icons rather than colors: MUI's Chip color palette only offers
-// ~7 named values, too few to stay visually distinct once every Serverless
-// Workflow task kind (12 total) is supported, so this map is the thing that
-// needs a new entry per new kind, not KIND_COLOR.
-const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
-  set: EditNoteIcon,
-  call: CallMadeIcon,
-  switch: AltRouteIcon,
-  raise: ReportProblemIcon,
-  wait: HourglassEmptyIcon,
-  emit: CampaignIcon,
-  do: AccountTreeIcon,
-  for: LoopIcon,
-  fork: CallSplitIcon,
-  try: HealingIcon,
-  listen: SensorsIcon,
-  run: PlayCircleOutlineIcon,
-};
 
 export function TaskNode({
   data,
@@ -47,34 +15,55 @@ export function TaskNode({
 }: NodeProps & { data: TaskNodeData }) {
   const { task } = data;
   const KindIcon = KIND_ICON[task.kind];
+  const category = KIND_CATEGORY[task.kind];
+  const categoryColor = CATEGORY_COLOR[category];
   return (
     <Card
       variant="outlined"
       sx={{
-        minWidth: 200,
-        borderColor: selected ? "primary.main" : "divider",
+        minWidth: 220,
+        borderRadius: 3,
+        borderColor: selected ? `${categoryColor}.main` : "divider",
         borderWidth: selected ? 2 : 1,
+        borderTop: 3,
+        borderTopColor: `${categoryColor}.main`,
+        boxShadow: selected ? 4 : 1,
+        transition: "box-shadow 120ms ease, border-color 120ms ease",
       }}
     >
       <Handle type="target" position={Position.Left} />
       <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 1,
-          }}
-        >
-          <Typography variant="subtitle2" noWrap title={task.name}>
-            {task.name}
-          </Typography>
-          <Chip
-            size="small"
-            icon={<KindIcon fontSize="small" />}
-            label={task.kind}
-            variant="outlined"
-          />
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Avatar
+            variant="rounded"
+            sx={{
+              width: 28,
+              height: 28,
+              bgcolor: `${categoryColor}.main`,
+              color: `${categoryColor}.contrastText`,
+            }}
+          >
+            <KindIcon fontSize="small" />
+          </Avatar>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Typography variant="subtitle2" noWrap title={task.name}>
+              {task.name}
+            </Typography>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{
+                display: "block",
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+                fontSize: "0.65rem",
+                lineHeight: 1.4,
+              }}
+            >
+              {task.kind}
+            </Typography>
+          </Box>
         </Box>
         {task.kind === "call" && task.call && (
           <Typography variant="caption" color="text.secondary" noWrap>
