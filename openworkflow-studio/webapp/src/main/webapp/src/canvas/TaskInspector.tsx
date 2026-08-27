@@ -11,14 +11,15 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { CommonTaskProps, SwitchCase, Task } from "./dsl";
 
-// A raw JSON textarea for "set"/"with", not a generated form per task type -
-// pragmatic for this first slice (every "set"/"call" parameter shape is
+// A raw JSON textarea for "set"/"with"/"emit"'s event properties, not a
+// generated form per task type - pragmatic for this slice (every shape is
 // representable, nothing is hidden or unsupported), a per-field form is a
 // natural follow-up once real usage shows which shapes are common enough to
 // warrant one.
 function paramsOf(task: Task): Record<string, unknown> {
   if (task.kind === "set") return task.set;
   if (task.kind === "call") return task.with;
+  if (task.kind === "emit") return task.with;
   return {};
 }
 
@@ -26,6 +27,9 @@ const KIND_LABEL: Record<Task["kind"], string> = {
   set: "Set task",
   call: "Call task",
   switch: "Switch task",
+  raise: "Raise task",
+  wait: "Wait task",
+  emit: "Emit task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -115,6 +119,24 @@ export function TaskInspector({
   const [cases, setCases] = useState<SwitchCase[]>(
     task.kind === "switch" ? task.cases : [],
   );
+  const [raiseType, setRaiseType] = useState(
+    task.kind === "raise" ? task.error.type : "",
+  );
+  const [raiseStatus, setRaiseStatus] = useState(
+    task.kind === "raise" ? String(task.error.status) : "",
+  );
+  const [raiseTitle, setRaiseTitle] = useState(
+    task.kind === "raise" ? task.error.title : "",
+  );
+  const [raiseInstance, setRaiseInstance] = useState(
+    task.kind === "raise" ? (task.error.instance ?? "") : "",
+  );
+  const [raiseDetail, setRaiseDetail] = useState(
+    task.kind === "raise" ? (task.error.detail ?? "") : "",
+  );
+  const [waitText, setWaitText] = useState(() =>
+    task.kind === "wait" ? toText(task.wait) : "",
+  );
   const [advanced, setAdvanced] = useState<AdvancedState>(() =>
     advancedStateOf(task),
   );
@@ -128,6 +150,12 @@ export function TaskInspector({
     setParamsText(JSON.stringify(paramsOf(task), null, 2));
     setParamsError(undefined);
     setCases(task.kind === "switch" ? task.cases : []);
+    setRaiseType(task.kind === "raise" ? task.error.type : "");
+    setRaiseStatus(task.kind === "raise" ? String(task.error.status) : "");
+    setRaiseTitle(task.kind === "raise" ? task.error.title : "");
+    setRaiseInstance(task.kind === "raise" ? (task.error.instance ?? "") : "");
+    setRaiseDetail(task.kind === "raise" ? (task.error.detail ?? "") : "");
+    setWaitText(task.kind === "wait" ? toText(task.wait) : "");
     setAdvanced(advancedStateOf(task));
     setAdvancedErrors({});
   }, [task]);
@@ -141,6 +169,37 @@ export function TaskInspector({
   ) {
     if (task.kind === "switch") return;
     const resolvedName = next.name ?? name;
+    const { props: commonProps, errors: commonErrors } =
+      resolveCommonProps(advanced);
+    setAdvancedErrors(commonErrors);
+    if (Object.keys(commonErrors).length > 0) return;
+
+    if (task.kind === "raise") {
+      onChange({
+        kind: "raise",
+        name: resolvedName,
+        error: {
+          type: raiseType,
+          status: Number(raiseStatus) || 0,
+          title: raiseTitle,
+          instance: raiseInstance.trim() || undefined,
+          detail: raiseDetail.trim() || undefined,
+        },
+        ...commonProps,
+      });
+      return;
+    }
+    if (task.kind === "wait") {
+      let waitValue: string | Record<string, unknown> = waitText;
+      try {
+        waitValue = JSON.parse(waitText) as Record<string, unknown>;
+      } catch {
+        // Not JSON - keep it as the plain duration-literal/expression string.
+      }
+      onChange({ kind: "wait", name: resolvedName, wait: waitValue, ...commonProps });
+      return;
+    }
+
     const resolvedCallTarget = next.callTarget ?? callTarget;
     const resolvedParamsText = next.paramsText ?? paramsText;
     let params: Record<string, unknown>;
@@ -151,20 +210,18 @@ export function TaskInspector({
       setParamsError(error instanceof Error ? error.message : String(error));
       return;
     }
-    const { props: commonProps, errors: commonErrors } =
-      resolveCommonProps(advanced);
-    setAdvancedErrors(commonErrors);
-    if (Object.keys(commonErrors).length > 0) return;
     onChange(
       task.kind === "set"
         ? { kind: "set", name: resolvedName, set: params, ...commonProps }
-        : {
-            kind: "call",
-            name: resolvedName,
-            call: resolvedCallTarget,
-            with: params,
-            ...commonProps,
-          },
+        : task.kind === "call"
+          ? {
+              kind: "call",
+              name: resolvedName,
+              call: resolvedCallTarget,
+              with: params,
+              ...commonProps,
+            }
+          : { kind: "emit", name: resolvedName, with: params, ...commonProps },
     );
   }
 
@@ -222,9 +279,15 @@ export function TaskInspector({
           onBlur={() => commit({})}
         />
       )}
-      {(task.kind === "set" || task.kind === "call") && (
+      {(task.kind === "set" || task.kind === "call" || task.kind === "emit") && (
         <TextField
-          label={task.kind === "set" ? "set (JSON)" : "with (JSON)"}
+          label={
+            task.kind === "set"
+              ? "set (JSON)"
+              : task.kind === "call"
+                ? "with (JSON)"
+                : "event.with (JSON)"
+          }
           multiline
           minRows={8}
           size="small"
@@ -232,6 +295,59 @@ export function TaskInspector({
           error={Boolean(paramsError)}
           helperText={paramsError}
           onChange={(event) => setParamsText(event.target.value)}
+          onBlur={() => commit({})}
+        />
+      )}
+      {task.kind === "raise" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <TextField
+            label="Error type"
+            size="small"
+            placeholder="https://example.com/errors/not-found"
+            value={raiseType}
+            onChange={(event) => setRaiseType(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Status"
+            size="small"
+            type="number"
+            value={raiseStatus}
+            onChange={(event) => setRaiseStatus(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Title"
+            size="small"
+            value={raiseTitle}
+            onChange={(event) => setRaiseTitle(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Instance (optional)"
+            size="small"
+            value={raiseInstance}
+            onChange={(event) => setRaiseInstance(event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Detail (optional)"
+            size="small"
+            multiline
+            minRows={2}
+            value={raiseDetail}
+            onChange={(event) => setRaiseDetail(event.target.value)}
+            onBlur={() => commit({})}
+          />
+        </Box>
+      )}
+      {task.kind === "wait" && (
+        <TextField
+          label="Duration"
+          size="small"
+          placeholder="PT30S, an expression, or JSON ({days, hours, ...})"
+          value={waitText}
+          onChange={(event) => setWaitText(event.target.value)}
           onBlur={() => commit({})}
         />
       )}

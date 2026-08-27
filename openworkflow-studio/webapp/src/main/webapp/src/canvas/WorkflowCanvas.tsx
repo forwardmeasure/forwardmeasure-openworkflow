@@ -41,6 +41,8 @@ const END_ID = "__end__";
  * except a "switch" task, which always redirects via its cases instead of
  * falling through positionally, matching the spec. A case's "then: exit"
  * (or the final task's positional fallthrough) targets the End anchor.
+ * "raise" gets no outgoing edge at all (see TaskNode.tsx) - it always
+ * terminates or transitions to error handling, never falls through.
  */
 export function deriveEdges(tasks: Task[]): Edge[] {
   const edges: Edge[] = [];
@@ -68,6 +70,9 @@ export function deriveEdges(tasks: Task[]): Edge[] {
             : switchCase.name,
         });
       });
+      return;
+    }
+    if (task.kind === "raise") {
       return;
     }
     const next = tasks[index + 1];
@@ -292,6 +297,9 @@ export function WorkflowCanvas({
             <MenuItem onClick={() => addTask("set")}>Set</MenuItem>
             <MenuItem onClick={() => addTask("call")}>Call</MenuItem>
             <MenuItem onClick={() => addTask("switch")}>Switch</MenuItem>
+            <MenuItem onClick={() => addTask("raise")}>Raise</MenuItem>
+            <MenuItem onClick={() => addTask("wait")}>Wait</MenuItem>
+            <MenuItem onClick={() => addTask("emit")}>Emit</MenuItem>
           </Menu>
         </Box>
         <ReactFlowProvider>

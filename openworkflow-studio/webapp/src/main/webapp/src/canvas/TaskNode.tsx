@@ -2,7 +2,10 @@ import type { ComponentType } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import AltRouteIcon from "@mui/icons-material/AltRoute";
 import CallMadeIcon from "@mui/icons-material/CallMade";
+import CampaignIcon from "@mui/icons-material/Campaign";
 import EditNoteIcon from "@mui/icons-material/EditNote";
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
+import ReportProblemIcon from "@mui/icons-material/ReportProblem";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -21,6 +24,9 @@ const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
   set: EditNoteIcon,
   call: CallMadeIcon,
   switch: AltRouteIcon,
+  raise: ReportProblemIcon,
+  wait: HourglassEmptyIcon,
+  emit: CampaignIcon,
 };
 
 export function TaskNode({
@@ -78,8 +84,28 @@ export function TaskNode({
                 : switchCase.name}
             </Typography>
           ))}
+        {task.kind === "raise" && (task.error.type || task.error.title) && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.error.title || task.error.type}
+          </Typography>
+        )}
+        {task.kind === "wait" && typeof task.wait === "string" && task.wait && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.wait}
+          </Typography>
+        )}
+        {task.kind === "emit" && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {Object.keys(task.with).length} event {Object.keys(task.with).length === 1 ? "property" : "properties"}
+          </Typography>
+        )}
       </CardContent>
-      {task.kind === "switch" ? (
+      {task.kind === "raise" ? (
+        // raise always terminates or transitions to error handling, never
+        // falls through positionally like every other kind here - no source
+        // handle at all, rather than a misleading "next" edge.
+        undefined
+      ) : task.kind === "switch" ? (
         // One named source handle per case, spread down the right edge, so
         // each branch's edge visibly leaves from its own case rather than
         // all cases bunching into a single point.

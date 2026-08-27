@@ -1,20 +1,23 @@
 import { dump, load } from "js-yaml";
 
 // Task vocabulary: "set" (assign variables), "call" (invoke a
-// function/HTTP/OpenAPI operation), and "switch" (branch to a named task by
-// a "when" condition) are the most common Serverless Workflow DSL
-// (https://serverlessworkflow.io, document.dsl "1.0.x") task types. "for"/
-// "fork"/"try" and other flow-control constructs are still out of scope for
-// this slice. "switch" case targets ("then") are always either another
-// task's name elsewhere in this flow, or the literal "exit" - a case
-// omitting "then" relies on the spec's positional-fallthrough default,
-// which this slice doesn't model (see switchCaseFromYamlEntry below) - use
-// Source view for that shape.
+// function/HTTP/OpenAPI operation), "switch" (branch to a named task by a
+// "when" condition), "raise" (terminate with a Problem-Details error),
+// "wait" (pause for a duration), and "emit" (publish a CloudEvent) are
+// modeled here - the Serverless Workflow DSL (https://serverlessworkflow.io,
+// document.dsl "1.0.x") task kinds that need no nested-children support.
+// "do"/"for"/"fork"/"try"/"listen"/"run" all carry nested task lists and are
+// still out of scope until the canvas has a container/drill-down story.
+// "switch" case targets ("then") are always either another task's name
+// elsewhere in this flow, or the literal "exit" - a case omitting "then"
+// relies on the spec's positional-fallthrough default, which this slice
+// doesn't model (see switchCaseFromYamlEntry below) - use Source view for
+// that shape.
 //
 // Every task kind also shares a common set of cross-cutting properties
 // ("if"/"input"/"output"/"export"/"timeout"/"metadata") the spec allows on
 // any task - CommonTaskProps below, spread into each kind-specific type.
-export type TaskType = "set" | "call" | "switch";
+export type TaskType = "set" | "call" | "switch" | "raise" | "wait" | "emit";
 
 // All optional: a task with none of these set is the common case, and
 // omitting an unset property from the serialized YAML (rather than writing
@@ -59,7 +62,45 @@ export type SwitchTask = CommonTaskProps & {
   cases: SwitchCase[];
 };
 
-export type Task = SetTask | CallTask | SwitchTask;
+// RFC 9457 Problem Details, matching the backend's ErrorPlan fields exactly.
+export type RaiseError = {
+  type: string;
+  status: number;
+  title: string;
+  instance?: string;
+  detail?: string;
+};
+
+export type RaiseTask = CommonTaskProps & {
+  kind: "raise";
+  name: string;
+  error: RaiseError;
+};
+
+export type WaitTask = CommonTaskProps & {
+  kind: "wait";
+  name: string;
+  // An ISO-8601 duration literal/expression (the common case, a plain
+  // string) - or the rarer inline breakdown object ({days, hours, ...}),
+  // kept as-is rather than normalized to one shape.
+  wait: string | Record<string, unknown>;
+};
+
+export type EmitTask = CommonTaskProps & {
+  kind: "emit";
+  name: string;
+  // The "emit.event.with" CloudEvents attribute template - same open-ended
+  // shape as "call"'s "with", so it reuses that field's raw-JSON editing.
+  with: Record<string, unknown>;
+};
+
+export type Task =
+  | SetTask
+  | CallTask
+  | SwitchTask
+  | RaiseTask
+  | WaitTask
+  | EmitTask;
 
 export type TaskGraph = {
   tasks: Task[];
@@ -127,6 +168,50 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       ...common,
     };
   }
+  if ("raise" in body) {
+    const raiseBody = (body.raise ?? {}) as Record<string, unknown>;
+    const error = (raiseBody.error ?? {}) as Record<string, unknown>;
+    if (typeof error.type !== "string" || typeof error.title !== "string") {
+      throw new UnsupportedTaskError(
+        `${name} (raise.error needs at least "type" and "title" - a named ` +
+          `reference into "use.errors" isn't supported here)`,
+      );
+    }
+    return {
+      kind: "raise",
+      name,
+      error: {
+        type: error.type,
+        status: typeof error.status === "number" ? error.status : 0,
+        title: error.title,
+        instance: typeof error.instance === "string" ? error.instance : undefined,
+        detail: typeof error.detail === "string" ? error.detail : undefined,
+      },
+      ...common,
+    };
+  }
+  if ("wait" in body) {
+    const rawWait = body.wait;
+    return {
+      kind: "wait",
+      name,
+      wait:
+        typeof rawWait === "string"
+          ? rawWait
+          : ((rawWait as Record<string, unknown>) ?? {}),
+      ...common,
+    };
+  }
+  if ("emit" in body) {
+    const emitBody = (body.emit ?? {}) as Record<string, unknown>;
+    const event = (emitBody.event ?? {}) as Record<string, unknown>;
+    return {
+      kind: "emit",
+      name,
+      with: (event.with as Record<string, unknown>) ?? {},
+      ...common,
+    };
+  }
   throw new UnsupportedTaskError(name);
 }
 
@@ -134,8 +219,8 @@ export class UnsupportedTaskError extends Error {
   constructor(public readonly taskName: string) {
     super(
       `Task "${taskName}" uses a construct the canvas doesn't support yet ` +
-        `(only "set", "call", and "switch" tasks are editable here) - edit ` +
-        `it in Source view instead.`,
+        `(only "set", "call", "switch", "raise", "wait", and "emit" tasks ` +
+        `are editable here) - edit it in Source view instead.`,
     );
   }
 }
@@ -173,15 +258,33 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
   if (task.kind === "call") {
     return { [task.name]: { ...common, call: task.call, with: task.with } };
   }
+  if (task.kind === "switch") {
+    return {
+      [task.name]: {
+        ...common,
+        switch: task.cases.map((switchCase) => ({
+          [switchCase.name]: switchCase.when
+            ? { when: switchCase.when, then: switchCase.then }
+            : { then: switchCase.then },
+        })),
+      },
+    };
+  }
+  if (task.kind === "raise") {
+    const error: Record<string, unknown> = {
+      type: task.error.type,
+      status: task.error.status,
+      title: task.error.title,
+    };
+    if (task.error.instance !== undefined) error.instance = task.error.instance;
+    if (task.error.detail !== undefined) error.detail = task.error.detail;
+    return { [task.name]: { ...common, raise: { error } } };
+  }
+  if (task.kind === "wait") {
+    return { [task.name]: { ...common, wait: task.wait } };
+  }
   return {
-    [task.name]: {
-      ...common,
-      switch: task.cases.map((switchCase) => ({
-        [switchCase.name]: switchCase.when
-          ? { when: switchCase.when, then: switchCase.then }
-          : { then: switchCase.then },
-      })),
-    },
+    [task.name]: { ...common, emit: { event: { with: task.with } } },
   };
 }
 
@@ -201,7 +304,14 @@ export function toYaml(source: string, graph: TaskGraph): string {
 export function emptyTask(kind: TaskType, name: string): Task {
   if (kind === "set") return { kind: "set", name, set: {} };
   if (kind === "call") return { kind: "call", name, call: "", with: {} };
-  return { kind: "switch", name, cases: [{ name: "default", then: "exit" }] };
+  if (kind === "switch") {
+    return { kind: "switch", name, cases: [{ name: "default", then: "exit" }] };
+  }
+  if (kind === "raise") {
+    return { kind: "raise", name, error: { type: "", status: 400, title: "" } };
+  }
+  if (kind === "wait") return { kind: "wait", name, wait: "" };
+  return { kind: "emit", name, with: {} };
 }
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license

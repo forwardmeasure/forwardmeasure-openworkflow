@@ -177,6 +177,115 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     expect(rewritten).not.toContain("metadata:");
   });
 
+  it("parses raise tasks with their Problem Details error fields", () => {
+    const source = [
+      "do:",
+      "  - fail:",
+      "      raise:",
+      "        error:",
+      "          type: https://example.com/errors/not-found",
+      "          status: 404",
+      "          title: Not Found",
+      "          instance: /pets/1",
+      "          detail: No pet with that id",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "raise",
+        name: "fail",
+        error: {
+          type: "https://example.com/errors/not-found",
+          status: 404,
+          title: "Not Found",
+          instance: "/pets/1",
+          detail: "No pet with that id",
+        },
+      },
+    ]);
+  });
+
+  it("rejects a raise task whose error has no type/title (a use.errors reference isn't supported here)", () => {
+    const source = "do:\n  - fail:\n      raise:\n        error: notFound\n";
+    expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
+  });
+
+  it("round-trips a raise task, omitting unset optional error fields", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "raise",
+          name: "fail",
+          error: { type: "https://example.com/errors/bad", status: 400, title: "Bad" },
+        },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "raise",
+        name: "fail",
+        error: { type: "https://example.com/errors/bad", status: 400, title: "Bad" },
+      },
+    ]);
+    expect(rewritten).not.toContain("instance:");
+    expect(rewritten).not.toContain("detail:");
+  });
+
+  it("parses wait tasks with a plain duration string", () => {
+    const source = "do:\n  - pause:\n      wait: PT30S\n";
+    expect(fromYaml(source).tasks).toEqual([
+      { kind: "wait", name: "pause", wait: "PT30S" },
+    ]);
+  });
+
+  it("round-trips a wait task's duration", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [{ kind: "wait", name: "pause", wait: "PT1M" }],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      { kind: "wait", name: "pause", wait: "PT1M" },
+    ]);
+  });
+
+  it("parses emit tasks, reading the event.with properties", () => {
+    const source = [
+      "do:",
+      "  - notify:",
+      "      emit:",
+      "        event:",
+      "          with:",
+      "            source: /orders",
+      "            type: com.example.order.created",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "emit",
+        name: "notify",
+        with: { source: "/orders", type: "com.example.order.created" },
+      },
+    ]);
+  });
+
+  it("round-trips an emit task's event properties", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "emit",
+          name: "notify",
+          with: { source: "/orders", type: "com.example.order.created" },
+        },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "emit",
+        name: "notify",
+        with: { source: "/orders", type: "com.example.order.created" },
+      },
+    ]);
+  });
+
   it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
     const source =
       "do:\n  - retry:\n      for:\n        each: item\n        in: ${ .items }\n";
