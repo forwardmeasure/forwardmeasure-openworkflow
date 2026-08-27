@@ -1,13 +1,37 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { initialize } from "./runtime";
+import { applyThemeTokens } from "./theme";
 import "./styles.css";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Must run before the first render - styles.css only ever references
+// var(--token), so nothing has a color until this writes the custom
+// properties onto <html>.
+applyThemeTokens();
+
+const root = createRoot(document.getElementById("root")!);
+root.render(<div className="boot">Opening OpenWorkflow Studio…</div>);
+
+initialize()
+  .then((identity) =>
+    root.render(
+      <StrictMode>
+        <App identity={identity} />
+      </StrictMode>,
+    ),
+  )
+  .catch((failure) =>
+    root.render(
+      <main className="fatal" role="alert">
+        <p>OpenWorkflow Studio</p>
+        <h1>Unable To Start This View</h1>
+        <pre>
+          {failure instanceof Error ? failure.message : String(failure)}
+        </pre>
+      </main>,
+    ),
+  );
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
  * agreements. See the NOTICE file distributed with this work for additional information regarding

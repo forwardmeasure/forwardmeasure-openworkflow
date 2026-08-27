@@ -4,6 +4,9 @@ interface Window {
   __OPENWORKFLOW_STUDIO_CONFIG__?: {
     apiBasePath: string;
     environmentName: string;
+    oidcUrl: string;
+    oidcRealm: string;
+    oidcClientId: string;
   };
 }
 /*

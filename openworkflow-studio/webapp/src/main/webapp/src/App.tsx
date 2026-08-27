@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ThemeProvider } from "@mui/material/styles";
 import type {
   Workflow,
   WorkflowDefinition,
@@ -8,66 +9,78 @@ import type {
   ExecutionHistoryEntry,
 } from "@forwardmeasure/openworkflow-execution-client";
 import { authorizationDecisions, clients, correlationId } from "./api";
-import { getToken, setToken, tenantFromToken } from "./session";
+import { WorkflowCanvas } from "./canvas/WorkflowCanvas";
+import type { StudioIdentity } from "./runtime";
+import { tenantFromToken } from "./session";
+import { createStudioMuiTheme } from "./theme";
 import { canPause, diagnostic, lineDiff, SAMPLE, taskNames } from "./workflow";
 
+// Built once at module scope, not per-render - it only depends on THEMES in
+// theme.ts, never on component state.
+const muiTheme = createStudioMuiTheme();
+
 type View = "author" | "executions";
+type EditorView = "source" | "canvas";
 type GovernanceAction = "submit" | "approve" | "reject" | "publish";
 type ExecutionControlAction = "pause" | "resume" | "cancel";
+
+// Refresh well before the access token's own 1-hour lifetime (see the real
+// expires_in on an issued token) - 30s poll, refresh once under 60s
+// remaining, matching Keycloak's own recommended updateToken() margin.
+const TOKEN_REFRESH_POLL_MS = 30_000;
+const TOKEN_REFRESH_MIN_VALIDITY_SECONDS = 60;
 
 function entityTag(revision: number): string {
   return `"${revision}"`;
 }
 
-export function App() {
-  const [token, updateToken] = useState(getToken);
-  const [draftToken, setDraftToken] = useState("");
-  if (!token) {
-    return (
-      <main className="login-shell">
-        <section className="login-card" aria-labelledby="login-title">
-          <p className="eyebrow">ForwardMeasure</p>
-          <h1 id="login-title">OpenWorkflow Studio</h1>
-          <p>Use an access token issued for your tenant.</p>
-          <label htmlFor="token">Bearer access token</label>
-          <textarea
-            id="token"
-            rows={5}
-            value={draftToken}
-            onChange={(event) => setDraftToken(event.target.value)}
-          />
-          <button
-            onClick={() => {
-              const value = draftToken.trim();
-              if (value) {
-                setToken(value);
-                updateToken(value);
-              }
-            }}
-          >
-            Enter Studio
-          </button>
-        </section>
-      </main>
-    );
-  }
+export function App({ identity }: { identity: StudioIdentity }) {
+  const [token, setToken] = useState(identity.token);
+
+  // clients(token)/api.ts takes a plain string, not a dynamic supplier the
+  // way PlatformDashboard's generated client does - so staying authenticated
+  // past the token's own lifetime means polling keycloak-js for a refresh
+  // and pushing the new token through React state, which recreates the api
+  // client below (useMemo keyed on token).
+  useEffect(() => {
+    const interval = setInterval(() => {
+      identity.keycloak
+        .updateToken(TOKEN_REFRESH_MIN_VALIDITY_SECONDS)
+        .then((refreshed) => {
+          if (refreshed && identity.keycloak.token) {
+            setToken(identity.keycloak.token);
+          }
+        })
+        .catch(() => {
+          // Refresh failed (session/refresh-token expired) - a fresh
+          // top-level login is the only recovery, same as
+          // PlatformDashboard's own onLoad: "login-required" would force on
+          // a reload.
+          void identity.keycloak.login();
+        });
+    }, TOKEN_REFRESH_POLL_MS);
+    return () => clearInterval(interval);
+  }, [identity.keycloak]);
+
   return (
-    <Studio
-      token={token}
-      logout={() => {
-        setToken("");
-        updateToken("");
-      }}
-    />
+    <ThemeProvider theme={muiTheme}>
+      <Studio
+        token={token}
+        logout={() =>
+          void identity.keycloak.logout({ redirectUri: window.location.origin })
+        }
+      />
+    </ThemeProvider>
   );
 }
 
 function Studio({ token, logout }: { token: string; logout: () => void }) {
   const api = useMemo(() => clients(token), [token]);
   const [view, setView] = useState<View>("author");
+  const [editorView, setEditorView] = useState<EditorView>("source");
   const [source, setSource] = useState(SAMPLE);
   const [definitionKey, setDefinitionKey] = useState(
-    "forwardmeasure.hello-studio",
+    "forwardmeasure-hello-studio",
   );
   const [definitionVersion, setDefinitionVersion] = useState("1.0.0");
   const [displayName, setDisplayName] = useState("Hello Studio");
@@ -98,6 +111,14 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
     void refreshDefinitions();
   }, []);
   useEffect(() => {
+    const mergePermissions = (decisions: Record<string, boolean>) =>
+      setPermissions((previous) => ({ ...previous, ...decisions }));
+    // Two calls, not one: the batch-authorization endpoint evaluates every
+    // action against a single resource, so definition:* and execution:*
+    // actions - which are authorized against different resources
+    // (openworkflow-definition/definitions vs openworkflow-execution/
+    // executions) - can't share one request without evaluating the
+    // execution actions against the wrong resource.
     void authorizationDecisions(
       token,
       [
@@ -108,16 +129,20 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
         "definition:approve",
         "definition:reject",
         "definition:publish",
-        "execution:start",
       ],
       "openworkflow-definition",
       "definitions",
     )
-      .then(setPermissions)
-      .catch((error) => {
-        setPermissions({});
-        setDiagnostics(diagnostic(error));
-      });
+      .then(mergePermissions)
+      .catch(async (error) => setDiagnostics(await diagnostic(error)));
+    void authorizationDecisions(
+      token,
+      ["execution:start", "execution:pause", "execution:resume", "execution:cancel"],
+      "openworkflow-execution",
+      "executions",
+    )
+      .then(mergePermissions)
+      .catch(async (error) => setDiagnostics(await diagnostic(error)));
   }, [token]);
 
   async function refreshDefinitions() {
@@ -129,7 +154,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       setWorkflows(workflowPage.data);
       setDefinitions(definitionPage.data);
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     }
   }
 
@@ -153,7 +178,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
           : `Validation failed: ${result.violations.join("; ")}`,
       );
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     } finally {
       setBusy(false);
     }
@@ -210,7 +235,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       );
       await refreshDefinitions();
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     } finally {
       setBusy(false);
     }
@@ -246,7 +271,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       );
       await refreshDefinitions();
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     } finally {
       setBusy(false);
     }
@@ -266,7 +291,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       setView("executions");
       await refreshExecutions();
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     } finally {
       setBusy(false);
     }
@@ -276,7 +301,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
     try {
       setExecutions((await api.executions.listExecutions({ limit: 50 })).items);
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     }
   }
 
@@ -289,7 +314,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       setSelected(execution);
       setHistory(events.items);
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     }
   }
 
@@ -314,7 +339,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       await inspect(selected.id);
       await refreshExecutions();
     } catch (error) {
-      setDiagnostics(diagnostic(error));
+      setDiagnostics(await diagnostic(error));
     } finally {
       setBusy(false);
     }
@@ -373,6 +398,18 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 <h2 id="editor-title">Workflow definition</h2>
               </div>
               <div className="actions">
+                <button
+                  className={editorView === "source" ? "active" : "secondary"}
+                  onClick={() => setEditorView("source")}
+                >
+                  Source
+                </button>
+                <button
+                  className={editorView === "canvas" ? "active" : "secondary"}
+                  onClick={() => setEditorView("canvas")}
+                >
+                  Canvas
+                </button>
                 <label className="button-label">
                   Import
                   <input
@@ -424,13 +461,19 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 />
               </label>
             </div>
-            <textarea
-              className="editor"
-              aria-label="Workflow YAML or JSON"
-              spellCheck={false}
-              value={source}
-              onChange={(event) => setSource(event.target.value)}
-            />
+            {editorView === "source" ? (
+              <textarea
+                className="editor"
+                aria-label="Workflow YAML or JSON"
+                spellCheck={false}
+                value={source}
+                onChange={(event) => setSource(event.target.value)}
+              />
+            ) : (
+              <div className="canvas-shell">
+                <WorkflowCanvas source={source} onSourceChange={setSource} />
+              </div>
+            )}
             {previousSource && previousSource !== source && (
               <details>
                 <summary>Revision diff</summary>

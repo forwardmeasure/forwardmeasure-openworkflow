@@ -1,4 +1,5 @@
 import { load } from "js-yaml";
+import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
 
 export const SAMPLE = `document:
   dsl: '1.0.3'
@@ -22,7 +23,46 @@ export function taskNames(source: string): string[] {
   }
 }
 
-export function diagnostic(error: unknown): string {
+// The generated client's ResponseError only ever carries a generic message
+// ("Response returned an error code") - the actual server-side explanation
+// is in the response BODY, which nothing was reading. Two Problem shapes
+// exist and both need reading, not just one: RFC 9457 Problems from
+// openworkflow-definition-management-jaxrs's *ExceptionMapper classes carry
+// the real text in "detail" (an exception message for known error types,
+// and, temporarily, see DebugThrowableExceptionMapper - the full exception
+// class/cause chain/stack trace for anything else); Quarkus's own built-in
+// bean-validation failure response (quarkus-hibernate-validator rejecting a
+// request before a resource method even runs, e.g. a missing required
+// header) has no "detail" at all - the real text is in "violations"
+// instead. Async because reading a Response body is a Promise; every call
+// site already awaits inside a try/catch.
+export async function diagnostic(error: unknown): Promise<string> {
+  if (error instanceof ResponseError) {
+    try {
+      const problem = (await error.response.clone().json()) as {
+        detail?: string;
+        title?: string;
+        violations?: Array<{ field?: string; message?: string }>;
+      };
+      if (problem.detail) {
+        return problem.title
+          ? `${problem.title}: ${problem.detail}`
+          : problem.detail;
+      }
+      if (problem.violations?.length) {
+        const summary = problem.violations
+          .map(
+            (violation) =>
+              `${violation.field ?? "value"} ${violation.message ?? "is invalid"}`,
+          )
+          .join("; ");
+        return problem.title ? `${problem.title}: ${summary}` : summary;
+      }
+      if (problem.title) return problem.title;
+    } catch {
+      // Response body wasn't JSON (or already consumed) - fall through to the generic message.
+    }
+  }
   if (error instanceof Error) return error.message;
   return String(error);
 }

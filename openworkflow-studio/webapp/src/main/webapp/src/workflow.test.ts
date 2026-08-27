@@ -1,3 +1,4 @@
+import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
 import { canPause, diagnostic, lineDiff, taskNames } from "./workflow";
 import { tenantFromToken } from "./session";
 import { describe, expect, it } from "vitest";
@@ -10,16 +11,66 @@ describe("lossless authoring helpers", () => {
     expect(source).toContain("set: {value: 1}");
   });
 
-  it("keeps invalid documents available for server diagnostics", () => {
+  it("keeps invalid documents available for server diagnostics", async () => {
     expect(taskNames("do: [")).toEqual([]);
-    expect(diagnostic(new Error("line 1 is invalid"))).toBe(
+    expect(await diagnostic(new Error("line 1 is invalid"))).toBe(
       "line 1 is invalid",
     );
   });
 
+  it("surfaces the server's RFC 9457 Problem detail instead of the generic client message", async () => {
+    const response = new Response(
+      JSON.stringify({
+        title: "Unhandled Exception (debug mode)",
+        detail:
+          "java.lang.SecurityException: Organization client roles claim is required",
+      }),
+      { status: 500, headers: { "Content-Type": "application/problem+json" } },
+    );
+    const error = new ResponseError(
+      response,
+      "Response returned an error code",
+    );
+    expect(await diagnostic(error)).toBe(
+      "Unhandled Exception (debug mode): java.lang.SecurityException: Organization client roles claim is required",
+    );
+  });
+
+  it("surfaces a bean-validation constraint violation (Problem.detail is absent, not just empty)", async () => {
+    const response = new Response(
+      JSON.stringify({
+        title: "Constraint Violation",
+        status: 400,
+        violations: [
+          { field: "updateWorkflowDefinition.ifMatch", message: "must not be null" },
+        ],
+      }),
+      { status: 400, headers: { "Content-Type": "application/json" } },
+    );
+    const error = new ResponseError(
+      response,
+      "Response returned an error code",
+    );
+    expect(await diagnostic(error)).toBe(
+      "Constraint Violation: updateWorkflowDefinition.ifMatch must not be null",
+    );
+  });
+
+  it("falls back to the generic message when the response body isn't a Problem", async () => {
+    const response = new Response("not json", { status: 502 });
+    const error = new ResponseError(
+      response,
+      "Response returned an error code",
+    );
+    expect(await diagnostic(error)).toBe("Response returned an error code");
+  });
+
   it("displays tenant identity without treating an unreadable token as authority", () => {
+    // tenant_did, not tenant_id - matches the forwardmeasure_identity client
+    // scope's actual mapped claim name, confirmed against a real decoded
+    // token (see session.ts's own comment on tenantFromToken).
     const payload = btoa(
-      JSON.stringify({ tenant_id: "did:web:example:tenant:one" }),
+      JSON.stringify({ tenant_did: "did:web:example:tenant:one" }),
     );
     expect(tenantFromToken(`x.${payload}.x`)).toBe(
       "did:web:example:tenant:one",

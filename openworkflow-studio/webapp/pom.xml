@@ -4,6 +4,13 @@
   <parent><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-studio</artifactId><version>${revision}</version><relativePath>../pom.xml</relativePath></parent>
   <artifactId>openworkflow-studio-webapp</artifactId>
   <name>ForwardMeasure OpenWorkflow :: Studio :: Webapp</name>
+  <dependencies>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
   <build><plugins>
     <plugin><groupId>com.github.eirslett</groupId><artifactId>frontend-maven-plugin</artifactId><configuration><workingDirectory>src/main/webapp</workingDirectory><installDirectory>${project.build.directory}</installDirectory></configuration><executions>
       <execution><id>install-node</id><phase>generate-resources</phase><goals><goal>install-node-and-npm</goal></goals><configuration><nodeVersion>${nodejs.version}</nodeVersion></configuration></execution>

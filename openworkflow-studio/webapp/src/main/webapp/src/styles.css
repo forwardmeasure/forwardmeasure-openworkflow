@@ -1,7 +1,14 @@
+/*
+ * All colors, radii, and fonts below are CSS custom properties, not
+ * literals - they're written onto <html> by applyThemeTokens() in theme.ts
+ * (the single source of truth for Studio's look and feel) before the first
+ * render. This file only ever consumes var(--token); it never hardcodes a
+ * color so a future theme swap stays a theme.ts-only change.
+ */
 :root {
-  font-family: Inter, system-ui, sans-serif;
-  color: #eaf3ef;
-  background: #0b1513;
+  font-family: var(--font-sans);
+  color: var(--text);
+  background: var(--bg);
   font-synthesis: none;
 }
 * {
@@ -11,29 +18,30 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background: radial-gradient(circle at 75% 0, #19352e 0, #0b1513 42%);
+  background: radial-gradient(
+    circle at 75% 0,
+    var(--bg-accent) 0,
+    var(--bg) 42%
+  );
 }
 button,
 .button-label {
   border: 0;
-  border-radius: 7px;
-  background: #8de0bd;
-  color: #10201d;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--accent-contrast);
   padding: 0.7rem 1rem;
-  font:
-    700 0.82rem Inter,
-    system-ui,
-    sans-serif;
+  font: 700 0.82rem var(--font-sans);
   cursor: pointer;
 }
 button:hover,
 .button-label:hover {
-  background: #b7efd7;
+  background: var(--accent-hover);
 }
 button:focus-visible,
 textarea:focus-visible,
 .button-label:focus-within {
-  outline: 3px solid #f3c677;
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
 button:disabled {
@@ -42,16 +50,16 @@ button:disabled {
 }
 button.secondary,
 .button-label {
-  color: #dceae4;
-  background: #243a35;
+  color: var(--secondary-text);
+  background: var(--secondary-bg);
 }
 button.quiet {
   background: transparent;
-  color: #a7bbb4;
+  color: var(--muted);
 }
 button.danger {
-  color: #fff2ee;
-  background: #9e463e;
+  color: var(--danger-contrast);
+  background: var(--danger);
 }
 .app-shell {
   max-width: 1500px;
@@ -86,10 +94,8 @@ h3 {
 }
 .eyebrow {
   margin: 0 0 0.25rem;
-  color: #79b89f;
-  font:
-    500 0.68rem ui-monospace,
-    monospace;
+  color: var(--accent);
+  font: 500 0.68rem var(--font-mono);
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
@@ -101,23 +107,24 @@ nav,
   gap: 0.5rem;
 }
 nav button {
-  color: #b8cbc4;
+  color: var(--muted);
   background: transparent;
 }
 nav button.active {
-  color: #10201d;
-  background: #8de0bd;
+  color: var(--accent-contrast);
+  background: var(--accent);
 }
 .status {
   min-height: 2.7rem;
+  max-height: 40vh;
+  overflow-y: auto;
   margin: 0.6rem 0 1rem;
   padding: 0.7rem 1rem;
-  border-left: 3px solid #e5bb69;
-  color: #d5e1dd;
-  background: #13221f;
-  font:
-    0.78rem ui-monospace,
-    monospace;
+  border-left: 3px solid var(--warning);
+  color: var(--text);
+  background: var(--surface-row);
+  font: 0.78rem var(--font-mono);
+  white-space: pre-wrap;
 }
 .author-grid,
 .execution-grid {
@@ -130,9 +137,9 @@ nav button.active {
 }
 .panel {
   min-width: 0;
-  border: 1px solid #29403a;
-  border-radius: 11px;
-  background: rgba(17, 31, 28, 0.92);
+  border: 1px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
   padding: 1rem;
   box-shadow: 0 18px 60px #0004;
 }
@@ -152,15 +159,25 @@ nav button.active {
   flex: 1;
   width: 100%;
   resize: vertical;
-  border: 1px solid #304b44;
-  border-radius: 7px;
-  background: #07100e;
-  color: #d8ebe3;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  background: var(--code-bg);
+  color: var(--text);
   padding: 1.1rem;
-  font:
-    14px/1.65 ui-monospace,
-    monospace;
+  font: 14px/1.65 var(--font-mono);
   tab-size: 2;
+}
+.canvas-shell {
+  flex: 1;
+  min-height: 480px;
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--code-bg);
+}
+.actions button.active {
+  color: var(--accent-contrast);
+  background: var(--accent);
 }
 .diagram ol,
 .history {
@@ -174,8 +191,8 @@ nav button.active {
   gap: 0.8rem;
   margin: 0.55rem 0;
   padding: 0.7rem;
-  border-left: 1px solid #4d7969;
-  background: #182a26;
+  border-left: 1px solid var(--line);
+  background: var(--surface-row);
 }
 .diagram li span,
 .history li span {
@@ -185,27 +202,54 @@ nav button.active {
   height: 1.6rem;
   flex: 0 0 auto;
   border-radius: 50%;
-  background: #294a40;
-  color: #a9e5cc;
-  font:
-    0.7rem ui-monospace,
-    monospace;
+  background: var(--chip-bg);
+  color: var(--chip-text);
+  font: 0.7rem var(--font-mono);
 }
 .muted,
 small {
   display: block;
-  color: #91a69f;
+  color: var(--muted);
   font-size: 0.78rem;
+}
+.metadata {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  margin: 0.9rem 0;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--panel-border);
+}
+.metadata label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 12rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.metadata input {
+  padding: 0.5rem 0.6rem;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius-sm);
+  font: 0.85rem var(--font-mono);
+}
+.metadata input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
 }
 .definition {
   margin-top: 0.7rem;
-  border-top: 1px solid #29403a;
+  border-top: 1px solid var(--panel-border);
   padding-top: 0.9rem;
 }
 .definition label {
   display: block;
   margin: 0.8rem 0;
-  color: #a7bbb4;
+  color: var(--muted);
   font-size: 0.75rem;
 }
 .definition textarea {
@@ -213,9 +257,9 @@ small {
   width: 100%;
   margin-top: 0.3rem;
   padding: 0.5rem;
-  color: #d8ebe3;
-  background: #07100e;
-  border: 1px solid #304b44;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
 }
 .execution-row {
   width: 100%;
@@ -225,11 +269,11 @@ small {
   gap: 0.7rem;
   margin: 0.5rem 0;
   text-align: left;
-  color: #eaf3ef;
-  background: #182a26;
+  color: var(--text);
+  background: var(--surface-row);
 }
 .execution-row:hover {
-  background: #253d37;
+  background: var(--surface-row-hover);
 }
 .execution-row small {
   max-width: 28ch;
@@ -239,19 +283,17 @@ small {
 mark {
   border-radius: 999px;
   padding: 0.25rem 0.55rem;
-  color: #10201d;
-  background: #e5bb69;
-  font:
-    600 0.68rem ui-monospace,
-    monospace;
+  color: var(--accent-contrast);
+  background: var(--warning);
+  font: 600 0.68rem var(--font-mono);
 }
 mark[data-status="COMPLETED"] {
-  background: #83d1b0;
+  background: var(--success);
 }
 mark[data-status="CANCELLED"],
 mark[data-status="FAILED"] {
   color: white;
-  background: #a8534b;
+  background: var(--danger);
 }
 code,
 pre {
@@ -260,54 +302,24 @@ pre {
   overflow: auto;
   border-radius: 6px;
   padding: 0.8rem;
-  color: #bce5d4;
-  background: #07100e;
-  font:
-    0.78rem/1.5 ui-monospace,
-    monospace;
+  color: var(--chip-text);
+  background: var(--code-bg);
+  font: 0.78rem/1.5 var(--font-mono);
 }
 .history li {
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: 0.7rem;
-  border-bottom: 1px solid #29403a;
+  border-bottom: 1px solid var(--panel-border);
   padding: 0.55rem 0;
 }
 .history time {
-  color: #91a69f;
+  color: var(--muted);
   font-size: 0.7rem;
 }
 .failure {
-  color: #ffb8af;
-}
-.login-shell {
-  min-height: 100vh;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-}
-.login-card {
-  width: min(540px, 100%);
-  border: 1px solid #345148;
-  border-radius: 12px;
-  padding: 2rem;
-  background: #10201d;
-  box-shadow: 0 25px 100px #0009;
-}
-.login-card label {
-  display: block;
-  margin: 1.5rem 0 0.4rem;
-  font-size: 0.8rem;
-}
-.login-card textarea {
-  width: 100%;
-  margin-bottom: 1rem;
-  resize: vertical;
-  color: #d8ebe3;
-  background: #07100e;
-  border: 1px solid #416058;
-  padding: 0.7rem;
+  color: var(--danger-text);
 }
 .visually-hidden {
   position: absolute;
@@ -344,6 +356,14 @@ pre {
       transform: translateY(8px);
     }
   }
+}
+.boot,
+.fatal {
+  padding: 10vh 8vw;
+}
+.fatal pre {
+  white-space: pre-wrap;
+  color: var(--muted);
 }
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license

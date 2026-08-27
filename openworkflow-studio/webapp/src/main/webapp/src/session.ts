@@ -1,28 +1,16 @@
-export const TOKEN_KEY = "openworkflow.accessToken";
-
+// tenant_did, not tenant_id/tenant/tid - matches the forwardmeasure_identity
+// client scope's actual mapped claim name (see StudioResource's sibling apps
+// - PlatformTenantContextResource, TenantOrganizationReconciler - which all
+// use this same DID-based claim), confirmed against a real decoded token.
 export function tenantFromToken(token: string): string {
   try {
     const payload = JSON.parse(
       atob(token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/")),
     );
-    return String(
-      payload.tenant_id ??
-        payload.tenant ??
-        payload.tid ??
-        "authenticated tenant",
-    );
+    return String(payload.tenant_did ?? "authenticated tenant");
   } catch {
     return "authenticated tenant";
   }
-}
-
-export function getToken(): string {
-  return sessionStorage.getItem(TOKEN_KEY) ?? "";
-}
-
-export function setToken(token: string): void {
-  if (token) sessionStorage.setItem(TOKEN_KEY, token);
-  else sessionStorage.removeItem(TOKEN_KEY);
 }
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
