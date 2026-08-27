@@ -60,11 +60,14 @@ public final class TenantOrganizationReconciler {
         .filter(role -> !existingRoles.contains(role))
         .forEach(admin::createSharedClientRole);
 
-    Set<String> existingGroups = admin.organizationRoleGroups(organization.id());
+    Set<String> existingGroups =
+        admin.organizationRoleGroups(organization.id(), organization.alias());
     pack.roles().stream()
         .sorted()
         .filter(role -> !existingGroups.contains(role))
-        .forEach(role -> admin.createOrganizationRoleGroup(organization.id(), role));
+        .forEach(
+            role ->
+                admin.createOrganizationRoleGroup(organization.id(), organization.alias(), role));
 
     Map<String, String> attributes = new LinkedHashMap<>(organization.attributes());
     attributes.put(CAPABILITY_PACK_ATTRIBUTE_PREFIX + pack.id(), pack.version());

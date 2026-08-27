@@ -3,7 +3,7 @@
   "packId": "openworkflow",
   "packVersion": "1",
   "keycloakVersion": "26.7.1",
-  "clientId": "forwardmeasure-openworkflow",
+  "clientId": "openworkflow",
   "authzenFeature": "authzen",
   "roles": [
     "workflow-author",

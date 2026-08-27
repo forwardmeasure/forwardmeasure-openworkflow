@@ -34,7 +34,13 @@ public interface KeycloakOrganizationAdmin {
 
   void updateOrganization(OrganizationState organization);
 
-  Set<String> organizationRoleGroups(String organizationId);
+  /**
+   * Keycloak has no organization-scoped groups sub-resource, so "role group" is a realm {@code
+   * Group} namespaced by convention under a top-level group named for {@code organizationAlias}
+   * (e.g. {@code /lux/workflow-author}), not a child resource of the Organization itself - {@code
+   * organizationId} only identifies which Organization's roles these are for the caller.
+   */
+  Set<String> organizationRoleGroups(String organizationId, String organizationAlias);
 
-  void createOrganizationRoleGroup(String organizationId, String role);
+  void createOrganizationRoleGroup(String organizationId, String organizationAlias, String role);
 }

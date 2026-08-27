@@ -13,6 +13,7 @@ package com.forwardmeasure.openworkflow.binding.spring;
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganization;
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.KeycloakOrganizationClaims;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
@@ -20,6 +21,22 @@ import org.springframework.stereotype.Component;
 /** Reads only the nested active-Organization claims from Spring Security's verified JWT. */
 @Component
 public class SpringActiveOrganizationProvider implements ActiveOrganizationProvider {
+  private final String clientId;
+
+  // Deliberately NOT openworkflow.authorization.client-id - that property is
+  // this service's OWN identity for its outbound AuthZEN OAuth
+  // client-credentials call (OpenWorkflowSpringBinding), set to
+  // "openworkflow". This is a different thing: which client's roles to read
+  // out of the INCOMING browser-issued JWT's organization claim. Those
+  // roles are mapped onto "forwardmeasure-public" (confirmed live -
+  // GET .../organizations/{org}/groups/{group} shows
+  // "clientRoles":{"forwardmeasure-public":[...]}), the public client
+  // Studio/Dashboard actually log in through.
+  public SpringActiveOrganizationProvider(
+      @Value("${openworkflow.authorization.organization-client-id}") String organizationClientId) {
+    this.clientId = organizationClientId;
+  }
+
   @Override
   public ActiveOrganization current() {
     var authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -27,7 +44,6 @@ public class SpringActiveOrganizationProvider implements ActiveOrganizationProvi
         || !authentication.isAuthenticated()) {
       throw new SecurityException("An authenticated JWT is required");
     }
-    return KeycloakOrganizationClaims.extract(
-        token.getToken().getClaims(), "forwardmeasure-openworkflow");
+    return KeycloakOrganizationClaims.extract(token.getToken().getClaims(), clientId);
   }
 }

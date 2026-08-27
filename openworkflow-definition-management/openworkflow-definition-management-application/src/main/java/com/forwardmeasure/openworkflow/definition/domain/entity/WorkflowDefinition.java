@@ -173,6 +173,16 @@ public class WorkflowDefinition extends AuditedEntity<Long> {
     this.lifecycleState = Objects.requireNonNull(state, "state");
   }
 
+  /**
+   * Keeps this side of the {@code publication} association in sync within the same persistence
+   * context - {@code publication} is the inverse ({@code mappedBy}) side, so persisting a new
+   * {@link WorkflowPublication} elsewhere never updates it here on its own; JPA requires the caller
+   * to maintain both sides of a bidirectional association itself.
+   */
+  public void attachPublication(WorkflowPublication publication) {
+    this.publication = Objects.requireNonNull(publication, "publication");
+  }
+
   private static String required(String value, String name) {
     Objects.requireNonNull(value, name);
     if (value.isBlank()) {

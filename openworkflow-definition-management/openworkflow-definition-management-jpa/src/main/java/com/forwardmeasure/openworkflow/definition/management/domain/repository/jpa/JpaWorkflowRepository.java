@@ -68,12 +68,25 @@ public final class JpaWorkflowRepository extends AbstractAuditedEntityRepository
 
   @Override
   public Optional<Workflow> findById(UUID workflowId) {
-    return findByUuid(workflowId);
+    Optional<Workflow> workflow = findByUuid(workflowId);
+    workflow.ifPresent(JpaWorkflowRepository::initializeOwner);
+    return workflow;
   }
 
   @Override
   public Page<Workflow> list(int offset, int limit) {
-    return page(new PageRequest(offset, limit, List.of()));
+    Page<Workflow> page = page(new PageRequest(offset, limit, List.of()));
+    page.items().forEach(JpaWorkflowRepository::initializeOwner);
+    return page;
+  }
+
+  // owner is lazy (OwnedEntity), and the API mapper reads it after this
+  // repository's transaction/session has already closed - touching it here,
+  // while the session is still open, forces Hibernate to resolve the proxy
+  // before the entity is handed back, matching how create() already sets a
+  // fully-resolved owner rather than a lazy one.
+  private static void initializeOwner(Workflow workflow) {
+    workflow.getOwner().getUuid();
   }
 
   @Override

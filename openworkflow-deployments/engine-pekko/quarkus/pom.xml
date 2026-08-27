@@ -14,10 +14,6 @@
 
   <properties>
     <container-image.name>openworkflow-engine-pekko-quarkus</container-image.name>
-    <quarkus.container-image.registry>${container-image.registry}</quarkus.container-image.registry>
-    <quarkus.container-image.group>${container-image.group}</quarkus.container-image.group>
-    <quarkus.container-image.name>${container-image.name}</quarkus.container-image.name>
-    <quarkus.container-image.tag>${container-image.tag}</quarkus.container-image.tag>
   </properties>
 
   <dependencies>
@@ -88,17 +84,50 @@
   <profiles>
     <profile>
       <id>container-image</id>
-      <dependencies>
-        <dependency>
-          <groupId>io.quarkus</groupId>
-          <artifactId>quarkus-container-image-docker</artifactId>
-        </dependency>
-      </dependencies>
-      <properties>
-        <quarkus.container-image.build>${container-image.build}</quarkus.container-image.build>
-        <quarkus.container-image.push>${container-image.push}</quarkus.container-image.push>
-        <quarkus.container-image.docker.dockerfile-jvm-path>src/main/docker/Dockerfile.jvm</quarkus.container-image.docker.dockerfile-jvm-path>
-      </properties>
+      <build>
+        <plugins>
+          <!--
+          fabric8 docker-maven-plugin, not Quarkus's own quarkus-container-image-docker - same
+          mechanism as every non-Quarkus openworkflow module (tenant-provisioning, migrations,
+          spring/micronaut service bindings). Declared after quarkus-maven-plugin in this pom's
+          own <build><plugins> (Maven appends a profile's <plugins> after the base build's, for
+          same-phase executions) so this always builds from target/quarkus-app/ (produced by
+          quarkus-maven-plugin's own build goal, also bound to the package phase) after Quarkus's
+          augmentation has already run, not before it.
+          -->
+          <plugin>
+            <groupId>io.fabric8</groupId>
+            <artifactId>docker-maven-plugin</artifactId>
+            <configuration>
+              <images>
+                <image>
+                  <name>${container-image.registry}/${container-image.group}/${container-image.name}:${container-image.tag}</name>
+                  <build>
+                    <contextDir>${project.basedir}</contextDir>
+                    <dockerFile>src/main/docker/Dockerfile.jvm</dockerFile>
+                  </build>
+                </image>
+              </images>
+            </configuration>
+            <executions>
+              <execution>
+                <id>build-container-image</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>build</goal>
+                </goals>
+              </execution>
+              <execution>
+                <id>push-container-image</id>
+                <phase>package</phase>
+                <goals>
+                  <goal>push</goal>
+                </goals>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
     </profile>
   </profiles>
 </project>

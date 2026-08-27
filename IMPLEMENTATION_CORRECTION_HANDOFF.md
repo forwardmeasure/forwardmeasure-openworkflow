@@ -2,7 +2,9 @@
 
 **Purpose:** This document records implementation mistakes introduced during the OKS, OAE, Data Fabric evidence-service, and unified OpenWorkflow work. It is intended to give a replacement implementer enough evidence and direction to repair the code without inheriting the same assumptions.
 
-**Status:** The affected definition-management implementations must be treated as noncompliant until the correction plan and acceptance gates below pass.
+**Status:** This is a historical correction record and an implementation handoff. The current
+implementation must be assessed against the approved decisions recorded here and the acceptance
+gates below, not against superseded intermediate requirements.
 
 ## 1. Authorities and precedence
 
@@ -28,8 +30,7 @@ The required flow is:
 ```text
 OpenAPI source contract
     -> generated API interface
-    -> thin API implementation implementing that interface
-    -> operation-specific handlers
+    -> portable API implementation implementing that interface
     -> injected application/domain services
     -> injected persistence-service interfaces
     -> ForwardMeasure JPA service implementations
@@ -41,11 +42,16 @@ Responsibilities must remain separated:
 
 - The OpenAPI document is the public HTTP authority.
 - Generated API interfaces and generated DTOs are never hand-edited.
-- The API implementation implements the generated interface and delegates each operation to a handler.
-- The API implementation does not contain business rules, persistence calls, actor-resolution workflows, lifecycle logic, or manual routing annotations duplicating the contract.
-- Handlers coordinate one API use case and inject services. They do not inject `EntityManager` or repositories.
+- The API implementation implements the generated interface and may coordinate the HTTP use case
+  inline: trusted actor/context resolution, pagination defaults, ETag parsing/emission, DTO/domain
+  mapping, service invocation, and HTTP response construction.
+- A separate operation-handler layer is not required. This supersedes the earlier handoff language
+  that mandated one handler per operation.
+- The API implementation does not contain business rules, persistence calls, repository access,
+  transaction implementation, lifecycle rules, or manual routing annotations duplicating the
+  generated contract.
 - Application/domain services enforce business invariants and own Jakarta transaction boundaries where appropriate.
-- Persistence services isolate entity/repository access from handlers and transport code.
+- Persistence services isolate entity/repository access from transport code.
 - Repositories extend the appropriate standard ForwardMeasure JPA repository bases.
 - `EntityManager` is confined to ForwardMeasure JPA infrastructure and the smallest framework composition hook required to bind repositories.
 - API DTOs, domain types, persistence entities, authorization resources, and engine events are distinct types.
@@ -56,9 +62,26 @@ The ingestion implementation illustrates the intended top-level shape:
 ```text
 generated IngestionApi
     -> IngestionApiImpl implements IngestionApi
-    -> operation handlers
     -> injected services
 ```
+
+### 2.1 Approved framework and engine deployment model
+
+Quarkus, Spring, and Micronaut remain supported framework distributions and must expose the same
+contract and behavior. A deployed platform selects exactly one framework distribution at a time
+through `workflowPlatformFramework`; it does not deploy all three equivalent framework ports
+simultaneously.
+
+Within the selected framework, the platform may independently enable and simultaneously deploy all
+three workflow-engine flavours:
+
+- Kafka Streams;
+- Pekko with PostgreSQL persistence; and
+- Pekko with Cassandra persistence.
+
+The two Pekko flavours may use the same framework-specific Pekko image, but they remain distinct
+Helm releases, services, actor clusters, persistence configurations, and scaling units. Kafka
+Streams and Pekko remain separate image/runtime ownership boundaries.
 
 ## 3. Primary contract mistake
 
@@ -146,7 +169,7 @@ Resources therefore extend generated abstract classes, for example:
 
 The required pattern is a generated API interface and a thin implementation that implements it.
 
-### 4.2 Missing handler layer
+### 4.2 Resource orchestration
 
 The resource classes directly:
 
@@ -157,7 +180,10 @@ The resource classes directly:
 - invoke broad application services; and
 - construct HTTP responses.
 
-These are operation-handler responsibilities. Introduce explicit handlers for each use case and reduce the API implementation to delegation.
+These responsibilities may now remain inline in the generated-interface implementation. Their
+presence is not, by itself, an architecture violation. The resource remains noncompliant only where
+it implements business rules, owns transactions, injects repositories or `EntityManager`, bypasses
+application/domain services, or duplicates contract routing annotations.
 
 ### 4.3 Framework duplication
 
@@ -221,8 +247,6 @@ generated DefinitionsApi
 
 Problems include:
 
-- no operation-specific handler layer;
-- a broad resource-to-service dependency;
 - a persistence adapter that constructs an application service;
 - manual construction of repositories per call;
 - direct `EntityManager` ownership in application-facing orchestration;
@@ -248,7 +272,7 @@ The design must enforce immutable revisions, digest-bound approval, and author-n
 
 ### 6.4 Package and type separation violations
 
-Persistent classes currently live in a generic `definition.persistence` package. The manifesto requires explicit `entity` packages and distinct entity, repository, persistence-service, application-service, handler, mapper, and transport packages.
+Persistent classes currently live in a generic `definition.persistence` package. The manifesto requires explicit `entity` packages and distinct entity, repository, persistence-service, application-service, mapper, and transport packages.
 
 Generated DTOs must not become entities or domain objects. Entities must not implement API or authorization interfaces.
 
@@ -273,8 +297,7 @@ Affected root:
 
 Additional problems:
 
-- handlers return `jakarta.ws.rs.core.Response`, leaking transport concerns;
-- handlers carry transaction annotations and combine transport orchestration with application behavior;
+- transport code carries transaction annotations and combines transport orchestration with application behavior;
 - the `entity-intelligence-evidence-common` module contains CDI/JAX-RS-oriented handler code rather than being genuinely portable; and
 - generated-client/server contract drift cannot be detected because the resource itself defines the HTTP surface.
 
@@ -284,7 +307,6 @@ Repair it using the ingestion API pattern:
 evidence OpenAPI contract
     -> generated EvidenceApi interface and models
     -> EvidenceApiImpl implements EvidenceApi
-    -> evidence operation handlers
     -> injected services
 ```
 
@@ -310,7 +332,7 @@ The actual errors are:
 - it injects `AuthorizationService` directly and performs authorization request construction in the transport resource; and
 - no generated client/server drift gate covers it.
 
-The correction must first determine whether the Studio authorization endpoint is an approved public product capability. If it is approved, add it explicitly to the appropriate product OpenAPI contract, generate its API interface and models, and implement it through the same thin implementation -> handler -> service pattern. If it is not approved, remove the endpoint and have Studio obtain capability information through an approved API. Do not turn the internal authorization SPI into a REST module merely to legitimize the accidental endpoint.
+The correction must first determine whether the Studio authorization endpoint is an approved public product capability. If it is approved, add it explicitly to the appropriate product OpenAPI contract, generate its API interface and models, and implement it through the same generated-interface implementation -> service pattern. If it is not approved, remove the endpoint and have Studio obtain capability information through an approved API. Do not turn the internal authorization SPI into a REST module merely to legitimize the accidental endpoint.
 
 The required distinction is:
 
@@ -319,7 +341,7 @@ Internal authorization boundary:
 application services -> AuthorizationService SPI -> Keycloak AuthZEN adapter
 
 Optional product HTTP boundary, only if approved:
-product OpenAPI -> generated interface -> thin implementation -> handler -> authorization service
+product OpenAPI -> generated interface -> portable implementation -> authorization service
 ```
 
 ## 9. Migration-authority gap
@@ -346,12 +368,14 @@ Do not continue to later work packages while these foundations remain invalid.
 5. Propose only the minimal explicit contract additions required for approved maker-checker governance; do not implement speculative changes.
 6. Generate API interfaces, models, and clients from the single contract.
 7. Add an automated drift check proving generated artifacts derive from that contract.
-8. Implement a thin generated-interface implementation delegating each operation to an explicit handler.
+8. Implement a portable generated-interface implementation that coordinates HTTP concerns inline
+   and delegates business behavior to injected application/domain services.
 9. Implement application/domain services with lifecycle invariants and Jakarta transaction boundaries.
 10. Implement explicit persistence-service interfaces and implementations.
 11. Reconcile the OKS JPA model with the manifesto's complete definition, revision, validation, review, publication, and audit model.
 12. Use ForwardMeasure JPA entities, repositories, tenancy, identity, metamodel, MapStruct, Liquibase, locking, and contract-test facilities as prescribed; do not recreate them locally.
-13. Bind the same portable implementation through Quarkus, Spring, and Micronaut using only minimal framework adapters.
+13. Bind the same portable implementation through Quarkus, Spring, and Micronaut using only minimal
+    framework adapters; deploy the single framework selected by `workflowPlatformFramework`.
 14. Run focused tests after each layer is corrected.
 15. Run Kubernetes K2 only after all focused gates pass.
 16. Do not claim WP3 complete until restart persistence, exact digest retrieval, maker-checker, tenant isolation, and three-framework parity are proven.
@@ -374,9 +398,11 @@ The repair is not complete unless all of the following are demonstrated.
 ### Layering gates
 
 - API implementation implements generated interfaces.
-- Each API method delegates to an operation handler.
-- API implementation contains no persistence or domain lifecycle logic.
-- Handlers inject application services, not repositories or `EntityManager`.
+- API methods may coordinate HTTP concerns inline and delegate business behavior to injected
+  application/domain services.
+- API implementation contains no persistence, transaction implementation, or domain lifecycle
+  rules.
+- API implementations do not inject repositories or `EntityManager`.
 - Concrete application services inject domain/persistence-service interfaces and own transactional use cases.
 - Repository injection is limited to persistence/application-service implementations permitted by the manifesto.
 - `EntityManager` appears only in approved ForwardMeasure JPA/framework binding and integration-test locations.
@@ -407,7 +433,12 @@ The repair is not complete unless all of the following are demonstrated.
 ### Framework and deployment gates
 
 - Quarkus, Spring, and Micronaut expose the same contract and behavior.
-- The same portable API implementation and handlers are used by all three hosts.
+- The same portable API implementation is used by all three hosts.
+- A platform deploys exactly the framework selected by `workflowPlatformFramework`; three-framework
+  parity is verified by tests or sequential profile deployments, not by running all three ports in
+  one platform installation.
+- Kafka Streams, Pekko/PostgreSQL, and Pekko/Cassandra can be enabled and scaled as three
+  independent engine releases within the selected framework.
 - YAML is used for host configuration.
 - ORM schema generation is disabled.
 - The deployment-owned migration runner applies the composed changelog.
@@ -419,7 +450,7 @@ The repair is not complete unless all of the following are demonstrated.
 - Do not retain an API merely because generated code already exists for it.
 - Do not merge three contracts by inventing a fourth.
 - Do not use engine differences to justify product-plane API differences.
-- Do not inject repositories or `EntityManager` into REST resources or handlers.
+- Do not inject repositories or `EntityManager` into REST resources.
 - Do not construct services or repositories inside request handling.
 - Do not make generic `{action}` endpoints substitute for explicit governed operations.
 - Do not use API DTOs as persistence entities.
@@ -430,6 +461,6 @@ The repair is not complete unless all of the following are demonstrated.
 
 ## 13. Accountability summary
 
-The implementation failed because the existing OKS contract was not treated as reusable product authority; OAE was given an incompatible reduced API; the unified repository was then given a third incompatible API; and working HTTP behavior was accepted despite violations of the required handler, service, repository, entity, tenancy, migration, and framework boundaries. Similar contract-first discipline was also omitted from the Data Fabric evidence service. The internal authorization SPI was not clearly separated from product HTTP APIs, and an undocumented handwritten Studio authorization endpoint was introduced outside the generated contract.
+The implementation failed because the existing OKS contract was not treated as reusable product authority; OAE was given an incompatible reduced API; the unified repository was then given a third incompatible API; and working HTTP behavior was accepted despite violations of the required service, repository, entity, tenancy, migration, and framework boundaries. Similar contract-first discipline was also omitted from the Data Fabric evidence service. The internal authorization SPI was not clearly separated from product HTTP APIs, and an undocumented handwritten Studio authorization endpoint was introduced outside the generated contract. A separate operation-handler layer was considered during correction but is no longer required; generated-interface implementations may coordinate HTTP concerns inline while delegating business behavior to services.
 
 The replacement work must begin by restoring one contract and one enforced architecture, not by patching individual endpoints in the current design.

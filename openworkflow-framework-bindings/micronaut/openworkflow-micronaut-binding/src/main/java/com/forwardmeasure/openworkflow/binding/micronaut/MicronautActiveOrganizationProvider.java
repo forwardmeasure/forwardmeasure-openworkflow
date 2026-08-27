@@ -13,6 +13,7 @@ package com.forwardmeasure.openworkflow.binding.micronaut;
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganization;
 import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
 import com.forwardmeasure.openworkflow.authorization.KeycloakOrganizationClaims;
+import io.micronaut.context.annotation.Value;
 import io.micronaut.security.authentication.Authentication;
 import io.micronaut.security.utils.SecurityService;
 import jakarta.inject.Singleton;
@@ -23,10 +24,23 @@ import java.util.function.Supplier;
 @Singleton
 public class MicronautActiveOrganizationProvider implements ActiveOrganizationProvider {
   private final SecurityService security;
+  private final String clientId;
   private final ThreadLocal<Authentication> scopedAuthentication = new ThreadLocal<>();
 
-  public MicronautActiveOrganizationProvider(SecurityService security) {
+  // Deliberately NOT openworkflow.authorization.client-id - that property is
+  // this service's OWN identity for its outbound AuthZEN OAuth
+  // client-credentials call (OpenWorkflowMicronautBinding), set to
+  // "openworkflow". This is a different thing: which client's roles to read
+  // out of the INCOMING browser-issued JWT's organization claim. Those
+  // roles are mapped onto "forwardmeasure-public" (confirmed live -
+  // GET .../organizations/{org}/groups/{group} shows
+  // "clientRoles":{"forwardmeasure-public":[...]}), the public client
+  // Studio/Dashboard actually log in through.
+  public MicronautActiveOrganizationProvider(
+      SecurityService security,
+      @Value("${openworkflow.authorization.organization-client-id}") String organizationClientId) {
     this.security = security;
+    this.clientId = organizationClientId;
   }
 
   @Override
@@ -38,8 +52,7 @@ public class MicronautActiveOrganizationProvider implements ActiveOrganizationPr
               .getAuthentication()
               .orElseThrow(() -> new SecurityException("An authenticated JWT is required"));
     }
-    return KeycloakOrganizationClaims.extract(
-        authentication.getAttributes(), "forwardmeasure-openworkflow");
+    return KeycloakOrganizationClaims.extract(authentication.getAttributes(), clientId);
   }
 
   public <T> T call(Authentication authentication, Supplier<T> operation) {

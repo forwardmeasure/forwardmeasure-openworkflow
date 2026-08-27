@@ -12,26 +12,52 @@ import java.util.Set;
 
 /** Framework-neutral, bounded same-origin bridge from Studio's /api path to the runtime. */
 public final class StudioApiProxy {
+  // Every header the real API contract declares (common-definitions.yaml's If-Match/
+  // X-Correlation-ID, execution-management.openapi.yaml's Idempotency-Key) must be
+  // listed here - Studio's frontend already sends each one correctly; an allowlist
+  // that falls behind the contract silently drops it before the backend ever sees it.
   private static final Set<String> REQUEST_HEADERS =
-      Set.of("authorization", "content-type", "accept", "x-request-id");
+      Set.of(
+          "authorization",
+          "content-type",
+          "accept",
+          "x-request-id",
+          "x-correlation-id",
+          "if-match",
+          "idempotency-key");
   private static final Set<String> RESPONSE_HEADERS =
-      Set.of("content-type", "cache-control", "etag", "location", "x-request-id");
+      Set.of(
+          "content-type", "cache-control", "etag", "location", "x-request-id", "x-correlation-id");
 
-  private final URI upstream;
+  private final URI defaultUpstream;
+  private final URI executionUpstream;
   private final HttpClient client;
 
-  public StudioApiProxy(String upstream) {
-    this.upstream = URI.create(upstream.endsWith("/") ? upstream : upstream + "/");
-    if (!Set.of("http", "https").contains(this.upstream.getScheme())) {
+  /**
+   * Two upstreams, not one: definition-management and execution-management are separate deployables
+   * with disjoint API surfaces (only execution-management serves {@code v1/executions/*}), so a
+   * single upstream can only ever reach one of them - every execution call silently 404'd against
+   * the other service until this split existed.
+   */
+  public StudioApiProxy(String defaultUpstream, String executionUpstream) {
+    this.defaultUpstream = validateUpstream(defaultUpstream);
+    this.executionUpstream = validateUpstream(executionUpstream);
+    this.client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+  }
+
+  private static URI validateUpstream(String upstream) {
+    URI parsed = URI.create(upstream.endsWith("/") ? upstream : upstream + "/");
+    if (!Set.of("http", "https").contains(parsed.getScheme())) {
       throw new IllegalArgumentException("Studio API upstream must use http or https");
     }
-    this.client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+    return parsed;
   }
 
   public ProxyResponse forward(
       String method, String pathAndQuery, Map<String, List<String>> headers, byte[] body)
       throws IOException, InterruptedException {
     String relative = pathAndQuery.startsWith("/") ? pathAndQuery.substring(1) : pathAndQuery;
+    URI upstream = relative.startsWith("v1/executions") ? executionUpstream : defaultUpstream;
     var target = upstream.resolve(relative);
     var request =
         HttpRequest.newBuilder(target)

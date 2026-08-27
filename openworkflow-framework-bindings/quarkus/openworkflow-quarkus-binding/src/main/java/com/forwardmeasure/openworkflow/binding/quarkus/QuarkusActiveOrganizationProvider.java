@@ -19,6 +19,7 @@ import jakarta.enterprise.context.RequestScoped;
 import java.io.IOException;
 import java.util.Base64;
 import java.util.Map;
+import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /** Reads only the nested active-Organization claims from Quarkus's verified JWT. */
@@ -26,10 +27,26 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 public class QuarkusActiveOrganizationProvider implements ActiveOrganizationProvider {
   private final JsonWebToken token;
   private final ObjectMapper mapper;
+  private final String clientId;
 
-  public QuarkusActiveOrganizationProvider(JsonWebToken token, ObjectMapper mapper) {
+  // Deliberately NOT openworkflow.authorization.client-id - that property is
+  // this service's OWN identity for its outbound AuthZEN OAuth
+  // client-credentials call (OpenWorkflowQuarkusBinding), set to
+  // "openworkflow". This is a different thing: which client's roles to read
+  // out of the INCOMING browser-issued JWT's organization claim. Those
+  // roles are mapped onto "forwardmeasure-public" (confirmed live -
+  // GET .../organizations/{org}/groups/{group} shows
+  // "clientRoles":{"forwardmeasure-public":[...]}), the public client
+  // Studio/Dashboard actually log in through. Conflating the two here was a
+  // real mistake in an earlier pass at this fix - caught before it shipped.
+  public QuarkusActiveOrganizationProvider(
+      JsonWebToken token,
+      ObjectMapper mapper,
+      @ConfigProperty(name = "openworkflow.authorization.organization-client-id")
+          String organizationClientId) {
     this.token = token;
     this.mapper = mapper;
+    this.clientId = organizationClientId;
   }
 
   @Override
@@ -41,7 +58,7 @@ public class QuarkusActiveOrganizationProvider implements ActiveOrganizationProv
       }
       byte[] payload = Base64.getUrlDecoder().decode(segments[1]);
       Map<String, Object> claims = mapper.readValue(payload, new TypeReference<>() {});
-      return KeycloakOrganizationClaims.extract(claims, "forwardmeasure-openworkflow");
+      return KeycloakOrganizationClaims.extract(claims, clientId);
     } catch (IllegalArgumentException | IOException exception) {
       throw new SecurityException("Verified JWT claims could not be decoded", exception);
     }

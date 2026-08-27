@@ -17,8 +17,10 @@ final class StudioApiProxyController {
   private final StudioApiProxy proxy;
 
   StudioApiProxyController(
-      @Value("${openworkflow.studio.api-upstream:http://127.0.0.1:8081}") String upstream) {
-    this.proxy = new StudioApiProxy(upstream);
+      @Value("${openworkflow.studio.api-upstream:http://127.0.0.1:8081}") String upstream,
+      @Value("${openworkflow.studio.execution-api-upstream:http://127.0.0.1:8081}")
+          String executionUpstream) {
+    this.proxy = new StudioApiProxy(upstream, executionUpstream);
   }
 
   @RequestMapping("/api/**")

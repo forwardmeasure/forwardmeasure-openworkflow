@@ -7,14 +7,35 @@ quarkus:
       studio:
         matches: "/studio/.*"
         header:
-          Content-Security-Policy: "default-src 'self'; connect-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+          # connect-src needs the OIDC provider's own origin, not just
+          # 'self' - keycloak-js's token exchange is a background fetch()
+          # from this page to Keycloak (unlike the initial login redirect,
+          # a top-level navigation CSP never restricts), and connect-src
+          # 'self' blocks it outright before the browser even attempts the
+          # connection. Confirmed the hard way: every login got stuck on
+          # "Unable To Start This View / Failed to fetch", 100% of the
+          # time, with curl reproducing the identical request successfully
+          # (curl doesn't enforce CSP - it's a browser-side policy) and
+          # Keycloak's own CORS headers checking out fine - the request was
+          # never leaving the browser at all. Interpolated from the same
+          # OPENWORKFLOW_STUDIO_OIDC_URL env var StudioResource's oidc-url
+          # property reads, rather than a second hardcoded literal.
+          # style-src needs 'unsafe-inline': the canvas view's MUI components
+          # style themselves via Emotion (CSS-in-JS), which inserts <style>
+          # elements into the DOM at runtime rather than shipping a static
+          # stylesheet - CSP's style-src governs those exactly like a <link>
+          # tag, and 'self' alone blocks them. A nonce-based style-src would
+          # avoid 'unsafe-inline' but needs the server to mint a per-request
+          # nonce and thread it into Emotion's cache config; not worth that
+          # complexity for a style-only (non-script) relaxation.
+          Content-Security-Policy: "default-src 'self'; connect-src 'self' ${OPENWORKFLOW_STUDIO_OIDC_URL:http://localhost:8180}; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
           Referrer-Policy: no-referrer
           X-Content-Type-Options: nosniff
 
 openworkflow:
   studio:
-    api-base-path: "${OPENWORKFLOW_STUDIO_API_BASE_PATH:/api}"
     api-upstream: "${OPENWORKFLOW_STUDIO_API_UPSTREAM:http://127.0.0.1:8081}"
+    execution-api-upstream: "${OPENWORKFLOW_STUDIO_EXECUTION_API_UPSTREAM:http://127.0.0.1:8081}"
     environment-name: "${OPENWORKFLOW_STUDIO_ENVIRONMENT_NAME:Local}"
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more

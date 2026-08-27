@@ -15,6 +15,7 @@ openworkflow:
   studio:
     api-base-path: ${OPENWORKFLOW_STUDIO_API_BASE_PATH:/api}
     api-upstream: ${OPENWORKFLOW_STUDIO_API_UPSTREAM:http://127.0.0.1:8081}
+    execution-api-upstream: ${OPENWORKFLOW_STUDIO_EXECUTION_API_UPSTREAM:http://127.0.0.1:8081}
     environment-name: ${OPENWORKFLOW_STUDIO_ENVIRONMENT_NAME:Local}
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more

@@ -140,25 +140,104 @@ public final class HttpKeycloakOrganizationAdmin implements KeycloakOrganization
   }
 
   @Override
-  public Set<String> organizationRoleGroups(String organizationId) {
-    String id = KeycloakAdminConfiguration.validateSegment(organizationId, "organization.id");
-    JsonNode groups =
-        send("GET", adminBase.resolve("organizations/" + id + "/groups"), null, 200).body();
+  public Set<String> organizationRoleGroups(String organizationId, String organizationAlias) {
+    Optional<String> tenantGroupId = findGroupIdByExactName(organizationAlias);
+    if (tenantGroupId.isEmpty()) {
+      return Set.of();
+    }
+    JsonNode children =
+        send("GET", adminBase.resolve("groups/" + tenantGroupId.get() + "/children"), null, 200)
+            .body();
     Set<String> names = new TreeSet<>();
-    groups.forEach(group -> names.add(requiredText(group, "name")));
+    children.forEach(group -> names.add(requiredText(group, "name")));
     return Set.copyOf(names);
   }
 
   @Override
-  public void createOrganizationRoleGroup(String organizationId, String role) {
-    String id = KeycloakAdminConfiguration.validateSegment(organizationId, "organization.id");
+  public void createOrganizationRoleGroup(
+      String organizationId, String organizationAlias, String role) {
+    String tenantGroupId =
+        findGroupIdByExactName(organizationAlias)
+            .orElseGet(() -> createTopLevelGroup(organizationAlias));
     send(
         "POST",
-        adminBase.resolve("organizations/" + id + "/groups"),
+        adminBase.resolve("groups/" + tenantGroupId + "/children"),
         Map.of("name", role),
+        201,
+        409);
+    String roleGroupId =
+        findChildGroupIdByExactName(tenantGroupId, role)
+            .orElseThrow(
+                () ->
+                    new KeycloakAdminException(
+                        "Keycloak did not return the created role group " + role));
+    JsonNode roleRepresentation =
+        send(
+                "GET",
+                adminBase.resolve("clients/" + sharedClientUuid() + "/roles/" + role),
+                null,
+                200)
+            .body();
+    send(
+        "POST",
+        adminBase.resolve("groups/" + roleGroupId + "/role-mappings/clients/" + sharedClientUuid()),
+        java.util.List.of(roleRepresentation),
         201,
         204,
         409);
+  }
+
+  /**
+   * Keycloak's realm-scoped Groups API is the real, documented mechanism the "organization role
+   * group" concept above is implemented on top of - Organizations themselves have no nested groups
+   * sub-resource (confirmed live: {@code GET .../organizations/{id}/groups} returns HTTP 404).
+   * Top-level groups are namespaced by tenant alias so the same role name (e.g. "workflow-author")
+   * stays distinct per tenant.
+   */
+  private Optional<String> findGroupIdByExactName(String name) {
+    String query = URLEncoder.encode(name, StandardCharsets.UTF_8);
+    JsonNode groups =
+        send(
+                "GET",
+                URI.create(
+                    adminBase.resolve("groups").toString()
+                        + "?search="
+                        + query
+                        + "&exact=true&briefRepresentation=true"),
+                null,
+                200)
+            .body();
+    for (JsonNode group : groups) {
+      if (name.equals(group.path("name").asText())) {
+        return Optional.of(requiredText(group, "id"));
+      }
+    }
+    return Optional.empty();
+  }
+
+  private Optional<String> findChildGroupIdByExactName(String parentGroupId, String name) {
+    JsonNode children =
+        send("GET", adminBase.resolve("groups/" + parentGroupId + "/children"), null, 200).body();
+    for (JsonNode group : children) {
+      if (name.equals(group.path("name").asText())) {
+        return Optional.of(requiredText(group, "id"));
+      }
+    }
+    return Optional.empty();
+  }
+
+  private String createTopLevelGroup(String name) {
+    Response created = send("POST", adminBase.resolve("groups"), Map.of("name", name), 201, 409);
+    return created
+        .location()
+        .map(HttpKeycloakOrganizationAdmin::lastPathSegment)
+        .or(() -> findGroupIdByExactName(name))
+        .orElseThrow(
+            () -> new KeycloakAdminException("Keycloak did not return the created group " + name));
+  }
+
+  private static String lastPathSegment(String uri) {
+    return uri.substring(uri.lastIndexOf('/') + 1);
   }
 
   private String sharedClientUuid() {

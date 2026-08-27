@@ -104,12 +104,13 @@ class TenantOrganizationReconcilerTest {
     }
 
     @Override
-    public Set<String> organizationRoleGroups(String organizationId) {
+    public Set<String> organizationRoleGroups(String organizationId, String organizationAlias) {
       return Set.copyOf(groups.getOrDefault(organizationId, Set.of()));
     }
 
     @Override
-    public void createOrganizationRoleGroup(String organizationId, String role) {
+    public void createOrganizationRoleGroup(
+        String organizationId, String organizationAlias, String role) {
       groups.computeIfAbsent(organizationId, ignored -> new HashSet<>()).add(role);
     }
   }

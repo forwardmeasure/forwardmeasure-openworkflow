@@ -311,7 +311,9 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
         WorkflowLifecycleState.PUBLISHED,
         actor.actorId(),
         correlationId);
-    publications.publish(definition, actor.actorId(), definition.getResolvedDigest());
+    WorkflowPublication publication =
+        publications.publish(definition, actor.actorId(), definition.getResolvedDigest());
+    definition.attachPublication(publication);
     return definition;
   }
 

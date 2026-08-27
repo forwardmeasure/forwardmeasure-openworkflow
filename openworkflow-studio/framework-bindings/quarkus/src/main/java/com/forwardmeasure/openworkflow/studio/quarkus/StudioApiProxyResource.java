@@ -16,16 +16,27 @@ import jakarta.ws.rs.core.UriInfo;
 import java.io.IOException;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
-@Path("/api/{path: .+}")
+/**
+ * Mapped under "studio/api", not bare "/api" - the Gateway strips a "/owf" prefix before forwarding
+ * but keeps "studio", so a public request to "/owf/studio/api/xyz" (what StudioResource's config()
+ * now advertises as apiBasePath) arrives here as "/studio/api/xyz". A bare "/api/{path}" mapping
+ * would only ever be reached by a request this Gateway route can never actually produce.
+ */
+@Path("studio/api/{path: .+}")
 public final class StudioApiProxyResource {
   @ConfigProperty(name = "openworkflow.studio.api-upstream", defaultValue = "http://127.0.0.1:8081")
   String upstream;
+
+  @ConfigProperty(
+      name = "openworkflow.studio.execution-api-upstream",
+      defaultValue = "http://127.0.0.1:8081")
+  String executionUpstream;
 
   private StudioApiProxy proxy;
 
   @PostConstruct
   void initialize() {
-    proxy = new StudioApiProxy(upstream);
+    proxy = new StudioApiProxy(upstream, executionUpstream);
   }
 
   @GET
@@ -59,7 +70,7 @@ public final class StudioApiProxyResource {
 
   private Response forward(String method, UriInfo uri, HttpHeaders headers, byte[] body)
       throws IOException, InterruptedException {
-    var raw = uri.getRequestUri().getRawPath().substring("/api/".length());
+    var raw = uri.getRequestUri().getRawPath().substring("/studio/api/".length());
     if (uri.getRequestUri().getRawQuery() != null) raw += "?" + uri.getRequestUri().getRawQuery();
     var proxied =
         proxy.forward(method, raw, headers.getRequestHeaders(), body == null ? new byte[0] : body);

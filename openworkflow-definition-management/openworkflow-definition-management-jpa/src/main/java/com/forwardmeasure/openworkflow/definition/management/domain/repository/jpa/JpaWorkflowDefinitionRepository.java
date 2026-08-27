@@ -16,6 +16,7 @@ import com.forwardmeasure.jpa.identity.entity.Actor;
 import com.forwardmeasure.openworkflow.definition.domain.entity.Workflow;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowDefinition;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowLifecycleState;
+import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowPublication;
 import com.forwardmeasure.openworkflow.definition.domain.repository.WorkflowDefinitionRepository;
 import com.forwardmeasure.openworkflow.definition.infrastructure.persistence.WorkflowActorResolver;
 import com.forwardmeasure.openworkflow.definition.management.DefinitionManagementException;
@@ -98,8 +99,11 @@ public final class JpaWorkflowDefinitionRepository
 
   @Override
   public Optional<WorkflowDefinition> findByWorkflowAndUuid(Workflow workflow, UUID definitionId) {
-    return findByUuid(definitionId)
-        .filter(definition -> definition.getWorkflow().getId().equals(workflow.getId()));
+    Optional<WorkflowDefinition> definition =
+        findByUuid(definitionId)
+            .filter(candidate -> candidate.getWorkflow().getId().equals(workflow.getId()));
+    definition.ifPresent(JpaWorkflowDefinitionRepository::initializeForApi);
+    return definition;
   }
 
   @Override
@@ -124,6 +128,7 @@ public final class JpaWorkflowDefinitionRepository
     }
     List<WorkflowDefinition> items =
         dataQuery.setFirstResult(offset).setMaxResults(limit).getResultList();
+    items.forEach(JpaWorkflowDefinitionRepository::initializeForApi);
     return new Page<>(items, countQuery.getSingleResult(), offset, limit);
   }
 
@@ -145,7 +150,23 @@ public final class JpaWorkflowDefinitionRepository
     }
     List<WorkflowDefinition> items =
         dataQuery.setFirstResult(offset).setMaxResults(limit).getResultList();
+    items.forEach(JpaWorkflowDefinitionRepository::initializeForApi);
     return new Page<>(items, countQuery.getSingleResult(), offset, limit);
+  }
+
+  // workflow, author, and publication (plus publication's own actor) are all
+  // lazy, and the API mapper reads every one of them after this repository's
+  // transaction/session has already closed - each must be resolved here,
+  // while the session is still open. create() doesn't need this: it sets
+  // workflow/author directly from already-resolved callers, and a
+  // freshly-persisted definition's publication is a plain null, not a proxy.
+  private static void initializeForApi(WorkflowDefinition definition) {
+    definition.getWorkflow().getUuid();
+    definition.getAuthor().getUuid();
+    WorkflowPublication publication = definition.getPublication();
+    if (publication != null) {
+      publication.getActor().getUuid();
+    }
   }
 
   @Override

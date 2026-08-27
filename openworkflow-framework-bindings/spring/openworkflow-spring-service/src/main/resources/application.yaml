@@ -33,8 +33,14 @@ management:
 openworkflow:
   authorization:
     issuer: ${OPENWORKFLOW_KEYCLOAK_ISSUER:http://localhost:8080/realms/openworkflow}
-    client-id: forwardmeasure-openworkflow
+    client-id: ${OPENWORKFLOW_CLIENT_ID:openworkflow}
     client-secret: ${OPENWORKFLOW_CLIENT_SECRET}
+    # Not the same client as client-id above (this service's own AuthZEN
+    # OAuth identity) - this is which client's roles to read out of an
+    # INCOMING browser-issued JWT's organization claim. Must match the
+    # client the public/browser OIDC client (forwardmeasure-public) role
+    # mappings actually live on.
+    organization-client-id: ${OPENWORKFLOW_ORGANIZATION_CLIENT_ID:forwardmeasure-public}
     request-timeout: 5s
     decision-ttl: 5s
     maximum-cache-entries: 10000
