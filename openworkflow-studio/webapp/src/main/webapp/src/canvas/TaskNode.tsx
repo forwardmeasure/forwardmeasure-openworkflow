@@ -9,7 +9,9 @@ import EditNoteIcon from "@mui/icons-material/EditNote";
 import HealingIcon from "@mui/icons-material/Healing";
 import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import LoopIcon from "@mui/icons-material/Loop";
+import PlayCircleOutlineIcon from "@mui/icons-material/PlayCircleOutlined";
 import ReportProblemIcon from "@mui/icons-material/ReportProblem";
+import SensorsIcon from "@mui/icons-material/Sensors";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -35,6 +37,8 @@ const KIND_ICON: Record<Task["kind"], ComponentType<SvgIconProps>> = {
   for: LoopIcon,
   fork: CallSplitIcon,
   try: HealingIcon,
+  listen: SensorsIcon,
+  run: PlayCircleOutlineIcon,
 };
 
 export function TaskNode({
@@ -133,6 +137,26 @@ export function TaskNode({
             · catches{" "}
             {task.catchClause.errors?.type ?? task.catchClause.errors?.status ?? "any error"}{" "}
             — double-click to open
+          </Typography>
+        )}
+        {task.kind === "listen" &&
+          (task.children.length > 0 ? (
+            <Typography variant="caption" color="text.secondary" noWrap>
+              foreach {task.itemVariable || "item"} · {task.children.length}{" "}
+              task{task.children.length === 1 ? "" : "s"} — double-click to
+              open
+            </Typography>
+          ) : (
+            <Typography variant="caption" color="text.secondary" noWrap>
+              waits for a matching event
+            </Typography>
+          ))}
+        {task.kind === "run" && (
+          <Typography variant="caption" color="text.secondary" noWrap>
+            {task.variant}
+            {task.variant === "workflow" && task.workflowName
+              ? `: ${task.workflowName}`
+              : ""}
           </Typography>
         )}
       </CardContent>

@@ -47,6 +47,8 @@ const KIND_LABEL: Record<Task["kind"], string> = {
   for: "For task",
   fork: "Fork task",
   try: "Try task",
+  listen: "Listen task",
+  run: "Run task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -267,6 +269,110 @@ function resolveCatchClause(state: CatchState): {
   };
 }
 
+// "listen"'s consumption filter stays raw JSON (same reasoning as "emit"'s
+// "with"); readAs/itemVariable/indexVariable get real fields since they're
+// small, bounded values. "children" (foreach.do) is edited via canvas
+// drill-down, same as every other container kind - not represented here.
+type ListenState = {
+  consumptionText: string;
+  readAs: "data" | "envelope" | "raw";
+  itemVariable: string;
+  indexVariable: string;
+};
+
+function listenStateOf(task: Task): ListenState {
+  if (task.kind !== "listen") {
+    return { consumptionText: "", readAs: "data", itemVariable: "", indexVariable: "" };
+  }
+  return {
+    consumptionText: task.consumption !== undefined ? JSON.stringify(task.consumption, null, 2) : "",
+    readAs: task.readAs ?? "data",
+    itemVariable: task.itemVariable ?? "",
+    indexVariable: task.indexVariable ?? "",
+  };
+}
+
+// "run"'s container/script/shell variants keep their own configuration
+// object opaque (raw JSON) - four meaningfully different open shapes, not
+// worth four generated forms in v1. "workflow" gets real fields since it's
+// small and this canvas can usefully help fill it in.
+type RunState = {
+  variant: "container" | "script" | "shell" | "workflow";
+  configurationText: string;
+  workflowNamespace: string;
+  workflowName: string;
+  workflowVersion: string;
+  workflowInputText: string;
+  awaitResult: boolean;
+  returnMode: "stdout" | "stderr" | "code" | "all" | "none";
+};
+
+function runStateOf(task: Task): RunState {
+  if (task.kind !== "run") {
+    return {
+      variant: "container",
+      configurationText: "{}",
+      workflowNamespace: "",
+      workflowName: "",
+      workflowVersion: "",
+      workflowInputText: "",
+      awaitResult: true,
+      returnMode: "stdout",
+    };
+  }
+  return {
+    variant: task.variant,
+    configurationText: JSON.stringify(task.configuration ?? {}, null, 2),
+    workflowNamespace: task.workflowNamespace ?? "",
+    workflowName: task.workflowName ?? "",
+    workflowVersion: task.workflowVersion ?? "",
+    workflowInputText:
+      task.workflowInput !== undefined ? JSON.stringify(task.workflowInput, null, 2) : "",
+    awaitResult: task.await ?? true,
+    returnMode: task.returnMode ?? "stdout",
+  };
+}
+
+function resolveListenState(state: ListenState): {
+  consumption: unknown;
+  error?: string;
+} {
+  if (!state.consumptionText.trim()) return { consumption: undefined };
+  try {
+    return { consumption: JSON.parse(state.consumptionText) };
+  } catch (error) {
+    return {
+      consumption: undefined,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+function resolveRunState(state: RunState): {
+  configuration?: Record<string, unknown>;
+  workflowInput?: unknown;
+  errors: Partial<Record<"configurationText" | "workflowInputText", string>>;
+} {
+  const errors: Partial<Record<"configurationText" | "workflowInputText", string>> = {};
+  let configuration: Record<string, unknown> | undefined;
+  if (state.variant !== "workflow" && state.configurationText.trim()) {
+    try {
+      configuration = JSON.parse(state.configurationText) as Record<string, unknown>;
+    } catch (error) {
+      errors.configurationText = error instanceof Error ? error.message : String(error);
+    }
+  }
+  let workflowInput: unknown;
+  if (state.variant === "workflow" && state.workflowInputText.trim()) {
+    try {
+      workflowInput = JSON.parse(state.workflowInputText);
+    } catch (error) {
+      errors.workflowInputText = error instanceof Error ? error.message : String(error);
+    }
+  }
+  return { configuration, workflowInput, errors };
+}
+
 export function TaskInspector({
   task,
   onChange,
@@ -326,6 +432,14 @@ export function TaskInspector({
   const [catchErrors, setCatchErrors] = useState<
     Partial<Record<"errorsText" | "doText", string>>
   >({});
+  const [listenState, setListenState] = useState<ListenState>(() =>
+    listenStateOf(task),
+  );
+  const [listenError, setListenError] = useState<string>();
+  const [runState, setRunState] = useState<RunState>(() => runStateOf(task));
+  const [runErrors, setRunErrors] = useState<
+    Partial<Record<"configurationText" | "workflowInputText", string>>
+  >({});
   const [advanced, setAdvanced] = useState<AdvancedState>(() =>
     advancedStateOf(task),
   );
@@ -352,9 +466,21 @@ export function TaskInspector({
     setForkCompete(task.kind === "fork" ? task.compete : false);
     setCatchState(catchStateOf(task));
     setCatchErrors({});
+    setListenState(listenStateOf(task));
+    setListenError(undefined);
+    setRunState(runStateOf(task));
+    setRunErrors({});
     setAdvanced(advancedStateOf(task));
     setAdvancedErrors({});
   }, [task]);
+
+  function setListenField<K extends keyof ListenState>(field: K, value: ListenState[K]) {
+    setListenState((current) => ({ ...current, [field]: value }));
+  }
+
+  function setRunField<K extends keyof RunState>(field: K, value: RunState[K]) {
+    setRunState((current) => ({ ...current, [field]: value }));
+  }
 
   function setCatchField<K extends keyof CatchState>(field: K, value: CatchState[K]) {
     setCatchState((current) => ({ ...current, [field]: value }));
@@ -377,6 +503,11 @@ export function TaskInspector({
       callTarget: string;
       paramsText: string;
       forkCompete: boolean;
+      retryBackoff: RetryPolicy["backoff"];
+      listenReadAs: ListenState["readAs"];
+      runVariant: RunState["variant"];
+      runAwait: boolean;
+      runReturnMode: RunState["returnMode"];
     }>,
   ) {
     if (task.kind === "switch") return;
@@ -455,9 +586,19 @@ export function TaskInspector({
       // "children" (the try block) is edited by drilling into this task on
       // canvas, same as every other container kind - only the catch clause
       // (errors/as/when/exceptWhen/retry/then, plus catch.do as raw JSON)
-      // is edited here.
+      // is edited here. "retryBackoff" is threaded through `next` for the
+      // same reason forkCompete/runAwait are: the backoff Select commits
+      // from onClose, which (confirmed live) fires in the same synchronous
+      // batch as its own onChange, before this render's retryState closure
+      // would see the update - unlike a text field's onBlur, which
+      // genuinely happens on a later tick after React has already
+      // re-rendered.
+      const effectiveCatchState =
+        next.retryBackoff !== undefined
+          ? { ...catchState, retry: { ...catchState.retry, backoff: next.retryBackoff } }
+          : catchState;
       const { catchClause, errors: catchClauseErrors } =
-        resolveCatchClause(catchState);
+        resolveCatchClause(effectiveCatchState);
       setCatchErrors(catchClauseErrors);
       if (Object.keys(catchClauseErrors).length > 0) return;
       onChange({
@@ -465,6 +606,58 @@ export function TaskInspector({
         name: resolvedName,
         children: task.children,
         catchClause,
+        ...commonProps,
+      });
+      return;
+    }
+    if (task.kind === "listen") {
+      // "children" (foreach.do, if this listen loops) is edited by
+      // drilling into this task on canvas, same as every other container
+      // kind - not touched here. "listenReadAs" is threaded through `next`
+      // for the same reason as retryBackoff above - the readAs Select
+      // commits from onClose, same-batch as its own onChange.
+      const { consumption, error } = resolveListenState(listenState);
+      setListenError(error);
+      if (error) return;
+      const resolvedReadAs = next.listenReadAs ?? listenState.readAs;
+      onChange({
+        kind: "listen",
+        name: resolvedName,
+        consumption,
+        readAs: resolvedReadAs === "data" ? undefined : resolvedReadAs,
+        itemVariable: listenState.itemVariable.trim() || undefined,
+        indexVariable: listenState.indexVariable.trim() || undefined,
+        children: task.children,
+        ...commonProps,
+      });
+      return;
+    }
+    if (task.kind === "run") {
+      // "runVariant"/"runReturnMode" are threaded through `next` for the
+      // same reason as retryBackoff/listenReadAs above - both Selects
+      // commit from onClose, same-batch as their own onChange.
+      const resolvedVariant = next.runVariant ?? runState.variant;
+      const resolvedReturnMode = next.runReturnMode ?? runState.returnMode;
+      const effectiveRunState = { ...runState, variant: resolvedVariant };
+      const { configuration, workflowInput, errors: runFieldErrors } =
+        resolveRunState(effectiveRunState);
+      setRunErrors(runFieldErrors);
+      if (Object.keys(runFieldErrors).length > 0) return;
+      const resolvedAwait = next.runAwait ?? runState.awaitResult;
+      onChange({
+        kind: "run",
+        name: resolvedName,
+        variant: resolvedVariant,
+        configuration: resolvedVariant === "workflow" ? undefined : configuration,
+        workflowNamespace:
+          resolvedVariant === "workflow" ? runState.workflowNamespace.trim() || undefined : undefined,
+        workflowName:
+          resolvedVariant === "workflow" ? runState.workflowName.trim() || undefined : undefined,
+        workflowVersion:
+          resolvedVariant === "workflow" ? runState.workflowVersion.trim() || undefined : undefined,
+        workflowInput: resolvedVariant === "workflow" ? workflowInput : undefined,
+        await: resolvedAwait === true ? undefined : resolvedAwait,
+        returnMode: resolvedReturnMode === "stdout" ? undefined : resolvedReturnMode,
         ...commonProps,
       });
       return;
@@ -764,13 +957,11 @@ export function TaskInspector({
                   labelId="retry-backoff-label"
                   label="Backoff"
                   value={catchState.retry.backoff}
-                  onChange={(event) =>
-                    setRetryField(
-                      "backoff",
-                      event.target.value as RetryState["backoff"],
-                    )
-                  }
-                  onClose={() => commit({})}
+                  onChange={(event) => {
+                    const backoff = event.target.value as RetryState["backoff"];
+                    setRetryField("backoff", backoff);
+                    commit({ retryBackoff: backoff });
+                  }}
                 >
                   <MenuItem value="constant">Constant</MenuItem>
                   <MenuItem value="linear">Linear</MenuItem>
@@ -844,6 +1035,162 @@ export function TaskInspector({
             onChange={(event) => setCatchField("doText", event.target.value)}
             onBlur={() => commit({})}
           />
+        </Box>
+      )}
+      {task.kind === "listen" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Typography variant="caption" color="text.secondary">
+            Set an item variable below to loop over each matching event -
+            double-click this task on canvas to edit that loop's tasks.
+          </Typography>
+          <TextField
+            label="Consumption filter (JSON: one/all/any)"
+            multiline
+            minRows={4}
+            size="small"
+            placeholder={'{ "one": { "with": { "type": "com.example.event" } } }'}
+            value={listenState.consumptionText}
+            error={Boolean(listenError)}
+            helperText={listenError}
+            onChange={(event) => setListenField("consumptionText", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <FormControl size="small">
+            <InputLabel id="listen-read-label">Read as</InputLabel>
+            <Select
+              labelId="listen-read-label"
+              label="Read as"
+              value={listenState.readAs}
+              onChange={(event) => {
+                const readAs = event.target.value as ListenState["readAs"];
+                setListenField("readAs", readAs);
+                commit({ listenReadAs: readAs });
+              }}
+            >
+              <MenuItem value="data">Data</MenuItem>
+              <MenuItem value="envelope">Envelope</MenuItem>
+              <MenuItem value="raw">Raw</MenuItem>
+            </Select>
+          </FormControl>
+          <TextField
+            label="Loop: item variable (optional)"
+            size="small"
+            placeholder="event"
+            value={listenState.itemVariable}
+            onChange={(event) => setListenField("itemVariable", event.target.value)}
+            onBlur={() => commit({})}
+          />
+          <TextField
+            label="Loop: index variable (optional)"
+            size="small"
+            placeholder="index"
+            value={listenState.indexVariable}
+            onChange={(event) => setListenField("indexVariable", event.target.value)}
+            onBlur={() => commit({})}
+          />
+        </Box>
+      )}
+      {task.kind === "run" && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <FormControl size="small">
+            <InputLabel id="run-variant-label">Variant</InputLabel>
+            <Select
+              labelId="run-variant-label"
+              label="Variant"
+              value={runState.variant}
+              onChange={(event) => {
+                const variant = event.target.value as RunState["variant"];
+                setRunField("variant", variant);
+                commit({ runVariant: variant });
+              }}
+            >
+              <MenuItem value="container">Container</MenuItem>
+              <MenuItem value="script">Script</MenuItem>
+              <MenuItem value="shell">Shell</MenuItem>
+              <MenuItem value="workflow">Workflow (subflow)</MenuItem>
+            </Select>
+          </FormControl>
+          {runState.variant === "workflow" ? (
+            <>
+              <TextField
+                label="Workflow: namespace"
+                size="small"
+                value={runState.workflowNamespace}
+                onChange={(event) => setRunField("workflowNamespace", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Workflow: name"
+                size="small"
+                value={runState.workflowName}
+                onChange={(event) => setRunField("workflowName", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Workflow: version"
+                size="small"
+                value={runState.workflowVersion}
+                onChange={(event) => setRunField("workflowVersion", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Workflow: input (JSON, optional)"
+                multiline
+                minRows={3}
+                size="small"
+                value={runState.workflowInputText}
+                error={Boolean(runErrors.workflowInputText)}
+                helperText={runErrors.workflowInputText}
+                onChange={(event) => setRunField("workflowInputText", event.target.value)}
+                onBlur={() => commit({})}
+              />
+            </>
+          ) : (
+            <TextField
+              label={`${runState.variant} configuration (JSON)`}
+              multiline
+              minRows={6}
+              size="small"
+              value={runState.configurationText}
+              error={Boolean(runErrors.configurationText)}
+              helperText={runErrors.configurationText}
+              onChange={(event) => setRunField("configurationText", event.target.value)}
+              onBlur={() => commit({})}
+            />
+          )}
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
+                checked={runState.awaitResult}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setRunField("awaitResult", checked);
+                  commit({ runAwait: checked });
+                }}
+              />
+            }
+            label="Await result before continuing"
+          />
+          <FormControl size="small">
+            <InputLabel id="run-return-label">Return</InputLabel>
+            <Select
+              labelId="run-return-label"
+              label="Return"
+              value={runState.returnMode}
+              onChange={(event) => {
+                const returnMode = event.target.value as RunState["returnMode"];
+                setRunField("returnMode", returnMode);
+                commit({ runReturnMode: returnMode });
+              }}
+            >
+              <MenuItem value="stdout">Stdout</MenuItem>
+              <MenuItem value="stderr">Stderr</MenuItem>
+              <MenuItem value="code">Exit code</MenuItem>
+              <MenuItem value="all">All</MenuItem>
+              <MenuItem value="none">None</MenuItem>
+            </Select>
+          </FormControl>
         </Box>
       )}
       {task.kind === "switch" && (

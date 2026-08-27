@@ -30,7 +30,9 @@ export type TaskType =
   | "do"
   | "for"
   | "fork"
-  | "try";
+  | "try"
+  | "listen"
+  | "run";
 
 // All optional: a task with none of these set is the common case, and
 // omitting an unset property from the serialized YAML (rather than writing
@@ -211,6 +213,50 @@ export type TryTask = CommonTaskProps & {
   catchClause: CatchClause;
 };
 
+// The fifth container kind - surprising at first (the spec puts "foreach"
+// as a SIBLING of "listen" at the task level, not nested inside it, unlike
+// every other loop-shaped construct here), but structurally the same
+// "optional loop, same children: Task[] shape" story as the rest: an empty
+// "children" (foreach absent) is a plain "wait for one/all/any matching
+// event" task; a non-empty "children" (foreach.do) runs those tasks once
+// per consumed event, binding itemVariable/indexVariable from foreach.item/
+// foreach.at.
+export type ListenTask = CommonTaskProps & {
+  kind: "listen";
+  name: string;
+  // The "to" event-consumption filter (one/all/any, with CloudEvents
+  // attribute predicates and optional correlation/until) - kept opaque,
+  // same reasoning as "emit"'s "with": a bag of filters isn't honestly
+  // better as a generated form than as JSON.
+  consumption?: unknown;
+  readAs?: "data" | "envelope" | "raw";
+  itemVariable?: string;
+  indexVariable?: string;
+  children: Task[];
+};
+
+// NOT a container - "run" has no nested task list in any variant, unlike
+// every kind above. Which variant is active is a plain discriminant
+// ("variant"); container/script/shell keep their own configuration object
+// opaque (four meaningfully different open shapes - not worth four
+// generated forms), but "workflow" gets real namespace/name/version/input
+// fields since that's the one variant this canvas can usefully help fill
+// in (no catalog-listing endpoint exists to autocomplete against, per
+// Phase 1 planning - confirmed directly against openworkflow-api-
+// specifications - so these stay plain text fields, not a picker).
+export type RunTask = CommonTaskProps & {
+  kind: "run";
+  name: string;
+  variant: "container" | "script" | "shell" | "workflow";
+  configuration?: Record<string, unknown>;
+  workflowNamespace?: string;
+  workflowName?: string;
+  workflowVersion?: string;
+  workflowInput?: unknown;
+  await?: boolean;
+  returnMode?: "stdout" | "stderr" | "code" | "all" | "none";
+};
+
 export type Task =
   | SetTask
   | CallTask
@@ -221,7 +267,9 @@ export type Task =
   | DoTask
   | ForTask
   | ForkTask
-  | TryTask;
+  | TryTask
+  | ListenTask
+  | RunTask;
 
 export type TaskGraph = {
   tasks: Task[];
@@ -434,6 +482,76 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       ...common,
     };
   }
+  if ("listen" in body) {
+    const listenBody = (body.listen ?? {}) as Record<string, unknown>;
+    // "foreach" is a SIBLING of "listen" at the task-body level, not
+    // nested inside it - confirmed directly against the real compiler and
+    // its own conformance fixtures (listen-*.yaml), not assumed from spec
+    // summary.
+    const foreachBody = (body.foreach ?? {}) as Record<string, unknown>;
+    const rawForeachDo = Array.isArray(foreachBody.do) ? foreachBody.do : [];
+    return {
+      kind: "listen",
+      name,
+      consumption: listenBody.to,
+      readAs:
+        listenBody.read === "data" ||
+        listenBody.read === "envelope" ||
+        listenBody.read === "raw"
+          ? listenBody.read
+          : undefined,
+      itemVariable: typeof foreachBody.item === "string" ? foreachBody.item : undefined,
+      indexVariable: typeof foreachBody.at === "string" ? foreachBody.at : undefined,
+      children: taskListFromYamlEntries(
+        rawForeachDo as Array<Record<string, unknown>>,
+      ),
+      ...common,
+    };
+  }
+  if ("run" in body) {
+    const runBody = (body.run ?? {}) as Record<string, unknown>;
+    const variant: RunTask["variant"] =
+      "container" in runBody
+        ? "container"
+        : "script" in runBody
+          ? "script"
+          : "shell" in runBody
+            ? "shell"
+            : "workflow";
+    const rawReturnMode = runBody.return;
+    const returnMode: RunTask["returnMode"] =
+      rawReturnMode === "stdout" ||
+      rawReturnMode === "stderr" ||
+      rawReturnMode === "code" ||
+      rawReturnMode === "all" ||
+      rawReturnMode === "none"
+        ? rawReturnMode
+        : undefined;
+    const base = {
+      kind: "run" as const,
+      name,
+      variant,
+      await: typeof runBody.await === "boolean" ? runBody.await : undefined,
+      returnMode,
+      ...common,
+    };
+    if (variant === "workflow") {
+      const workflowBody = (runBody.workflow ?? {}) as Record<string, unknown>;
+      return {
+        ...base,
+        workflowNamespace:
+          typeof workflowBody.namespace === "string" ? workflowBody.namespace : undefined,
+        workflowName: typeof workflowBody.name === "string" ? workflowBody.name : undefined,
+        workflowVersion:
+          typeof workflowBody.version === "string" ? workflowBody.version : undefined,
+        workflowInput: workflowBody.input,
+      };
+    }
+    return {
+      ...base,
+      configuration: (runBody[variant] as Record<string, unknown>) ?? {},
+    };
+  }
   if ("do" in body) {
     const rawChildren = Array.isArray(body.do) ? body.do : [];
     return {
@@ -458,10 +576,14 @@ function taskListFromYamlEntries(entries: Array<Record<string, unknown>>): Task[
 export class UnsupportedTaskError extends Error {
   constructor(public readonly taskName: string) {
     super(
-      `Task "${taskName}" uses a construct the canvas doesn't support yet ` +
-        `(only "set", "call", "switch", "raise", "wait", "emit", "do", ` +
-        `"for", "fork", and "try" tasks are editable here) - edit it in ` +
-        `Source view instead.`,
+      // Every Serverless Workflow DSL task kind (set/call/switch/raise/
+      // wait/emit/do/for/fork/try/listen/run) is modeled here as of this
+      // task type list - reaching this means the task's own body doesn't
+      // match any of their shapes (e.g. a switch case with no "then",
+      // relying on positional fallthrough this canvas doesn't model - see
+      // switchCaseFromYamlEntry above), not that a kind is unimplemented.
+      `Task "${taskName}" uses a shape the canvas doesn't support yet - ` +
+        `edit it in Source view instead.`,
     );
   }
 }
@@ -555,6 +677,43 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
         catch: catchClauseToYamlBody(task.catchClause),
       },
     };
+  }
+  if (task.kind === "listen") {
+    const listenObj: Record<string, unknown> = {};
+    if (task.consumption !== undefined) listenObj.to = task.consumption;
+    if (task.readAs !== undefined) listenObj.read = task.readAs;
+    const entry: Record<string, unknown> = { ...common, listen: listenObj };
+    // "foreach" only appears at all if the task actually uses it - an
+    // empty children list with no item/index binding is a plain listen,
+    // not a (vacuous) foreach loop.
+    if (
+      task.itemVariable !== undefined ||
+      task.indexVariable !== undefined ||
+      task.children.length > 0
+    ) {
+      const foreachObj: Record<string, unknown> = {};
+      if (task.itemVariable !== undefined) foreachObj.item = task.itemVariable;
+      if (task.indexVariable !== undefined) foreachObj.at = task.indexVariable;
+      foreachObj.do = taskListToYamlEntries(task.children);
+      entry.foreach = foreachObj;
+    }
+    return { [task.name]: entry };
+  }
+  if (task.kind === "run") {
+    const runObj: Record<string, unknown> = {};
+    if (task.variant === "workflow") {
+      const workflowObj: Record<string, unknown> = {};
+      if (task.workflowNamespace !== undefined) workflowObj.namespace = task.workflowNamespace;
+      if (task.workflowName !== undefined) workflowObj.name = task.workflowName;
+      if (task.workflowVersion !== undefined) workflowObj.version = task.workflowVersion;
+      if (task.workflowInput !== undefined) workflowObj.input = task.workflowInput;
+      runObj.workflow = workflowObj;
+    } else {
+      runObj[task.variant] = task.configuration ?? {};
+    }
+    if (task.await !== undefined) runObj.await = task.await;
+    if (task.returnMode !== undefined) runObj.return = task.returnMode;
+    return { [task.name]: { ...common, run: runObj } };
   }
   return {
     [task.name]: { ...common, do: taskListToYamlEntries(task.children) },
@@ -650,6 +809,12 @@ export function emptyTask(kind: TaskType, name: string): Task {
   }
   if (kind === "try") {
     return { kind: "try", name, children: [], catchClause: { children: [] } };
+  }
+  if (kind === "listen") {
+    return { kind: "listen", name, children: [] };
+  }
+  if (kind === "run") {
+    return { kind: "run", name, variant: "container", configuration: {} };
   }
   return { kind: "do", name, children: [] };
 }

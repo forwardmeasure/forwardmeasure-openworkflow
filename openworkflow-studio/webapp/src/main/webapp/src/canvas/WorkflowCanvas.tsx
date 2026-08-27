@@ -332,6 +332,8 @@ export function WorkflowCanvas({
             <MenuItem onClick={() => addTask("for")}>For (loop)</MenuItem>
             <MenuItem onClick={() => addTask("fork")}>Fork (parallel)</MenuItem>
             <MenuItem onClick={() => addTask("try")}>Try (error handling)</MenuItem>
+            <MenuItem onClick={() => addTask("listen")}>Listen (event)</MenuItem>
+            <MenuItem onClick={() => addTask("run")}>Run (container/script/shell/workflow)</MenuItem>
           </Menu>
         </Box>
         {path.length > 0 && (

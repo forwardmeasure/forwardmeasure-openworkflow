@@ -691,9 +691,153 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     expect(rewritten).toContain("retry: default");
   });
 
-  it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
+  it("parses a plain listen task (no foreach) with an empty children list", () => {
     const source =
-      "do:\n  - step:\n      listen:\n        to:\n          one:\n            with: {}\n";
+      "do:\n  - step:\n      listen:\n        to:\n          one:\n            with:\n              type: com.example.event\n        read: envelope\n";
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "listen",
+        name: "step",
+        consumption: { one: { with: { type: "com.example.event" } } },
+        readAs: "envelope",
+        itemVariable: undefined,
+        indexVariable: undefined,
+        children: [],
+      },
+    ]);
+  });
+
+  it("parses a listen task with a sibling foreach (not nested inside listen)", () => {
+    const source = [
+      "do:",
+      "  - step:",
+      "      listen:",
+      "        to:",
+      "          any: []",
+      "      foreach:",
+      "        item: event",
+      "        at: i",
+      "        do:",
+      "          - handle:",
+      "              set:",
+      "                seen: true",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "listen",
+        name: "step",
+        consumption: { any: [] },
+        readAs: undefined,
+        itemVariable: "event",
+        indexVariable: "i",
+        children: [{ kind: "set", name: "handle", set: { seen: true } }],
+      },
+    ]);
+  });
+
+  it("round-trips a listen task's foreach loop, omitting an absent foreach entirely", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "listen",
+          name: "step",
+          consumption: { one: { with: { type: "x" } } },
+          children: [],
+        },
+      ],
+    });
+    expect(rewritten).not.toContain("foreach:");
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "listen",
+        name: "step",
+        consumption: { one: { with: { type: "x" } } },
+        readAs: undefined,
+        itemVariable: undefined,
+        indexVariable: undefined,
+        children: [],
+      },
+    ]);
+  });
+
+  it("parses each run variant (container/script/shell/workflow) with await/return", () => {
+    const source = [
+      "do:",
+      "  - runIt:",
+      "      run:",
+      "        container:",
+      "          image: alpine",
+      "          arguments: [Foo, Bar]",
+      "        await: false",
+      "        return: all",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "run",
+        name: "runIt",
+        variant: "container",
+        configuration: { image: "alpine", arguments: ["Foo", "Bar"] },
+        await: false,
+        returnMode: "all",
+      },
+    ]);
+  });
+
+  it("parses a run task's workflow variant into structured fields", () => {
+    const source = [
+      "do:",
+      "  - runIt:",
+      "      run:",
+      "        workflow:",
+      "          namespace: test",
+      "          name: register-customer",
+      "          version: 0.1.0",
+      "          input:",
+      "            customer: .user",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "run",
+        name: "runIt",
+        variant: "workflow",
+        workflowNamespace: "test",
+        workflowName: "register-customer",
+        workflowVersion: "0.1.0",
+        workflowInput: { customer: ".user" },
+      },
+    ]);
+  });
+
+  it("round-trips a run task, omitting default await/return", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        {
+          kind: "run",
+          name: "runIt",
+          variant: "shell",
+          configuration: { command: "echo hi" },
+        },
+      ],
+    });
+    expect(rewritten).not.toContain("await:");
+    expect(rewritten).not.toContain("return:");
+    expect(fromYaml(rewritten).tasks).toEqual([
+      {
+        kind: "run",
+        name: "runIt",
+        variant: "shell",
+        configuration: { command: "echo hi" },
+        await: undefined,
+        returnMode: undefined,
+      },
+    ]);
+  });
+
+  it("rejects task constructs the canvas doesn't support yet, rather than silently dropping them", () => {
+    const source = "do:\n  - step:\n      notAKnownTaskKeyword: {}\n";
     expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
   });
 });
