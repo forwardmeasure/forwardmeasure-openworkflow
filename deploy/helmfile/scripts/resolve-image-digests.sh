@@ -50,13 +50,24 @@ if [[ -z "${CLOUD}" ]]; then
   exit 0
 fi
 
-command -v skopeo >/dev/null || {
-  echo "Required command is unavailable: skopeo (needed to resolve image digests for cloud environment ${ENVIRONMENT})" >&2
-  exit 1
-}
+for command in docker jq; do
+  command -v "${command}" >/dev/null || {
+    echo "Required command is unavailable: ${command} (needed to resolve image digests for cloud environment ${ENVIRONMENT})" >&2
+    exit 1
+  }
+done
 : "${OPENWORKFLOW_VERSION:?OPENWORKFLOW_VERSION must be set for cloud environment ${ENVIRONMENT} - every imageVersions.*.tag override in its own environment file resolves from it}"
 
 # repo_path/digest_path are yq expressions into IMAGE_VERSIONS_FILE.
+#
+# `docker manifest inspect --verbose`, not `skopeo inspect`, despite skopeo
+# being the more obviously-purpose-built tool here - confirmed directly that
+# skopeo's per-invocation fresh auth-token fetch flakes against Docker Hub's
+# token endpoint under the back-to-back calls this loop makes (repeated
+# "unauthorized: incorrect username or password" against a real, correctly
+# configured credential, each one clearing on its very next retry), while
+# `docker` (session/token reuse across invocations) did not fail once across
+# the same sequence of repositories.
 resolve() {
   local repo_path="$1" digest_path="$2"
   local repository current resolved
@@ -65,10 +76,19 @@ resolve() {
   if [[ -z "${current}" ]]; then
     return 0
   fi
-  if ! resolved="$(skopeo inspect "docker://${repository}:${OPENWORKFLOW_VERSION}" --format '{{.Digest}}' 2>&1)"; then
-    echo "Failed to resolve ${repository}:${OPENWORKFLOW_VERSION}: ${resolved}" >&2
-    exit 1
-  fi
+  local attempt output
+  for attempt in 1 2 3; do
+    if output="$(docker manifest inspect --verbose "${repository}:${OPENWORKFLOW_VERSION}" 2>&1)" \
+        && resolved="$(jq -r '.Descriptor.digest // empty' <<<"${output}")" \
+        && [[ -n "${resolved}" ]]; then
+      break
+    fi
+    if [[ "${attempt}" == 3 ]]; then
+      echo "Failed to resolve ${repository}:${OPENWORKFLOW_VERSION} after ${attempt} attempts: ${output}" >&2
+      exit 1
+    fi
+    sleep 2
+  done
   if [[ "${resolved}" != "${current}" ]]; then
     echo "${digest_path}: ${current} -> ${resolved}"
     yq -i "${digest_path} = \"${resolved}\"" "${IMAGE_VERSIONS_FILE}"

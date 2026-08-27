@@ -16,7 +16,7 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-definition-management-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:06fadaa4f2cd7d257dfc5667a185b4f78504de771d9dd2e6a3d54b3bf208d3a6
+      quarkus: sha256:0c09341d1625a0b7f29c47f0061441fb13965dd4b1566c9de6f84b704aad55d0
       spring: ""
       micronaut: ""
   executionManagement:
@@ -26,7 +26,7 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-execution-management-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:7c6c71cdf5220b80699be45f2bcf35ed39b39184ac7cdbbc9463b5675da3c369
+      quarkus: sha256:23223716646e34696d319f3b5e99482bf34cb58c006f8f69c051511647db758f
       spring: ""
       micronaut: ""
   engines:
@@ -67,13 +67,13 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-studio-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:349f6bbed4f1253ea6739989206f613d17c0c0ee8b16e4ca8139a90cc902f3e2
+      quarkus: sha256:756fd6d0b7bc7209cc584f3f67f141ae214025f21d57cbbbd1d7d46be00c3cab
       spring: ""
       micronaut: ""
   tenantProvisioning:
     repository: forwardmeasure/openworkflow-tenant-provisioning
     tag: "1.0.0-SNAPSHOT"
-    digest: sha256:940bf39a24a28de8d419bada75adc87daeabe7b489db5f29741e652292e5d7de
+    digest: sha256:c2125b65386dea238ef56717083ff0b1a0f587bd57f5538e6b4c1a0d7bf51e7b
   migrations:
     repository: forwardmeasure/openworkflow-migrations
     tag: "1.0.0-SNAPSHOT"
