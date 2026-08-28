@@ -2,6 +2,7 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import PendingIcon from "@mui/icons-material/Pending";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
@@ -10,9 +11,18 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { TraceEntry } from "./executionTrace";
 import { CATEGORY_COLOR, KIND_CATEGORY, KIND_ICON } from "./taskKindMeta";
+import type { ValidationIssue } from "./validation";
 import type { Task } from "./dsl";
 
-export type TaskNodeData = { task: Task; trace?: TraceEntry };
+export type TaskNodeData = {
+  task: Task;
+  trace?: TraceEntry;
+  // Author-time, advisory only (see validation.ts) - distinct badge
+  // (top-left, amber) from the trace badge (top-right) below, both by
+  // position and by the fact the two are never populated together: trace
+  // only appears in the Executions view, validation only while authoring.
+  validationIssues?: ValidationIssue[];
+};
 
 const TRACE_ICON = {
   entered: PendingIcon,
@@ -30,7 +40,7 @@ export function TaskNode({
   data,
   selected,
 }: NodeProps & { data: TaskNodeData }) {
-  const { task, trace } = data;
+  const { task, trace, validationIssues } = data;
   const KindIcon = KIND_ICON[task.kind];
   const category = KIND_CATEGORY[task.kind];
   const categoryColor = CATEGORY_COLOR[category];
@@ -210,6 +220,27 @@ export function TaskNode({
               position: "absolute",
               top: -8,
               right: -8,
+              bgcolor: "background.paper",
+              borderRadius: "50%",
+            }}
+          />
+        </Tooltip>
+      )}
+      {validationIssues && validationIssues.length > 0 && (
+        <Tooltip
+          title={
+            <Box component="span" sx={{ whiteSpace: "pre-line" }}>
+              {validationIssues.map((issue) => issue.message).join("\n")}
+            </Box>
+          }
+        >
+          <WarningAmberIcon
+            fontSize="small"
+            color="warning"
+            sx={{
+              position: "absolute",
+              top: -8,
+              left: -8,
               bgcolor: "background.paper",
               borderRadius: "50%",
             }}

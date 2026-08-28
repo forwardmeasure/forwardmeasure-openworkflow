@@ -17,10 +17,12 @@ import "@xyflow/react/dist/style.css";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
 import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
+import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
@@ -34,6 +36,7 @@ import { traceKey, type TraceEntry } from "./executionTrace";
 import { CATEGORY_COLOR, KIND_CATEGORY } from "./taskKindMeta";
 import { TaskInspector } from "./TaskInspector";
 import { TaskNode, type TaskNodeData } from "./TaskNode";
+import { validateWorkflowSource, type ValidationIssue } from "./validation";
 import {
   emptyTask,
   fromYaml,
@@ -342,6 +345,25 @@ export function WorkflowCanvas({
     }
   }, [source]);
 
+  // Always computed against the FULL source, not tasksInView below - a
+  // validation issue nested three "do"s deep still needs to show up on
+  // its own node once you drill in that far, regardless of where the
+  // breadcrumb currently sits. Keyed the same way trace already is
+  // (traceKey(containerPath, taskName)) so both attach to nodes via the
+  // identical lookup below.
+  const validationIssues = useMemo(() => validateWorkflowSource(source), [source]);
+  const validationIssuesByKey = useMemo(() => {
+    const map = new Map<string, ValidationIssue[]>();
+    for (const issue of validationIssues) {
+      if (!issue.taskPath) continue;
+      const key = traceKey(issue.taskPath.containerPath, issue.taskPath.taskName);
+      const existing = map.get(key);
+      if (existing) existing.push(issue);
+      else map.set(key, [issue]);
+    }
+    return map;
+  }, [validationIssues]);
+
   const [selectedTaskName, setSelectedTaskName] = useState<string>();
   // Breadcrumb of "do" task names drilled into - [] means the top-level
   // "do:" list itself. Every operation below (add/update/delete/layout)
@@ -413,10 +435,14 @@ export function WorkflowCanvas({
       const stickyNodes = current.filter((node) => node.type === "sticky");
       const taskAndAnchorNodes = computed.nodes.map((node) => {
         const withTrace: Node<CanvasNodeData> =
-          node.type === "task" && trace
+          node.type === "task"
             ? {
                 ...node,
-                data: { ...node.data, trace: trace.get(traceKey(path, node.id)) },
+                data: {
+                  ...node.data,
+                  trace: trace?.get(traceKey(path, node.id)),
+                  validationIssues: validationIssuesByKey.get(traceKey(path, node.id)),
+                },
               }
             : node;
         if (forceFullLayout) return withTrace;
@@ -435,9 +461,10 @@ export function WorkflowCanvas({
     setEdges(withEdgeData(computed.edges));
     // Deliberately keyed only on tasksInView (which already changes
     // reference whenever `path` does, so drilling in/out re-attaches trace
-    // at the new depth too) and `trace` itself - not nodes/setNodes, since
-    // a drag's own setNodes call must not re-trigger this resync.
-  }, [tasksInView, trace, path]);
+    // at the new depth too), `trace`, and `validationIssuesByKey` - not
+    // nodes/setNodes, since a drag's own setNodes call must not re-trigger
+    // this resync.
+  }, [tasksInView, trace, validationIssuesByKey, path]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<CanvasNodeData>>[]) =>
@@ -626,6 +653,30 @@ export function WorkflowCanvas({
       <NodePalette onAddTask={(kind) => addTask(kind)} />
       <Box sx={{ flex: 1, position: "relative" }}>
         <Box sx={{ position: "absolute", top: 8, right: 8, zIndex: 1, display: "flex", gap: 1 }}>
+          {validationIssues.length > 0 && (
+            <Tooltip
+              title={
+                <Box component="span" sx={{ whiteSpace: "pre-line" }}>
+                  {validationIssues
+                    .map((issue) =>
+                      issue.taskPath
+                        ? `${[...issue.taskPath.containerPath, issue.taskPath.taskName].join(" / ")}: ${issue.message}`
+                        : issue.message,
+                    )
+                    .join("\n")}
+                </Box>
+              }
+            >
+              <Chip
+                size="small"
+                color="warning"
+                variant="outlined"
+                icon={<WarningAmberOutlinedIcon fontSize="small" />}
+                label={`${validationIssues.length} issue${validationIssues.length === 1 ? "" : "s"}`}
+                sx={{ bgcolor: "background.paper" }}
+              />
+            </Tooltip>
+          )}
           <Tooltip title="Auto layout">
             <IconButton
               size="small"
