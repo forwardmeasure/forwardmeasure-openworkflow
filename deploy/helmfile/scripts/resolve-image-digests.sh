@@ -22,6 +22,19 @@
 # sets every imageVersions.*.tag to the same $OPENWORKFLOW_VERSION -
 # resolving that tag here, once per repository, covers all of them.
 #
+# Walks the file generically instead of a hardcoded service list: any node
+# under imageVersions with the framework-split shape (repositories:/
+# digests: maps, e.g. definitionManagement, engines.pekko) or the
+# single-repo shape (repository:/digest: scalars, e.g. tenantProvisioning)
+# is a candidate, filtered down to just the ones whose OWN committed tag
+# equals $OPENWORKFLOW_VERSION. That filter is what excludes the
+# third-party base images (postgresql, cassandra, nginx, ...) - each pins
+# its own independent version (postgresql's tag is "18.0", not
+# $OPENWORKFLOW_VERSION) and was never meant to be resolved here. A new
+# OpenWorkflow-built service just needs adding to image-versions.yaml with
+# that same tag convention to be picked up automatically - nothing in this
+# script needs to change for it.
+#
 # Why this exists: releases/openworkflow-service/templates/workload.yaml's
 # image reference is `repository@digest` whenever digest is non-empty,
 # ignoring tag entirely - so a stale committed digest silently overrides
@@ -50,7 +63,7 @@ if [[ -z "${CLOUD}" ]]; then
   exit 0
 fi
 
-for command in docker jq; do
+for command in docker jq yq; do
   command -v "${command}" >/dev/null || {
     echo "Required command is unavailable: ${command} (needed to resolve image digests for cloud environment ${ENVIRONMENT})" >&2
     exit 1
@@ -95,17 +108,23 @@ resolve() {
   fi
 }
 
-for entry in definitionManagement executionManagement studio operationAdapter; do
+# Framework-split entries (repositories:/digests: maps), at any depth
+# (covers both top-level services like studio and nested ones like
+# engines.pekko identically - no special-casing needed for the extra
+# nesting level).
+while IFS= read -r base_path; do
+  tag="$(yq -r ".${base_path}.tag" "${IMAGE_VERSIONS_FILE}")"
+  [[ "${tag}" == "${OPENWORKFLOW_VERSION}" ]] || continue
   for framework in quarkus spring micronaut; do
-    resolve ".imageVersions.${entry}.repositories.${framework}" ".imageVersions.${entry}.digests.${framework}"
+    resolve ".${base_path}.repositories.${framework}" ".${base_path}.digests.${framework}"
   done
-done
-for engine in kafka-streams pekko; do
-  for framework in quarkus spring micronaut; do
-    resolve ".imageVersions.engines.${engine}.repositories.${framework}" ".imageVersions.engines.${engine}.digests.${framework}"
-  done
-done
-resolve ".imageVersions.tenantProvisioning.repository" ".imageVersions.tenantProvisioning.digest"
-resolve ".imageVersions.migrations.repository" ".imageVersions.migrations.digest"
+done < <(yq eval '.. | select(tag == "!!map") | select(has("repositories") and has("digests")) | path | join(".")' "${IMAGE_VERSIONS_FILE}")
+
+# Single-repo entries (repository:/digest: scalars), same tag filter.
+while IFS= read -r base_path; do
+  tag="$(yq -r ".${base_path}.tag" "${IMAGE_VERSIONS_FILE}")"
+  [[ "${tag}" == "${OPENWORKFLOW_VERSION}" ]] || continue
+  resolve ".${base_path}.repository" ".${base_path}.digest"
+done < <(yq eval '.. | select(tag == "!!map") | select(has("repository") and has("digest")) | path | join(".")' "${IMAGE_VERSIONS_FILE}")
 
 echo "image-versions.yaml digests are up to date with ${OPENWORKFLOW_VERSION}."
