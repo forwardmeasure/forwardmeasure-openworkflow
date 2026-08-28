@@ -298,7 +298,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
               : await api.governance.publishWorkflowDefinition(request);
       const workflow = workflowById.get(changed.workflowId);
       setDiagnostics(
-        `${workflow?.title ?? changed.namespace} is now ${changed.status}.`,
+        `${workflow?.title ?? changed.namespace ?? changed.workflowId} is now ${changed.status}.`,
       );
       await refreshDefinitions();
     } catch (error) {
@@ -579,7 +579,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 const workflow = workflowById.get(definition.workflowId);
                 return (
                   <article className="definition" key={definition.id}>
-                    <strong>{workflow?.title ?? definition.namespace}</strong>
+                    <strong>{workflow?.title ?? definition.namespace ?? definition.workflowId}</strong>
                     <small>
                       {workflow?.name ?? definition.workflowId} · version{" "}
                       {definition.version} · {definition.status}
@@ -589,10 +589,16 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                       onClick={() => {
                         setSource(definition.source);
                         setDefinitionKey(
-                          workflow?.name ?? definition.namespace,
+                          // namespace is undefined until this revision compiles at least
+                          // once (see the openworkflow-280 migration) - workflowId is
+                          // always present, the last-resort fallback for a still-draft,
+                          // never-yet-valid revision.
+                          workflow?.name ?? definition.namespace ?? definition.workflowId,
                         );
                         setDefinitionVersion(definition.version);
-                        setDisplayName(workflow?.title ?? definition.namespace);
+                        setDisplayName(
+                          workflow?.title ?? definition.namespace ?? definition.workflowId,
+                        );
                       }}
                     >
                       Open source

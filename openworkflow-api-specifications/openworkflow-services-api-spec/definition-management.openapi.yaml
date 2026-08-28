@@ -1235,9 +1235,7 @@ components:
       required:
         - id
         - workflow_id
-        - namespace
         - version
-        - dsl
         - status
         - source
         - author
@@ -1255,12 +1253,20 @@ components:
           readOnly: true
         namespace:
           type: string
+          nullable: true
           readOnly: true
+          description: >-
+            Null until this revision compiles at least once - a DRAFT no longer has to compile to
+            be saved, only to be submitted for review.
         version:
           type: string
           readOnly: true
+          description: >-
+            The author's own requested/declared version - always present, even before this
+            revision has ever compiled.
         dsl:
           type: string
+          nullable: true
           readOnly: true
         status:
           $ref: '#/components/schemas/WorkflowDefinitionStatus'

@@ -98,6 +98,28 @@ public final class JpaWorkflowDefinitionRepository
   }
 
   @Override
+  public WorkflowDefinition create(
+      Workflow workflow,
+      int revisionNumber,
+      String authorActorId,
+      String sourceDocument,
+      String sourceDigest,
+      String documentVersion) {
+    Actor author = actors.resolve(authorActorId);
+    WorkflowDefinition definition =
+        new WorkflowDefinition(
+            workflow, revisionNumber, sourceDocument, sourceDigest, documentVersion, author);
+    try {
+      persist(definition);
+      flush();
+    } catch (PersistenceException failure) {
+      throw DefinitionManagementException.conflict(
+          "Workflow definition revision " + revisionNumber + " already exists");
+    }
+    return definition;
+  }
+
+  @Override
   public Optional<WorkflowDefinition> findByWorkflowAndUuid(Workflow workflow, UUID definitionId) {
     Optional<WorkflowDefinition> definition =
         findByUuid(definitionId)

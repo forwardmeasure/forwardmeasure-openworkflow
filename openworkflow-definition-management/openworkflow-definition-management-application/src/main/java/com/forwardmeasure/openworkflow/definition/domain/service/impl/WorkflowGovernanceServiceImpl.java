@@ -18,6 +18,7 @@ import com.forwardmeasure.openworkflow.authorization.AuthorizationRequest;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationResource;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
+import com.forwardmeasure.openworkflow.definition.WorkflowDefinitionException;
 import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
 import com.forwardmeasure.openworkflow.definition.WorkflowResourceBundleCodec;
 import com.forwardmeasure.openworkflow.definition.WorkflowResourceLoader;
@@ -38,6 +39,9 @@ import com.forwardmeasure.openworkflow.definition.management.api.model.ReviewDec
 import com.forwardmeasure.openworkflow.definition.management.api.model.UpdateWorkflowDefinitionRequest;
 import com.forwardmeasure.openworkflow.definition.management.api.model.WorkflowDefinitionValidation;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -81,30 +85,46 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
       CreateWorkflowDefinitionRequest request) {
     authorize(actor, correlationId, workflowId.toString(), AuthorizationAction.DEFINITION_CREATE);
     Workflow workflow = requireWorkflow(workflowId);
-    WorkflowPlan plan = compile(request.getSource());
-    if (!plan.coordinates().version().equals(request.getVersion())) {
-      throw DefinitionManagementException.unprocessableEntity(
-          "Requested version "
-              + request.getVersion()
-              + " does not match the version declared in the workflow source ("
-              + plan.coordinates().version()
-              + ")");
-    }
     int revisionNumber = definitions.nextRevisionNumber(workflow);
-    WorkflowDefinition definition =
-        definitions.create(
-            workflow,
-            revisionNumber,
-            actor.actorId(),
-            request.getSource(),
-            plan.definition().toString(),
-            WorkflowResourceBundleCodec.encode(plan.resources()),
-            plan.coordinates().namespace(),
-            plan.coordinates().version(),
-            plan.coordinates().dsl(),
-            plan.compilerSha256(),
-            plan.sourceSha256(),
-            plan.definitionSha256());
+    WorkflowDefinition definition;
+    try {
+      WorkflowPlan plan = compile(request.getSource());
+      if (!plan.coordinates().version().equals(request.getVersion())) {
+        throw DefinitionManagementException.unprocessableEntity(
+            "Requested version "
+                + request.getVersion()
+                + " does not match the version declared in the workflow source ("
+                + plan.coordinates().version()
+                + ")");
+      }
+      definition =
+          definitions.create(
+              workflow,
+              revisionNumber,
+              actor.actorId(),
+              request.getSource(),
+              plan.definition().toString(),
+              WorkflowResourceBundleCodec.encode(plan.resources()),
+              plan.coordinates().namespace(),
+              plan.coordinates().version(),
+              plan.coordinates().dsl(),
+              plan.compilerSha256(),
+              plan.sourceSha256(),
+              plan.definitionSha256());
+    } catch (WorkflowDefinitionException notYetCompilable) {
+      // A DRAFT doesn't have to compile to be saved - only submitWorkflowDefinition enforces
+      // that. request.getVersion() (not anything derived from the source, since nothing compiled
+      // it) is what's trusted for documentVersion here, so "find the draft for version X" lookups
+      // still work before there's anything to compile. Re-thrown, not swallowed, on failure.
+      definition =
+          definitions.create(
+              workflow,
+              revisionNumber,
+              actor.actorId(),
+              request.getSource(),
+              sha256(request.getSource()),
+              request.getVersion());
+    }
     history.record(definition, null, WorkflowLifecycleState.DRAFT, actor.actorId(), correlationId);
     log.info("Created workflow definition {} for workflow {}", definition.getUuid(), workflowId);
     return definition;
@@ -155,17 +175,25 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
     WorkflowDefinition definition = requireDefinition(workflow, definitionId);
     requireVersion(definition, expectedVersion);
     requireDraft(definition, "updated");
-    WorkflowPlan plan = compile(request.getSource());
-    definition.setContent(
-        request.getSource(),
-        plan.definition().toString(),
-        WorkflowResourceBundleCodec.encode(plan.resources()),
-        plan.coordinates().namespace(),
-        plan.coordinates().version(),
-        plan.coordinates().dsl(),
-        plan.compilerSha256(),
-        plan.sourceSha256(),
-        plan.definitionSha256());
+    try {
+      WorkflowPlan plan = compile(request.getSource());
+      definition.setContent(
+          request.getSource(),
+          plan.definition().toString(),
+          WorkflowResourceBundleCodec.encode(plan.resources()),
+          plan.coordinates().namespace(),
+          plan.coordinates().version(),
+          plan.coordinates().dsl(),
+          plan.compilerSha256(),
+          plan.sourceSha256(),
+          plan.definitionSha256());
+    } catch (WorkflowDefinitionException notYetCompilable) {
+      // Same "a DRAFT doesn't have to compile" carve-out as createWorkflowDefinition - only the
+      // raw source changes; every compiled-derived field is left exactly as it was (see
+      // setSourceOnly's own doc comment for why that's safe to leave stale rather than null it
+      // out). Re-thrown, not swallowed, on failure.
+      definition.setSourceOnly(request.getSource(), sha256(request.getSource()));
+    }
     return definition;
   }
 
@@ -213,17 +241,36 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
       UUID workflowId,
       UUID definitionId,
       int expectedVersion) {
-    return transition(
-        actor,
-        correlationId,
-        workflowId,
-        definitionId,
-        expectedVersion,
-        AuthorizationAction.DEFINITION_SUBMIT,
+    // Not a plain transition() (unlike withdraw/approve/reject below) - submit is the actual
+    // enforcement point now that draft saves no longer have to compile. Recompiles here, for real,
+    // populating every compiled-derived field for the first time if createWorkflowDefinition/
+    // updateWorkflowDefinition never managed to; a definition that still doesn't compile stays
+    // DRAFT (the exception propagates uncaught - now a clean 422 via
+    // WorkflowDefinitionExceptionMapper, not a state change).
+    authorize(actor, correlationId, workflowId.toString(), AuthorizationAction.DEFINITION_SUBMIT);
+    Workflow workflow = requireWorkflow(workflowId);
+    WorkflowDefinition definition = requireDefinition(workflow, definitionId);
+    requireVersion(definition, expectedVersion);
+    requireState(definition, WorkflowLifecycleState.DRAFT, WorkflowLifecycleState.IN_REVIEW);
+    WorkflowPlan plan = compile(definition.getSourceDocument());
+    definition.setContent(
+        definition.getSourceDocument(),
+        plan.definition().toString(),
+        WorkflowResourceBundleCodec.encode(plan.resources()),
+        plan.coordinates().namespace(),
+        plan.coordinates().version(),
+        plan.coordinates().dsl(),
+        plan.compilerSha256(),
+        plan.sourceSha256(),
+        plan.definitionSha256());
+    definition.transitionTo(WorkflowLifecycleState.IN_REVIEW);
+    history.record(
+        definition,
         WorkflowLifecycleState.DRAFT,
         WorkflowLifecycleState.IN_REVIEW,
-        false,
-        null);
+        actor.actorId(),
+        correlationId);
+    return definition;
   }
 
   @Override
@@ -428,6 +475,19 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
     Objects.requireNonNull(sourceDocument, "sourceDocument");
     byte[] source = sourceDocument.getBytes(StandardCharsets.UTF_8);
     return compiler.compile(source, new WorkflowResourceResolver().resolve(source, resourceLoader));
+  }
+
+  // Mirrors OpenWorkflowCompiler's own private sha256() exactly (same HexFormat lowercase-hex
+  // encoding the WorkflowDefinition entity's digest() validator requires) - needed independently
+  // here because a failed compile() never returns a WorkflowPlan to read sourceSha256() off of.
+  private static String sha256(String value) {
+    try {
+      return HexFormat.of()
+          .formatHex(
+              MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
+    } catch (NoSuchAlgorithmException impossible) {
+      throw new IllegalStateException(impossible);
+    }
   }
 
   private void authorize(

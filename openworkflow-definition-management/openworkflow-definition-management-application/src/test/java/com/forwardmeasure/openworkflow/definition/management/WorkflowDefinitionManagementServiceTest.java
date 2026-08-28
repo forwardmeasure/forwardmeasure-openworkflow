@@ -12,6 +12,7 @@ package com.forwardmeasure.openworkflow.definition.management;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -24,6 +25,7 @@ import com.forwardmeasure.openworkflow.authorization.AuthorizationDecision;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationRequest;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
+import com.forwardmeasure.openworkflow.definition.WorkflowDefinitionException;
 import com.forwardmeasure.openworkflow.definition.domain.entity.Workflow;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowDefinition;
 import com.forwardmeasure.openworkflow.definition.domain.entity.WorkflowLifecycleHistory;
@@ -40,6 +42,7 @@ import com.forwardmeasure.openworkflow.definition.domain.service.impl.WorkflowMa
 import com.forwardmeasure.openworkflow.definition.management.api.model.CreateWorkflowDefinitionRequest;
 import com.forwardmeasure.openworkflow.definition.management.api.model.CreateWorkflowRequest;
 import com.forwardmeasure.openworkflow.definition.management.api.model.ReviewDecisionRequest;
+import com.forwardmeasure.openworkflow.definition.management.api.model.UpdateWorkflowDefinitionRequest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -139,12 +142,96 @@ class WorkflowDefinitionManagementServiceTest {
     assertEquals(4, store.history.size());
   }
 
+  @Test
+  void savesAndUpdatesADraftThatDoesNotCompileInsteadOfBlockingTheSave() {
+    Workflow workflow =
+        workflows.createWorkflow(
+            AUTHOR, "create-workflow", new CreateWorkflowRequest("orders", "Orders"));
+    WorkflowDefinition definition =
+        governance.createWorkflowDefinition(
+            AUTHOR,
+            "create-definition",
+            workflow.getUuid(),
+            new CreateWorkflowDefinitionRequest("1.0.0", invalidWorkflowSource("one", "1.0.0")));
+
+    // Persisted anyway - the point of this whole change. documentVersion is the one exception,
+    // populated from the request even though nothing compiled, since it's how "find the draft for
+    // version X" lookups work before there's anything to compile.
+    assertEquals(WorkflowLifecycleState.DRAFT, definition.getLifecycleState());
+    assertEquals("1.0.0", definition.getDocumentVersion());
+    assertNull(definition.getResolvedDocument());
+    assertNull(definition.getResolvedResources());
+    assertNull(definition.getNamespace());
+    assertNull(definition.getSpecificationVersion());
+    assertNull(definition.getCompilerProfile());
+    assertNull(definition.getResolvedDigest());
+    assertTrue(definition.getSourceDigest().matches("[0-9a-f]{64}"));
+
+    // Editing it while still broken (setSourceOnly) doesn't touch the (already-null) compiled
+    // fields, and doesn't throw either - same "never blocks" behavior on update.
+    WorkflowDefinition updated =
+        governance.updateWorkflowDefinition(
+            AUTHOR,
+            "update-still-broken",
+            workflow.getUuid(),
+            definition.getUuid(),
+            0,
+            new UpdateWorkflowDefinitionRequest(
+                invalidWorkflowSource("one", "1.0.0") + "  extra: true\n"));
+    assertNull(updated.getResolvedDigest());
+
+    // Submitting is the actual enforcement point - a definition that still doesn't compile stays
+    // DRAFT, the exception now propagating as WorkflowDefinitionException (a clean 422 for a real
+    // caller, via WorkflowDefinitionExceptionMapper - not exercised here, this is the JAX-RS
+    // layer's job).
+    assertThrows(
+        WorkflowDefinitionException.class,
+        () ->
+            governance.submitWorkflowDefinition(
+                AUTHOR, "submit-still-broken", workflow.getUuid(), definition.getUuid(), 0));
+    assertEquals(WorkflowLifecycleState.DRAFT, updated.getLifecycleState());
+
+    // Fix it, then submit again - now it compiles for the first time, populating every
+    // compiled-derived field and actually transitioning to IN_REVIEW.
+    governance.updateWorkflowDefinition(
+        AUTHOR,
+        "update-fixed",
+        workflow.getUuid(),
+        definition.getUuid(),
+        0,
+        new UpdateWorkflowDefinitionRequest(workflowSource("one", "1.0.0")));
+    WorkflowDefinition submitted =
+        governance.submitWorkflowDefinition(
+            AUTHOR, "submit-fixed", workflow.getUuid(), definition.getUuid(), 0);
+    assertEquals(WorkflowLifecycleState.IN_REVIEW, submitted.getLifecycleState());
+    assertTrue(submitted.getResolvedDigest().matches("[0-9a-f]{64}"));
+    assertEquals("tests", submitted.getNamespace());
+  }
+
   private WorkflowDefinition createDefinition(Workflow workflow, String name, String version) {
     return governance.createWorkflowDefinition(
         AUTHOR,
         "create-definition-" + name,
         workflow.getUuid(),
         new CreateWorkflowDefinitionRequest(version, workflowSource(name, version)));
+  }
+
+  // "raise" with neither an inline error object nor a use.errors reference - fails the compiler's
+  // oneOf schema check the exact way the reported production crash did (an empty/malformed task),
+  // not a YAML syntax error - the point of this whole feature is a definition that PARSES fine but
+  // doesn't satisfy the workflow schema.
+  private static String invalidWorkflowSource(String name, String version) {
+    return """
+    document:
+      dsl: '1.0.3'
+      namespace: tests
+      name: %s
+      version: '%s'
+    do:
+      - broken:
+          raise: {}
+    """
+        .formatted(name, version);
   }
 
   private static ActiveOrganization actor(String actorId) {
@@ -263,6 +350,28 @@ class WorkflowDefinitionManagementServiceTest {
               compilerProfile,
               sourceDigest,
               resolvedDigest,
+              persistentActor(authorActorId));
+      value.setUuid(UUID.randomUUID());
+      value.setVersion(0);
+      definitions.add(value);
+      return value;
+    }
+
+    @Override
+    public WorkflowDefinition create(
+        Workflow workflow,
+        int revisionNumber,
+        String authorActorId,
+        String sourceDocument,
+        String sourceDigest,
+        String documentVersion) {
+      WorkflowDefinition value =
+          new WorkflowDefinition(
+              workflow,
+              revisionNumber,
+              sourceDocument,
+              sourceDigest,
+              documentVersion,
               persistentActor(authorActorId));
       value.setUuid(UUID.randomUUID());
       value.setVersion(0);

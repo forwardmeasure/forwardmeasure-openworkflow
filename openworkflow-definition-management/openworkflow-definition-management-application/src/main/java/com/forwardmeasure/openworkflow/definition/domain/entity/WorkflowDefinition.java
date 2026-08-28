@@ -122,6 +122,32 @@ public class WorkflowDefinition extends AuditedEntity<Long> {
       String sourceDigest,
       String resolvedDigest,
       Actor author) {
+    this(workflow, revisionNumber, sourceDocument, sourceDigest, documentVersion, author);
+    this.resolvedDocument = required(resolvedDocument, "resolvedDocument");
+    this.resolvedResources = required(resolvedResources, "resolvedResources");
+    this.namespace = required(namespace, "namespace");
+    this.specificationVersion = required(specificationVersion, "specificationVersion");
+    this.compilerProfile = required(compilerProfile, "compilerProfile");
+    this.resolvedDigest = digest(resolvedDigest, "resolvedDigest");
+  }
+
+  /**
+   * A DRAFT revision whose source hasn't compiled (yet, or possibly ever) - every field
+   * OpenWorkflowCompiler.compile() would have produced stays null until a later save compiles
+   * cleanly, or until submitWorkflowDefinition compiles it for the first time on the way to
+   * IN_REVIEW (see the openworkflow-280 migration's comment for why that's still safe: nothing
+   * reads these columns before a definition leaves DRAFT). {@code documentVersion} is the one
+   * exception - populated from the author's own requested version regardless of whether the source
+   * compiles, since it's how callers look up "the draft for version X" long before there's anything
+   * to compile.
+   */
+  public WorkflowDefinition(
+      Workflow workflow,
+      int revisionNumber,
+      String sourceDocument,
+      String sourceDigest,
+      String documentVersion,
+      Actor author) {
     if (revisionNumber < 1) {
       throw new IllegalArgumentException("revisionNumber must be positive");
     }
@@ -130,14 +156,8 @@ public class WorkflowDefinition extends AuditedEntity<Long> {
     this.lifecycleState = WorkflowLifecycleState.DRAFT;
     this.author = Objects.requireNonNull(author, "author");
     this.sourceDocument = required(sourceDocument, "sourceDocument");
-    this.resolvedDocument = required(resolvedDocument, "resolvedDocument");
-    this.resolvedResources = required(resolvedResources, "resolvedResources");
-    this.namespace = required(namespace, "namespace");
-    this.documentVersion = required(documentVersion, "documentVersion");
-    this.specificationVersion = required(specificationVersion, "specificationVersion");
-    this.compilerProfile = required(compilerProfile, "compilerProfile");
     this.sourceDigest = digest(sourceDigest, "sourceDigest");
-    this.resolvedDigest = digest(resolvedDigest, "resolvedDigest");
+    this.documentVersion = required(documentVersion, "documentVersion");
   }
 
   /**
@@ -167,6 +187,19 @@ public class WorkflowDefinition extends AuditedEntity<Long> {
     this.compilerProfile = required(compilerProfile, "compilerProfile");
     this.sourceDigest = digest(sourceDigest, "sourceDigest");
     this.resolvedDigest = digest(resolvedDigest, "resolvedDigest");
+  }
+
+  /**
+   * Replaces only the raw source text on a DRAFT revision whose new content doesn't compile - every
+   * compiled-derived field (resolvedDocument, namespace, specificationVersion, ...) is left exactly
+   * as it was, not nulled out. That's deliberately stale rather than wrong: nothing reads those
+   * columns while still DRAFT (see the openworkflow-280 migration), and submitWorkflowDefinition
+   * always recompiles and overwrites them via setContent before a definition can leave DRAFT, so a
+   * stale value here never becomes an observable one.
+   */
+  public void setSourceOnly(String sourceDocument, String sourceDigest) {
+    this.sourceDocument = required(sourceDocument, "sourceDocument");
+    this.sourceDigest = digest(sourceDigest, "sourceDigest");
   }
 
   public void transitionTo(WorkflowLifecycleState state) {

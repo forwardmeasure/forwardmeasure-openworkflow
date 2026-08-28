@@ -41,6 +41,17 @@ public interface WorkflowDefinitionRepository {
       String sourceDigest,
       String resolvedDigest);
 
+  /**
+   * A DRAFT revision whose source didn't compile - see WorkflowDefinition's matching constructor.
+   */
+  WorkflowDefinition create(
+      Workflow workflow,
+      int revisionNumber,
+      String authorActorId,
+      String sourceDocument,
+      String sourceDigest,
+      String documentVersion);
+
   Optional<WorkflowDefinition> findByWorkflowAndUuid(Workflow workflow, UUID definitionId);
 
   Page<WorkflowDefinition> listByWorkflow(

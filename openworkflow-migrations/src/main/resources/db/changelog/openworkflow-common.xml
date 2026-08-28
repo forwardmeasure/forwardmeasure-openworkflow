@@ -369,4 +369,22 @@
         ]]></sql>
     </changeSet>
 
+    <changeSet id="openworkflow-280-draft-definitions-need-not-compile" author="forwardmeasure">
+        <comment>A DRAFT revision's source no longer has to compile to be saved - only source_document/
+            source_digest (a plain hash of the raw text, computable without compiling) stay mandatory.
+            The other eight columns are every field OpenWorkflowCompiler.compile() produces; NULL now
+            means "not compiled yet," populated for the first time when the revision is submitted for
+            review (compile() failure there still blocks the DRAFT -> IN_REVIEW transition, so nothing
+            leaves DRAFT without a clean compile - see the workflow_definition_content_immutable trigger
+            above, unaffected: it already only locks these columns once lifecycle_state is no longer
+            DRAFT, and IS DISTINCT FROM already treats NULL correctly on both sides.</comment>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="resolved_document" columnDataType="TEXT"/>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="resolved_resources" columnDataType="TEXT"/>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="namespace" columnDataType="VARCHAR(255)"/>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="document_version" columnDataType="VARCHAR(128)"/>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="specification_version" columnDataType="VARCHAR(32)"/>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="compiler_profile" columnDataType="VARCHAR(80)"/>
+        <dropNotNullConstraint tableName="workflow_definition" columnName="resolved_digest" columnDataType="VARCHAR(64)"/>
+    </changeSet>
+
 </databaseChangeLog>
