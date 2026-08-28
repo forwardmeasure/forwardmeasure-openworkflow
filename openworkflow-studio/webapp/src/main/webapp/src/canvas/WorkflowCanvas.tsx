@@ -27,6 +27,7 @@ import { useTheme } from "@mui/material/styles";
 import { AnchorNode, type AnchorNodeData } from "./AnchorNode";
 import { NodePalette, PALETTE_DRAG_MIME } from "./NodePalette";
 import { StickyNoteNode, type StickyNoteData } from "./StickyNoteNode";
+import { traceKey, type TraceEntry } from "./executionTrace";
 import { CATEGORY_COLOR, KIND_CATEGORY } from "./taskKindMeta";
 import { TaskInspector } from "./TaskInspector";
 import { TaskNode, type TaskNodeData } from "./TaskNode";
@@ -182,9 +183,17 @@ function uniqueTaskName(existing: string[]): string {
 export function WorkflowCanvas({
   source,
   onSourceChange,
+  trace,
 }: {
   source: string;
   onSourceChange: (source: string) => void;
+  // Optional execution-trace overlay (see executionTrace.ts) - keyed by
+  // traceKey(containerPath, taskName), so it naturally follows drill-down:
+  // a task's trace status shows whether you're viewing it at the top level
+  // or having drilled into its parent "do"/"for"/"try". undefined (the
+  // normal authoring case) renders exactly as before - trace is additive,
+  // nothing about the editable canvas changes when it's absent.
+  trace?: Map<string, TraceEntry>;
 }) {
   const theme = useTheme();
   const parsed = useMemo(() => {
@@ -253,20 +262,31 @@ export function WorkflowCanvas({
       // computed.nodes, which only ever contains task/anchor nodes.
       const stickyNodes = current.filter((node) => node.type === "sticky");
       const taskAndAnchorNodes = computed.nodes.map((node) => {
+        const withTrace: Node<CanvasNodeData> =
+          node.type === "task" && trace
+            ? {
+                ...node,
+                data: { ...node.data, trace: trace.get(traceKey(path, node.id)) },
+              }
+            : node;
         const pending = pendingPositionRef.current;
         if (pending && node.id === pending.name) {
           pendingPositionRef.current = undefined;
-          return { ...node, position: pending.position };
+          return { ...withTrace, position: pending.position };
         }
         const existing = existingById.get(node.id);
-        return existing ? { ...node, position: existing.position } : node;
+        return existing
+          ? { ...withTrace, position: existing.position }
+          : withTrace;
       });
       return [...taskAndAnchorNodes, ...stickyNodes];
     });
     setEdges(computed.edges);
-    // Deliberately keyed only on tasksInView, not on nodes/setNodes - a
-    // drag's own setNodes call must not re-trigger this resync.
-  }, [tasksInView]);
+    // Deliberately keyed only on tasksInView (which already changes
+    // reference whenever `path` does, so drilling in/out re-attaches trace
+    // at the new depth too) and `trace` itself - not nodes/setNodes, since
+    // a drag's own setNodes call must not re-trigger this resync.
+  }, [tasksInView, trace, path]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<CanvasNodeData>>[]) =>

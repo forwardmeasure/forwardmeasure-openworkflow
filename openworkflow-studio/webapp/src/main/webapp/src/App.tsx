@@ -10,6 +10,7 @@ import type {
 } from "@forwardmeasure/openworkflow-execution-client";
 import { authorizationDecisions, clients, correlationId } from "./api";
 import { WorkflowCanvas } from "./canvas/WorkflowCanvas";
+import { buildTraceMap } from "./canvas/executionTrace";
 import { WorkflowSettingsPanel } from "./canvas/WorkflowSettingsPanel";
 import type { StudioIdentity } from "./runtime";
 import { tenantFromToken } from "./session";
@@ -107,6 +108,18 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       definition.version === definitionVersion,
   );
   const previousSource = currentDefinition?.source;
+  // The workflow definition this selected execution actually ran against -
+  // not necessarily currentDefinition above (that's whatever's loaded in
+  // the author-tab editor, which can be a different, newer draft than what
+  // an older execution ran). Falls back to `source` only if the executed
+  // revision's own source isn't loaded (e.g. it's since been superseded
+  // and dropped from `definitions`'s page) - still lets the trace overlay
+  // render on SOMETHING rather than nothing, even if that something is an
+  // approximation.
+  const executedDefinition = definitions.find(
+    (definition) => definition.id === selected?.revisionId,
+  );
+  const executionTrace = useMemo(() => buildTraceMap(history), [history]);
 
   useEffect(() => {
     void refreshDefinitions();
@@ -686,6 +699,30 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                     </button>
                   )}
                 </div>
+                {executedDefinition && (
+                  <>
+                    <h3>Trace</h3>
+                    <p className="muted">
+                      The workflow this execution actually ran, with each
+                      task's status overlaid - not the live-editing source
+                      in the Author tab, which may have moved on since.
+                    </p>
+                    <div className="canvas-shell">
+                      <WorkflowCanvas
+                        source={executedDefinition.source}
+                        onSourceChange={() => {
+                          // Read-only in spirit: this view exists to show
+                          // what already happened, not to edit it. Editing
+                          // the canvas here is harmless (it never writes
+                          // back to the definition or re-runs anything),
+                          // but silently swallowing the change avoids the
+                          // false impression that it did.
+                        }}
+                        trace={executionTrace}
+                      />
+                    </div>
+                  </>
+                )}
                 <h3>Timeline</h3>
                 <ol className="history">
                   {history.map((item) => (

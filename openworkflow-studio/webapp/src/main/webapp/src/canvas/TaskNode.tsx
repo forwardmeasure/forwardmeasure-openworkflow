@@ -1,36 +1,59 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import ErrorIcon from "@mui/icons-material/Error";
+import PendingIcon from "@mui/icons-material/Pending";
 import Avatar from "@mui/material/Avatar";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
+import type { TraceEntry } from "./executionTrace";
 import { CATEGORY_COLOR, KIND_CATEGORY, KIND_ICON } from "./taskKindMeta";
 import type { Task } from "./dsl";
 
-export type TaskNodeData = { task: Task };
+export type TaskNodeData = { task: Task; trace?: TraceEntry };
+
+const TRACE_ICON = {
+  entered: PendingIcon,
+  completed: CheckCircleIcon,
+  failed: ErrorIcon,
+};
+
+const TRACE_COLOR = {
+  entered: "warning",
+  completed: "success",
+  failed: "error",
+} as const;
 
 export function TaskNode({
   data,
   selected,
 }: NodeProps & { data: TaskNodeData }) {
-  const { task } = data;
+  const { task, trace } = data;
   const KindIcon = KIND_ICON[task.kind];
   const category = KIND_CATEGORY[task.kind];
   const categoryColor = CATEGORY_COLOR[category];
+  const TraceIcon = trace ? TRACE_ICON[trace.status] : undefined;
   return (
-    <Card
-      variant="outlined"
-      sx={{
-        minWidth: 220,
-        borderRadius: 3,
-        borderColor: selected ? `${categoryColor}.main` : "divider",
-        borderWidth: selected ? 2 : 1,
-        borderTop: 3,
-        borderTopColor: `${categoryColor}.main`,
-        boxShadow: selected ? 4 : 1,
-        transition: "box-shadow 120ms ease, border-color 120ms ease",
-      }}
-    >
+    <Box sx={{ position: "relative" }}>
+      <Card
+        variant="outlined"
+        sx={{
+          minWidth: 220,
+          borderRadius: 3,
+          borderColor: trace
+            ? `${TRACE_COLOR[trace.status]}.main`
+            : selected
+              ? `${categoryColor}.main`
+              : "divider",
+          borderWidth: trace || selected ? 2 : 1,
+          borderTop: 3,
+          borderTopColor: `${categoryColor}.main`,
+          boxShadow: selected ? 4 : 1,
+          transition: "box-shadow 120ms ease, border-color 120ms ease",
+        }}
+      >
       <Handle type="target" position={Position.Left} />
       <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
@@ -170,7 +193,23 @@ export function TaskNode({
       ) : (
         <Handle type="source" position={Position.Right} />
       )}
-    </Card>
+      </Card>
+      {trace && TraceIcon && (
+        <Tooltip title={trace.message || trace.status}>
+          <TraceIcon
+            fontSize="small"
+            color={TRACE_COLOR[trace.status]}
+            sx={{
+              position: "absolute",
+              top: -8,
+              right: -8,
+              bgcolor: "background.paper",
+              borderRadius: "50%",
+            }}
+          />
+        </Tooltip>
+      )}
+    </Box>
   );
 }
 /*
