@@ -24,24 +24,13 @@
 #
 # Why this exists: releases/openworkflow-service/templates/workload.yaml's
 # image reference is `repository@digest` whenever digest is non-empty,
-# ignoring tag entirely - so picking up a genuinely new build means
-# updating the digest committed here, deliberately, by hand or by running
-# this script. Run it yourself, review the diff it produces, and commit
-# it before deploying.
-#
-# Deliberately NOT wired into install.sh anymore (it used to run
-# unconditionally on every deploy) - the committed digest is the actual
-# source of truth, and this script's whole job is querying a shared,
-# mutable :$OPENWORKFLOW_VERSION tag on the registry, which anything can
-# push to at any time. Auto-running this on every deploy meant that
-# committed digest was never really authoritative - a stray push to the
-# tag from anywhere would get silently adopted on the next deploy. That's
-# a strictly worse failure mode than the one this script was originally
-# built to fix (a stale digest silently overriding a real new build after
-# a `kubectl set image` in the 2026-08-25/08-27 Studio debugging session),
-# and it's exactly what caused a later regression - a deploy reverted
-# Studio to its very first, pre-fix image because something else had
-# pushed old content to the tag in between.
+# ignoring tag entirely - so a stale committed digest silently overrides
+# whatever OPENWORKFLOW_VERSION is set to, and the only way to actually
+# deploy a new build has been to bypass helmfile with `kubectl set image`
+# and then remember to hand-update this file afterward (exactly what
+# happened, and was later found to have drifted, in the 2026-08-25/08-27
+# Studio debugging session). This makes that reconciliation automatic
+# instead of a manually-remembered follow-up step.
 #
 # Only refreshes an entry that ALREADY has a non-empty digest pinned. An
 # empty digest (every spring/micronaut framework variant today) means that
