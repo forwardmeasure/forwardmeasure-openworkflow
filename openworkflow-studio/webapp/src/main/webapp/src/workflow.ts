@@ -71,16 +71,6 @@ export function canPause(status: string): boolean {
   return status === "RUNNING" || status === "WAITING";
 }
 
-export function lineDiff(previous: string, current: string): string[] {
-  const before = previous.split("\n");
-  const after = current.split("\n");
-  const length = Math.max(before.length, after.length);
-  return Array.from({ length }, (_, index) =>
-    before[index] === after[index]
-      ? `  ${after[index] ?? ""}`
-      : `- ${before[index] ?? ""}\n+ ${after[index] ?? ""}`,
-  );
-}
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
  * agreements. See the NOTICE file distributed with this work for additional information regarding

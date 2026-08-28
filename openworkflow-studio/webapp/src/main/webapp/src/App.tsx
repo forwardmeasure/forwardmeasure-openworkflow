@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { ThemeProvider } from "@mui/material/styles";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import type {
   Workflow,
   WorkflowDefinition,
@@ -9,13 +13,14 @@ import type {
   ExecutionHistoryEntry,
 } from "@forwardmeasure/openworkflow-execution-client";
 import { authorizationDecisions, clients, correlationId } from "./api";
+import { DiffView } from "./canvas/DiffView";
 import { WorkflowCanvas } from "./canvas/WorkflowCanvas";
 import { buildTraceMap } from "./canvas/executionTrace";
 import { WorkflowSettingsPanel } from "./canvas/WorkflowSettingsPanel";
 import type { StudioIdentity } from "./runtime";
 import { tenantFromToken } from "./session";
 import { createStudioMuiTheme } from "./theme";
-import { canPause, diagnostic, lineDiff, SAMPLE, taskNames } from "./workflow";
+import { canPause, diagnostic, SAMPLE, taskNames } from "./workflow";
 
 // Built once at module scope, not per-render - it only depends on THEMES in
 // theme.ts, never on component state.
@@ -94,6 +99,10 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
   const [selected, setSelected] = useState<Execution>();
   const [history, setHistory] = useState<ExecutionHistoryEntry[]>([]);
   const [input, setInput] = useState("{}");
+  // undefined = default behavior (diff against the saved revision sharing
+  // the editor's current version field); set once the author explicitly
+  // picks a different governed revision from the compare-against selector.
+  const [compareDefinitionId, setCompareDefinitionId] = useState<string>();
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
   const tasks = taskNames(source);
   const workflowById = new Map(
@@ -107,7 +116,15 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       definition.workflowId === currentWorkflow?.id &&
       definition.version === definitionVersion,
   );
-  const previousSource = currentDefinition?.source;
+  // Every governed revision of the workflow currently loaded in the editor,
+  // newest first - the pool the compare-against selector picks from.
+  const revisionsForCurrentWorkflow = definitions
+    .filter((definition) => definition.workflowId === currentWorkflow?.id)
+    .sort((a, b) => b.revision - a.revision);
+  const compareDefinition = compareDefinitionId
+    ? definitions.find((definition) => definition.id === compareDefinitionId)
+    : (currentDefinition ?? revisionsForCurrentWorkflow[0]);
+  const previousSource = compareDefinition?.source;
   // The workflow definition this selected execution actually ran against -
   // not necessarily currentDefinition above (that's whatever's loaded in
   // the author-tab editor, which can be a different, newer draft than what
@@ -498,12 +515,43 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 <WorkflowSettingsPanel source={source} onSourceChange={setSource} />
               </div>
             )}
-            {previousSource && previousSource !== source && (
-              <details>
+            {revisionsForCurrentWorkflow.length > 0 && (
+              <details open={Boolean(previousSource && previousSource !== source)}>
                 <summary>Revision diff</summary>
-                <pre aria-label="Revision diff">
-                  {lineDiff(previousSource, source).join("\n")}
-                </pre>
+                <FormControl size="small" sx={{ mb: 1, minWidth: 260 }}>
+                  <InputLabel id="compare-against-label">Compare against</InputLabel>
+                  <Select
+                    labelId="compare-against-label"
+                    label="Compare against"
+                    value={
+                      compareDefinitionId ??
+                      currentDefinition?.id ??
+                      revisionsForCurrentWorkflow[0]?.id ??
+                      ""
+                    }
+                    onChange={(event) =>
+                      setCompareDefinitionId(event.target.value || undefined)
+                    }
+                  >
+                    {revisionsForCurrentWorkflow.map((definition) => (
+                      <MenuItem key={definition.id} value={definition.id}>
+                        v{definition.version} · rev {definition.revision} ·{" "}
+                        {definition.status}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </FormControl>
+                {previousSource ? (
+                  <DiffView
+                    before={previousSource}
+                    after={source}
+                    label={`${compareDefinition?.version ?? "?"} (rev ${compareDefinition?.revision ?? "?"}) → editor`}
+                  />
+                ) : (
+                  <p className="muted">
+                    Selected revision has no source loaded.
+                  </p>
+                )}
               </details>
             )}
           </section>

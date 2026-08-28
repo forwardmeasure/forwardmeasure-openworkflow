@@ -1,5 +1,5 @@
 import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
-import { canPause, diagnostic, lineDiff, taskNames } from "./workflow";
+import { canPause, diagnostic, taskNames } from "./workflow";
 import { tenantFromToken } from "./session";
 import { describe, expect, it } from "vitest";
 
@@ -83,10 +83,6 @@ describe("lossless authoring helpers", () => {
     expect(canPause("WAITING")).toBe(true);
     expect(canPause("PAUSED")).toBe(false);
     expect(canPause("CANCELLED")).toBe(false);
-  });
-
-  it("diffs revisions without normalizing either source document", () => {
-    expect(lineDiff("a: 1\n", "a: 2\n")).toEqual(["- a: 1\n+ a: 2", "  "]);
   });
 });
 /*

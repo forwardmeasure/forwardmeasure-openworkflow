@@ -906,7 +906,7 @@ export function emptyTask(kind: TaskType, name: string): Task {
 // than listing kinds by name, is what lets tasksAtPath/setChildrenAtPath
 // below (and WorkflowCanvas.tsx's drill-in) support a new container kind
 // with no changes here when one lands.
-function hasChildren(task: Task): task is Task & { children: Task[] } {
+export function hasChildren(task: Task): task is Task & { children: Task[] } {
   return "children" in task;
 }
 
