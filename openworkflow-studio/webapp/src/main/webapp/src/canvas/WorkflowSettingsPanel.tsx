@@ -1,6 +1,12 @@
 import { useEffect, useState } from "react";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import Accordion from "@mui/material/Accordion";
+import AccordionDetails from "@mui/material/AccordionDetails";
+import AccordionSummary from "@mui/material/AccordionSummary";
 import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
 import FormControl from "@mui/material/FormControl";
+import FormHelperText from "@mui/material/FormHelperText";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
@@ -42,21 +48,43 @@ type SettingsState = {
   secrets: string;
 };
 
-// Grouped for the panel's own layout, not just iteration order - sixteen
-// flat text fields in a row reads as a wall; a workflow's document identity,
-// its data flow, and its reusable-component catalogs are three genuinely
-// different concerns.
-const SECTIONS: { heading: string; fields: (keyof SettingsState)[] }[] = [
+// "makes no sense whatsoever" (real user feedback on the previous version
+// of this panel) traced to one concrete problem, confirmed by actually
+// rendering it: sixteen fields, most of them raw-JSON textareas, ALL
+// always visible and equally weighted - "Document title" sat with the
+// same visual prominence as "use.secrets (JSON)", a field the overwhelming
+// majority of workflows never touch. Two fixes, not a rewrite of the
+// underlying edit model (still raw JSON for open-ended shapes - see the
+// file-level comment below for why): (1) only the fields most workflows
+// actually set stay always-open (title/summary, and the whole-workflow
+// data/timeout/schedule/expression-mode group); (2) the two genuinely
+// rare groups - freeform tags/metadata, and the eight "use.*" catalogs -
+// move into collapsed accordions with a live count badge, so they're
+// discoverable without dominating the panel on every open.
+const OPEN_SECTIONS: { heading: string; fields: (keyof SettingsState)[] }[] = [
   {
-    heading: "Document",
-    fields: ["documentTitle", "documentSummary", "documentTags", "documentMetadata"],
+    heading: "Basics",
+    fields: ["documentTitle", "documentSummary"],
   },
   {
-    heading: "Data flow",
+    heading: "Data & expressions",
     fields: ["input", "output", "timeout", "schedule"],
   },
+];
+const COLLAPSED_SECTIONS: {
+  heading: string;
+  description: string;
+  fields: (keyof SettingsState)[];
+}[] = [
   {
-    heading: "Reusable components (use.*)",
+    heading: "Labels & extra metadata",
+    description: "Freeform - most workflows leave these unset.",
+    fields: ["documentTags", "documentMetadata"],
+  },
+  {
+    heading: "Reusable components",
+    description:
+      'Named things tasks elsewhere in this workflow refer back to by name (e.g. a "raise" task\'s error, or a "call" task\'s authentication).',
     fields: [
       "authentications",
       "errors",
@@ -69,22 +97,44 @@ const SECTIONS: { heading: string; fields: (keyof SettingsState)[] }[] = [
     ],
   },
 ];
-const FIELD_ORDER: (keyof SettingsState)[] = SECTIONS.flatMap((section) => section.fields);
+const FIELD_ORDER: (keyof SettingsState)[] = [
+  ...OPEN_SECTIONS.flatMap((section) => section.fields),
+  ...COLLAPSED_SECTIONS.flatMap((section) => section.fields),
+];
 
 // "documentTitle"/"documentSummary" are plain strings on the wire (never
 // JSON) - distinct from "timeout" below (JSON-if-it-parses-else-string) and
 // from every other field here (JSON-only).
 const PLAIN_TEXT_FIELDS: (keyof SettingsState)[] = ["documentTitle", "documentSummary"];
 
+// Plain-language first - this is what reads as the field's name. The raw
+// DSL wire path (shown separately via FIELD_WIRE_PATH, only for the fields
+// where that path is itself the jargon a user got stuck on) is secondary.
 const FIELD_LABEL: Record<keyof SettingsState, string> = {
-  documentTitle: "Document title",
-  documentSummary: "Document summary",
-  documentTags: "document.tags",
-  documentMetadata: "document.metadata",
+  documentTitle: "Title",
+  documentSummary: "Summary",
+  documentTags: "Tags",
+  documentMetadata: "Metadata",
   input: "Workflow input",
   output: "Workflow output",
-  timeout: "Workflow timeout",
+  timeout: "Timeout",
   schedule: "Schedule",
+  authentications: "Authentication schemes",
+  errors: "Error definitions",
+  extensions: "Extensions",
+  retries: "Retry policies",
+  functions: "Reusable functions",
+  timeouts: "Named timeouts",
+  catalogs: "Resource catalogs",
+  secrets: "Secrets",
+};
+
+// Shown as a small monospace caption next to the label, only where the raw
+// DSL path is worth surfacing (the "use.*" catalogs - so an "authentication
+// schemes" field is still recognizable as "use.authentications" to someone
+// reading the YAML). Skipped for document.tags/metadata and workflow
+// input/output/timeout/schedule, which read fine as plain English alone.
+const FIELD_WIRE_PATH: Partial<Record<keyof SettingsState, string>> = {
   authentications: "use.authentications",
   errors: "use.errors",
   extensions: "use.extensions",
@@ -99,7 +149,7 @@ const FIELD_LABEL: Record<keyof SettingsState, string> = {
 // references it, so this panel doesn't read as a wall of disconnected text
 // boxes.
 const FIELD_HINT: Partial<Record<keyof SettingsState, string>> = {
-  documentTitle: 'the YAML\'s own "document.title" - distinct from "Display name" above, which is the governance API\'s separate Workflow.title',
+  documentTitle: 'Shown inside the workflow file itself. Different from "Display name" above the editor, which is only used by this catalog UI.',
   documentTags: "an object of freeform labels, e.g. {\"team\": \"platform\"}",
   documentMetadata: "an object of freeform business metadata carried through to the compiled plan",
   input: 'schema + "from" transform applied to the whole workflow\'s input, same shape as a task\'s own input',
@@ -261,6 +311,42 @@ export function WorkflowSettingsPanel({
     onSourceChange(applyWorkflowSettings(source, settings));
   }
 
+  function renderField(field: keyof SettingsState) {
+    const isPlainText = PLAIN_TEXT_FIELDS.includes(field);
+    const isJson = field !== "timeout" && !isPlainText;
+    const wirePath = FIELD_WIRE_PATH[field];
+    return (
+      <TextField
+        key={field}
+        label={
+          <>
+            {FIELD_LABEL[field]}
+            {isJson ? " (JSON)" : ""}
+            {wirePath && (
+              <Box
+                component="span"
+                sx={{ ml: 0.75, fontFamily: "monospace", opacity: 0.7 }}
+              >
+                {wirePath}
+              </Box>
+            )}
+          </>
+        }
+        placeholder={
+          field === "timeout" ? "PT30S, or a name from use.timeouts" : undefined
+        }
+        helperText={errors[field] ?? FIELD_HINT[field]}
+        error={Boolean(errors[field])}
+        multiline={isJson}
+        minRows={isJson ? 3 : undefined}
+        size="small"
+        value={state[field]}
+        onChange={(event) => setField(field, event.target.value)}
+        onBlur={() => commit()}
+      />
+    );
+  }
+
   return (
     <Box
       sx={{
@@ -278,71 +364,74 @@ export function WorkflowSettingsPanel({
       <Typography variant="caption" color="text.secondary">
         Document-level properties, not per-task ones - the workflow's own
         identity and metadata, its whole-workflow input/output and
-        timeout/schedule, and the "use.*" catalogs tasks reference by name
-        elsewhere in this workflow.
+        timeout/schedule, and the reusable, named things tasks elsewhere in
+        this workflow refer back to.
       </Typography>
       {parseError && (
         <Typography variant="body2" color="error">
           {parseError}
         </Typography>
       )}
-      {SECTIONS.map((section) => (
-        <Box
-          key={section.heading}
-          sx={{ display: "contents" }}
-        >
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-            <Typography variant="subtitle2">{section.heading}</Typography>
-            {section.fields.map((field) => {
-              const isPlainText = PLAIN_TEXT_FIELDS.includes(field);
-              const isJson = field !== "timeout" && !isPlainText;
-              return (
-                <TextField
-                  key={field}
-                  label={isJson ? `${FIELD_LABEL[field]} (JSON)` : FIELD_LABEL[field]}
-                  placeholder={
-                    field === "timeout" ? "PT30S, or a name from use.timeouts" : undefined
-                  }
-                  helperText={errors[field] ?? FIELD_HINT[field]}
-                  error={Boolean(errors[field])}
-                  multiline={isJson}
-                  minRows={isJson ? 3 : undefined}
-                  size="small"
-                  value={state[field]}
-                  onChange={(event) => setField(field, event.target.value)}
-                  onBlur={() => commit()}
-                />
-              );
-            })}
-          </Box>
-          {section.heading === "Data flow" && (
-            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-              <Typography variant="subtitle2">Expressions</Typography>
-              <FormControl size="small">
-                <InputLabel id="evaluate-mode-label">Evaluate mode</InputLabel>
-                <Select
-                  labelId="evaluate-mode-label"
-                  label="Evaluate mode"
-                  value={evaluateMode}
-                  onChange={(event) => {
-                    const next = event.target.value as "strict" | "loose";
-                    setEvaluateMode(next);
-                    commit(next);
-                  }}
-                >
-                  <MenuItem value="strict">Strict</MenuItem>
-                  <MenuItem value="loose">Loose</MenuItem>
-                </Select>
-              </FormControl>
-              <Typography variant="caption" color="text.secondary">
+      {OPEN_SECTIONS.map((section) => (
+        <Box key={section.heading} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+          <Typography variant="subtitle2">{section.heading}</Typography>
+          {section.fields.map(renderField)}
+          {section.heading === "Data & expressions" && (
+            <FormControl size="small">
+              <InputLabel id="evaluate-mode-label">Evaluate mode</InputLabel>
+              <Select
+                labelId="evaluate-mode-label"
+                label="Evaluate mode"
+                value={evaluateMode}
+                onChange={(event) => {
+                  const next = event.target.value as "strict" | "loose";
+                  setEvaluateMode(next);
+                  commit(next);
+                }}
+              >
+                <MenuItem value="strict">Strict</MenuItem>
+                <MenuItem value="loose">Loose</MenuItem>
+              </Select>
+              <FormHelperText>
                 Runtime-expression recognition for every "${'{'} ... {'}'}" in
                 this workflow. Strict (the default) rejects malformed
                 expressions; loose is more permissive.
-              </Typography>
-            </Box>
+              </FormHelperText>
+            </FormControl>
           )}
         </Box>
       ))}
+      {COLLAPSED_SECTIONS.map((section) => {
+        const setCount = section.fields.filter((field) => state[field].trim() !== "").length;
+        return (
+          <Accordion
+            key={section.heading}
+            disableGutters
+            elevation={0}
+            sx={{ border: 1, borderColor: "divider", "&:before": { display: "none" } }}
+          >
+            <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                <Typography variant="body2">{section.heading}</Typography>
+                {setCount > 0 && (
+                  <Chip
+                    size="small"
+                    label={`${setCount} of ${section.fields.length} set`}
+                    color="primary"
+                    variant="outlined"
+                  />
+                )}
+              </Box>
+            </AccordionSummary>
+            <AccordionDetails sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <Typography variant="caption" color="text.secondary">
+                {section.description}
+              </Typography>
+              {section.fields.map(renderField)}
+            </AccordionDetails>
+          </Accordion>
+        );
+      })}
     </Box>
   );
 }
