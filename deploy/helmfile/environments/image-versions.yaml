@@ -67,7 +67,7 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-studio-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:f63506e83665c068177b24ea30de79f0313f472472abc7103ab59573eaef9020
+      quarkus: sha256:128f72ba9b373030fa0ce671384b953a2c5c4021b741570e5681db3d51fdaa32
       spring: ""
       micronaut: ""
   tenantProvisioning:
