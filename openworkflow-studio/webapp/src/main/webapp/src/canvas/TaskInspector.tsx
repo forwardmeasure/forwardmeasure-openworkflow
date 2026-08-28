@@ -19,6 +19,7 @@ import type {
   CatchClause,
   CommonTaskProps,
   ErrorFilter,
+  RaiseError,
   RetryPolicy,
   SwitchCase,
   Task,
@@ -125,6 +126,44 @@ function parseMaybeJson(text: string): unknown {
   } catch {
     return text;
   }
+}
+
+// "raise"'s error is either a plain string naming a "use.errors" entry, or
+// an inline Problem-Details object - same string-or-inline shape and same
+// bundled-state treatment as "try"'s RetryState below. `refName` non-empty
+// means "use the reference," ignoring the inline fields.
+type RaiseErrorState = {
+  refName: string;
+  type: string;
+  status: string;
+  title: string;
+  instance: string;
+  detail: string;
+};
+
+function raiseErrorStateOf(error: string | RaiseError | undefined): RaiseErrorState {
+  if (typeof error === "string") {
+    return { refName: error, type: "", status: "", title: "", instance: "", detail: "" };
+  }
+  return {
+    refName: "",
+    type: error?.type ?? "",
+    status: error?.status !== undefined ? String(error.status) : "",
+    title: error?.title ?? "",
+    instance: error?.instance ?? "",
+    detail: error?.detail ?? "",
+  };
+}
+
+function resolveRaiseError(state: RaiseErrorState): string | RaiseError {
+  if (state.refName.trim()) return state.refName.trim();
+  return {
+    type: state.type,
+    status: Number(state.status) || 0,
+    title: state.title.trim() || undefined,
+    instance: state.instance.trim() || undefined,
+    detail: state.detail.trim() || undefined,
+  };
 }
 
 // "try"'s retry policy is either a plain string naming a "use.retries"
@@ -393,20 +432,8 @@ export function TaskInspector({
   const [cases, setCases] = useState<SwitchCase[]>(
     task.kind === "switch" ? task.cases : [],
   );
-  const [raiseType, setRaiseType] = useState(
-    task.kind === "raise" ? task.error.type : "",
-  );
-  const [raiseStatus, setRaiseStatus] = useState(
-    task.kind === "raise" ? String(task.error.status) : "",
-  );
-  const [raiseTitle, setRaiseTitle] = useState(
-    task.kind === "raise" ? task.error.title : "",
-  );
-  const [raiseInstance, setRaiseInstance] = useState(
-    task.kind === "raise" ? (task.error.instance ?? "") : "",
-  );
-  const [raiseDetail, setRaiseDetail] = useState(
-    task.kind === "raise" ? (task.error.detail ?? "") : "",
+  const [raiseError, setRaiseError] = useState<RaiseErrorState>(() =>
+    raiseErrorStateOf(task.kind === "raise" ? task.error : undefined),
   );
   const [waitText, setWaitText] = useState(() =>
     task.kind === "wait" ? toText(task.wait) : "",
@@ -453,11 +480,7 @@ export function TaskInspector({
     setParamsText(JSON.stringify(paramsOf(task), null, 2));
     setParamsError(undefined);
     setCases(task.kind === "switch" ? task.cases : []);
-    setRaiseType(task.kind === "raise" ? task.error.type : "");
-    setRaiseStatus(task.kind === "raise" ? String(task.error.status) : "");
-    setRaiseTitle(task.kind === "raise" ? task.error.title : "");
-    setRaiseInstance(task.kind === "raise" ? (task.error.instance ?? "") : "");
-    setRaiseDetail(task.kind === "raise" ? (task.error.detail ?? "") : "");
+    setRaiseError(raiseErrorStateOf(task.kind === "raise" ? task.error : undefined));
     setWaitText(task.kind === "wait" ? toText(task.wait) : "");
     setForItemVariable(task.kind === "for" ? task.itemVariable : "");
     setForCollection(task.kind === "for" ? task.collection : "");
@@ -473,6 +496,13 @@ export function TaskInspector({
     setAdvanced(advancedStateOf(task));
     setAdvancedErrors({});
   }, [task]);
+
+  function setRaiseErrorField<K extends keyof RaiseErrorState>(
+    field: K,
+    value: RaiseErrorState[K],
+  ) {
+    setRaiseError((current) => ({ ...current, [field]: value }));
+  }
 
   function setListenField<K extends keyof ListenState>(field: K, value: ListenState[K]) {
     setListenState((current) => ({ ...current, [field]: value }));
@@ -521,13 +551,7 @@ export function TaskInspector({
       onChange({
         kind: "raise",
         name: resolvedName,
-        error: {
-          type: raiseType,
-          status: Number(raiseStatus) || 0,
-          title: raiseTitle,
-          instance: raiseInstance.trim() || undefined,
-          detail: raiseDetail.trim() || undefined,
-        },
+        error: resolveRaiseError(raiseError),
         ...commonProps,
       });
       return;
@@ -764,44 +788,65 @@ export function TaskInspector({
       {task.kind === "raise" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
           <TextField
-            label="Error type"
+            label="Error: named entry from use.errors"
             size="small"
-            placeholder="https://example.com/errors/not-found"
-            value={raiseType}
-            onChange={(event) => setRaiseType(event.target.value)}
+            placeholder="leave blank for an inline error below"
+            value={raiseError.refName}
+            onChange={(event) => setRaiseErrorField("refName", event.target.value)}
             onBlur={() => commit({})}
           />
-          <TextField
-            label="Status"
-            size="small"
-            type="number"
-            value={raiseStatus}
-            onChange={(event) => setRaiseStatus(event.target.value)}
-            onBlur={() => commit({})}
-          />
-          <TextField
-            label="Title"
-            size="small"
-            value={raiseTitle}
-            onChange={(event) => setRaiseTitle(event.target.value)}
-            onBlur={() => commit({})}
-          />
-          <TextField
-            label="Instance (optional)"
-            size="small"
-            value={raiseInstance}
-            onChange={(event) => setRaiseInstance(event.target.value)}
-            onBlur={() => commit({})}
-          />
-          <TextField
-            label="Detail (optional)"
-            size="small"
-            multiline
-            minRows={2}
-            value={raiseDetail}
-            onChange={(event) => setRaiseDetail(event.target.value)}
-            onBlur={() => commit({})}
-          />
+          {!raiseError.refName.trim() && (
+            <Box
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 1.5,
+                pl: 1.5,
+                borderLeft: 2,
+                borderColor: "divider",
+              }}
+            >
+              <TextField
+                label="Error type"
+                size="small"
+                placeholder="https://example.com/errors/not-found"
+                value={raiseError.type}
+                onChange={(event) => setRaiseErrorField("type", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Status"
+                size="small"
+                type="number"
+                value={raiseError.status}
+                onChange={(event) => setRaiseErrorField("status", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Title (optional)"
+                size="small"
+                value={raiseError.title}
+                onChange={(event) => setRaiseErrorField("title", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Instance (optional)"
+                size="small"
+                value={raiseError.instance}
+                onChange={(event) => setRaiseErrorField("instance", event.target.value)}
+                onBlur={() => commit({})}
+              />
+              <TextField
+                label="Detail (optional)"
+                size="small"
+                multiline
+                minRows={2}
+                value={raiseError.detail}
+                onChange={(event) => setRaiseErrorField("detail", event.target.value)}
+                onBlur={() => commit({})}
+              />
+            </Box>
+          )}
         </Box>
       )}
       {task.kind === "wait" && (

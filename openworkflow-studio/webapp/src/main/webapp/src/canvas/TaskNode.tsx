@@ -108,11 +108,18 @@ export function TaskNode({
                 : switchCase.name}
             </Typography>
           ))}
-        {task.kind === "raise" && (task.error.type || task.error.title) && (
-          <Typography variant="caption" color="text.secondary" noWrap>
-            {task.error.title || task.error.type}
-          </Typography>
-        )}
+        {task.kind === "raise" &&
+          (typeof task.error === "string" ? (
+            <Typography variant="caption" color="text.secondary" noWrap>
+              use.errors: {task.error}
+            </Typography>
+          ) : (
+            (task.error.title || task.error.type) && (
+              <Typography variant="caption" color="text.secondary" noWrap>
+                {task.error.title || task.error.type}
+              </Typography>
+            )
+          ))}
         {task.kind === "wait" && typeof task.wait === "string" && task.wait && (
           <Typography variant="caption" color="text.secondary" noWrap>
             {task.wait}

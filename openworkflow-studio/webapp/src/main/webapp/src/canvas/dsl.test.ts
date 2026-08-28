@@ -214,8 +214,43 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
     ]);
   });
 
-  it("rejects a raise task whose error has no type/title (a use.errors reference isn't supported here)", () => {
+  it("parses a raise task whose error is a plain string naming a use.errors entry", () => {
     const source = "do:\n  - fail:\n      raise:\n        error: notFound\n";
+    expect(fromYaml(source).tasks).toEqual([
+      { kind: "raise", name: "fail", error: "notFound" },
+    ]);
+  });
+
+  it("round-trips a raise error reference", () => {
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [{ kind: "raise", name: "fail", error: "notFound" }],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      { kind: "raise", name: "fail", error: "notFound" },
+    ]);
+  });
+
+  it("parses an inline raise error with no title (only type/status are required)", () => {
+    const source = [
+      "do:",
+      "  - fail:",
+      "      raise:",
+      "        error:",
+      "          type: https://example.com/errors/bad",
+      "          status: 400",
+      "",
+    ].join("\n");
+    expect(fromYaml(source).tasks).toEqual([
+      {
+        kind: "raise",
+        name: "fail",
+        error: { type: "https://example.com/errors/bad", status: 400 },
+      },
+    ]);
+  });
+
+  it("rejects an inline raise error with no type/status", () => {
+    const source = "do:\n  - fail:\n      raise:\n        error: {}\n";
     expect(() => fromYaml(source)).toThrow(UnsupportedTaskError);
   });
 
@@ -951,6 +986,12 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     expect(parseWorkflowSettings(source)).toEqual({
       timeout: "PT1H",
       schedule: { cron: "0 0 * * *" },
+      input: undefined,
+      output: undefined,
+      documentTitle: undefined,
+      documentSummary: undefined,
+      documentTags: undefined,
+      documentMetadata: undefined,
       authentications: {
         petStoreAuth: { bearer: { token: "${ .token }" } },
       },
@@ -970,6 +1011,12 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     expect(parseWorkflowSettings(SAMPLE)).toEqual({
       timeout: undefined,
       schedule: undefined,
+      input: undefined,
+      output: undefined,
+      documentTitle: undefined,
+      documentSummary: undefined,
+      documentTags: undefined,
+      documentMetadata: undefined,
       authentications: undefined,
       errors: undefined,
       extensions: undefined,
@@ -981,6 +1028,99 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     });
   });
 
+  it("parses workflow-level input/output, the same {schema, from/as} shape a task's own input/output carries", () => {
+    const source = [
+      "document:",
+      "  dsl: '1.0.0'",
+      "  namespace: examples",
+      "  name: with-io",
+      "  version: '0.1.0'",
+      "input:",
+      "  schema:",
+      "    document:",
+      "      type: object",
+      "  from: '${ .payload }'",
+      "output:",
+      "  as: '${ {result: .} }'",
+      "do:",
+      "  - greet:",
+      "      set:",
+      "        message: hi",
+      "",
+    ].join("\n");
+    const settings = parseWorkflowSettings(source);
+    expect(settings.input).toEqual({
+      schema: { document: { type: "object" } },
+      from: "${ .payload }",
+    });
+    expect(settings.output).toEqual({ as: "${ {result: .} }" });
+  });
+
+  it("round-trips workflow-level input/output via applyWorkflowSettings", () => {
+    const rewritten = applyWorkflowSettings(SAMPLE, {
+      input: { schema: { document: { type: "object" } } },
+      output: { as: "${ . }" },
+    });
+    const settings = parseWorkflowSettings(rewritten);
+    expect(settings.input).toEqual({ schema: { document: { type: "object" } } });
+    expect(settings.output).toEqual({ as: "${ . }" });
+  });
+
+  it("parses document.title/summary/tags/metadata, distinct from the governance layer's own title", () => {
+    const source = [
+      "document:",
+      "  dsl: '1.0.0'",
+      "  namespace: examples",
+      "  name: with-doc-metadata",
+      "  version: '0.1.0'",
+      "  title: Pet Store Onboarding",
+      "  summary: Registers a new pet store tenant.",
+      "  tags:",
+      "    team: platform",
+      "  metadata:",
+      "    owner: platform-team",
+      "do:",
+      "  - greet:",
+      "      set:",
+      "        message: hi",
+      "",
+    ].join("\n");
+    const settings = parseWorkflowSettings(source);
+    expect(settings.documentTitle).toBe("Pet Store Onboarding");
+    expect(settings.documentSummary).toBe("Registers a new pet store tenant.");
+    expect(settings.documentTags).toEqual({ team: "platform" });
+    expect(settings.documentMetadata).toEqual({ owner: "platform-team" });
+  });
+
+  it("round-trips document.title/summary/tags/metadata, preserving dsl/namespace/name/version", () => {
+    const rewritten = applyWorkflowSettings(SAMPLE, {
+      documentTitle: "Hello Studio",
+      documentSummary: "A tiny sample workflow.",
+      documentTags: { team: "platform" },
+      documentMetadata: { owner: "platform-team" },
+    });
+    const settings = parseWorkflowSettings(rewritten);
+    expect(settings.documentTitle).toBe("Hello Studio");
+    expect(settings.documentSummary).toBe("A tiny sample workflow.");
+    expect(settings.documentTags).toEqual({ team: "platform" });
+    expect(settings.documentMetadata).toEqual({ owner: "platform-team" });
+    expect(rewritten).toContain("namespace: forwardmeasure");
+    expect(rewritten).toContain("name: hello-studio");
+    expect(fromYaml(rewritten).tasks).toEqual(fromYaml(SAMPLE).tasks);
+  });
+
+  it("clears document.title/summary/tags/metadata without dropping the rest of document:", () => {
+    const withMetadata = applyWorkflowSettings(SAMPLE, {
+      documentTitle: "Hello Studio",
+      documentTags: { team: "platform" },
+    });
+    const cleared = applyWorkflowSettings(withMetadata, {});
+    expect(cleared).not.toContain("title:");
+    expect(cleared).not.toContain("tags:");
+    expect(cleared).toContain("namespace: forwardmeasure");
+    expect(cleared).toContain("name: hello-studio");
+  });
+
   it("round-trips settings while leaving do: and document metadata untouched", () => {
     const rewritten = applyWorkflowSettings(SAMPLE, {
       timeout: "PT1H",
@@ -989,6 +1129,12 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     expect(parseWorkflowSettings(rewritten)).toEqual({
       timeout: "PT1H",
       schedule: undefined,
+      input: undefined,
+      output: undefined,
+      documentTitle: undefined,
+      documentSummary: undefined,
+      documentTags: undefined,
+      documentMetadata: undefined,
       authentications: undefined,
       errors: undefined,
       extensions: undefined,

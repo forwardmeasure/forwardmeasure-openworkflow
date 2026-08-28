@@ -78,18 +78,28 @@ export type SwitchTask = CommonTaskProps & {
 };
 
 // RFC 9457 Problem Details, matching the backend's ErrorPlan fields exactly.
+// Only "type" and "status" are required server-side (OpenWorkflowCompiler's
+// compileError() reads title/instance/detail via JsonNode#get, not
+// #required) - title kept optional here to match, not the "always present"
+// shape an earlier pass assumed.
 export type RaiseError = {
   type: string;
   status: number;
-  title: string;
+  title?: string;
   instance?: string;
   detail?: string;
 };
 
+// "error" is either an inline Problem-Details object, or a plain string
+// naming an entry in the workflow's "use.errors" catalog - same
+// string-or-inline shape as "try"'s retry policy (see RetryPolicy below),
+// confirmed against OpenWorkflowCompiler's compileRaise(): a textual value
+// looks itself up in reusable.errors() before falling through to
+// compileError().
 export type RaiseTask = CommonTaskProps & {
   kind: "raise";
   name: string;
-  error: RaiseError;
+  error: string | RaiseError;
 };
 
 export type WaitTask = CommonTaskProps & {
@@ -396,11 +406,15 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
   }
   if ("raise" in body) {
     const raiseBody = (body.raise ?? {}) as Record<string, unknown>;
-    const error = (raiseBody.error ?? {}) as Record<string, unknown>;
-    if (typeof error.type !== "string" || typeof error.title !== "string") {
+    const rawError = raiseBody.error;
+    if (typeof rawError === "string") {
+      return { kind: "raise", name, error: rawError, ...common };
+    }
+    const error = (rawError ?? {}) as Record<string, unknown>;
+    if (typeof error.type !== "string" || typeof error.status !== "number") {
       throw new UnsupportedTaskError(
-        `${name} (raise.error needs at least "type" and "title" - a named ` +
-          `reference into "use.errors" isn't supported here)`,
+        `${name} (raise.error needs at least "type" and "status" when ` +
+          `inline, or a plain string naming a "use.errors" entry)`,
       );
     }
     return {
@@ -408,8 +422,8 @@ function taskFromYamlEntry(entry: Record<string, unknown>): Task {
       name,
       error: {
         type: error.type,
-        status: typeof error.status === "number" ? error.status : 0,
-        title: error.title,
+        status: error.status,
+        title: typeof error.title === "string" ? error.title : undefined,
         instance: typeof error.instance === "string" ? error.instance : undefined,
         detail: typeof error.detail === "string" ? error.detail : undefined,
       },
@@ -634,11 +648,14 @@ function taskToYamlEntry(task: Task): Record<string, unknown> {
     };
   }
   if (task.kind === "raise") {
+    if (typeof task.error === "string") {
+      return { [task.name]: { ...common, raise: { error: task.error } } };
+    }
     const error: Record<string, unknown> = {
       type: task.error.type,
       status: task.error.status,
-      title: task.error.title,
     };
+    if (task.error.title !== undefined) error.title = task.error.title;
     if (task.error.instance !== undefined) error.instance = task.error.instance;
     if (task.error.detail !== undefined) error.detail = task.error.detail;
     return { [task.name]: { ...common, raise: { error } } };
@@ -809,6 +826,25 @@ export function toYaml(source: string, graph: TaskGraph): string {
 export type WorkflowSettings = {
   timeout?: unknown;
   schedule?: unknown;
+  // Root-level "input"/"output" - the same {schema, from/as} shape a task's
+  // own input/output carries (CommonTaskProps above), just applied to the
+  // whole workflow instead of one task. Confirmed against
+  // OpenWorkflowCompiler's workflowDataFlow(): it calls the identical
+  // dataSchema/dataTransform helpers used for task-level input/output,
+  // against the document root instead of a task node.
+  input?: unknown;
+  output?: unknown;
+  // "document.title/summary/tags/metadata" - confirmed against
+  // WorkflowDocumentMetadata.java. Distinct from the governance layer's own
+  // Workflow.title ("Display name" in App.tsx's metadata fields): that's a
+  // separate concept tracked by the definition-management service, not
+  // read from this YAML at all. This is the YAML's own "document:" block,
+  // which OpenWorkflowCompiler reads independently and carries through to
+  // the compiled plan as business-facing metadata.
+  documentTitle?: string;
+  documentSummary?: string;
+  documentTags?: unknown;
+  documentMetadata?: unknown;
   authentications?: unknown;
   errors?: unknown;
   extensions?: unknown;
@@ -822,9 +858,16 @@ export type WorkflowSettings = {
 export function parseWorkflowSettings(source: string): WorkflowSettings {
   const parsed = (load(source) as Record<string, unknown>) ?? {};
   const use = (parsed.use ?? {}) as Record<string, unknown>;
+  const document = (parsed.document ?? {}) as Record<string, unknown>;
   return {
     timeout: parsed.timeout,
     schedule: parsed.schedule,
+    input: parsed.input,
+    output: parsed.output,
+    documentTitle: typeof document.title === "string" ? document.title : undefined,
+    documentSummary: typeof document.summary === "string" ? document.summary : undefined,
+    documentTags: document.tags,
+    documentMetadata: document.metadata,
     authentications: use.authentications,
     errors: use.errors,
     extensions: use.extensions,
@@ -838,7 +881,8 @@ export function parseWorkflowSettings(source: string): WorkflowSettings {
 
 /**
  * The WorkflowSettings analogue of toYaml above: replaces only the
- * document-level "timeout"/"schedule" keys and the "use:" catalog's own
+ * document-level "timeout"/"schedule"/"input"/"output" keys, the
+ * "document:" block's own optional sub-keys, and the "use:" catalog's own
  * sub-keys, leaving "do:" and everything else in `source` untouched.
  */
 export function applyWorkflowSettings(
@@ -850,6 +894,24 @@ export function applyWorkflowSettings(
   else delete parsed.timeout;
   if (settings.schedule !== undefined) parsed.schedule = settings.schedule;
   else delete parsed.schedule;
+  if (settings.input !== undefined) parsed.input = settings.input;
+  else delete parsed.input;
+  if (settings.output !== undefined) parsed.output = settings.output;
+  else delete parsed.output;
+
+  // "document" always carries dsl/namespace/name/version (required by the
+  // compiler) even when none of these four optional fields are set - unlike
+  // "use" below, the object itself is never dropped, only these sub-keys.
+  const document = { ...((parsed.document as Record<string, unknown>) ?? {}) };
+  if (settings.documentTitle) document.title = settings.documentTitle;
+  else delete document.title;
+  if (settings.documentSummary) document.summary = settings.documentSummary;
+  else delete document.summary;
+  if (settings.documentTags !== undefined) document.tags = settings.documentTags;
+  else delete document.tags;
+  if (settings.documentMetadata !== undefined) document.metadata = settings.documentMetadata;
+  else delete document.metadata;
+  parsed.document = document;
 
   const use = { ...((parsed.use as Record<string, unknown>) ?? {}) };
   const useKeys: Array<keyof WorkflowSettings> = [
@@ -879,7 +941,7 @@ export function emptyTask(kind: TaskType, name: string): Task {
     return { kind: "switch", name, cases: [{ name: "default", then: "exit" }] };
   }
   if (kind === "raise") {
-    return { kind: "raise", name, error: { type: "", status: 400, title: "" } };
+    return { kind: "raise", name, error: { type: "", status: 400 } };
   }
   if (kind === "wait") return { kind: "wait", name, wait: "" };
   if (kind === "emit") return { kind: "emit", name, with: {} };
