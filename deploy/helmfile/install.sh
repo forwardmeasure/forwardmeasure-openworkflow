@@ -12,7 +12,20 @@ for command in kubectl helm helmfile yq jq; do
   }
 done
 
-"${SCRIPT_DIR}/scripts/resolve-image-digests.sh" "${ENVIRONMENT}"
+# Deliberately NOT calling scripts/resolve-image-digests.sh here anymore -
+# it used to run unconditionally on every single deploy, silently
+# overwriting image-versions.yaml's committed digests with whatever the
+# shared, mutable :$OPENWORKFLOW_VERSION tag currently resolves to on the
+# registry. That meant the committed digest was never actually
+# authoritative: any stray push to that tag (a stale local build re-pushed
+# from a different machine/session, anything) got silently adopted on the
+# next deploy, regardless of whether it was ever verified. Confirmed
+# directly as the cause of a real regression - a deploy reverted Studio to
+# the very first, pre-fix image because something else had pushed old
+# content to the tag in between. A deploy now applies exactly what's
+# committed, nothing else - to pick up a genuinely new build, run
+# scripts/resolve-image-digests.sh yourself, review the diff it produces,
+# and commit it deliberately before deploying.
 "${SCRIPT_DIR}/validate.sh" "${ENVIRONMENT}"
 "${SCRIPT_DIR}/scripts/preflight.sh" "${ENVIRONMENT}" "${REQUESTED_STAGE}"
 kubectl apply -k "${SCRIPT_DIR}/manifests/base"
