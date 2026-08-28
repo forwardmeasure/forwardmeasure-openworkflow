@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
   applyNodeChanges,
   Background,
@@ -10,10 +10,12 @@ import {
   type Edge,
   type Node,
   type NodeChange,
+  type OnReconnect,
   type ReactFlowInstance,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
+import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
 import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -23,8 +25,9 @@ import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { useTheme } from "@mui/material/styles";
+import { alpha, useTheme } from "@mui/material/styles";
 import { AnchorNode, type AnchorNodeData } from "./AnchorNode";
+import { InsertableEdge, type InsertableEdgeData } from "./InsertableEdge";
 import { NodePalette, PALETTE_DRAG_MIME } from "./NodePalette";
 import { StickyNoteNode, type StickyNoteData } from "./StickyNoteNode";
 import { traceKey, type TraceEntry } from "./executionTrace";
@@ -42,9 +45,12 @@ import {
 } from "./dsl";
 
 const NODE_TYPES = { task: TaskNode, anchor: AnchorNode, sticky: StickyNoteNode };
+const EDGE_TYPES = { insertable: InsertableEdge };
 type CanvasNodeData = TaskNodeData | AnchorNodeData | StickyNoteData;
 const COLUMN_WIDTH = 260;
 const ROW_HEIGHT = 130;
+const GRID_SIZE = 16;
+const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
 // Sentinel ids for the Start/End anchors - unlikely enough not to collide
 // with a real task name, and never fed back through dsl.ts, so a collision
 // would at worst mis-position one node visually, not corrupt saved YAML.
@@ -60,6 +66,18 @@ const END_ID = "__end__";
  * "raise" gets no outgoing edge at all (see TaskNode.tsx) - it always
  * terminates or transitions to error handling, never falls through.
  */
+// "continue"/"exit"/"end" are the three CNCF terminal directives a "then"
+// can hold besides a task name (confirmed against OpenWorkflowCompiler's
+// validateFlowTarget()) - "continue" (or omitted) falls through to
+// whatever's positionally next, "exit"/"end" both terminate to the End
+// anchor here (this canvas doesn't distinguish them - see deriveEdges'
+// own doc comment on "raise" for the same "one End anchor" simplification).
+function resolveThenTarget(then: string | undefined, positionalTarget: string): string {
+  if (then === undefined || then === "continue") return positionalTarget;
+  if (then === "exit" || then === "end") return END_ID;
+  return then;
+}
+
 export function deriveEdges(tasks: Task[]): Edge[] {
   const edges: Edge[] = [];
   const firstTask = tasks[0];
@@ -75,7 +93,7 @@ export function deriveEdges(tasks: Task[]): Edge[] {
   tasks.forEach((task, index) => {
     if (task.kind === "switch") {
       task.cases.forEach((switchCase) => {
-        const target = switchCase.then === "exit" ? END_ID : switchCase.then;
+        const target = resolveThenTarget(switchCase.then, END_ID);
         edges.push({
           id: `${task.name}:${switchCase.name}->${target}`,
           source: task.name,
@@ -92,10 +110,119 @@ export function deriveEdges(tasks: Task[]): Edge[] {
       return;
     }
     const next = tasks[index + 1];
-    const target = next ? next.name : END_ID;
+    const positionalTarget = next ? next.name : END_ID;
+    // The gap that motivated this fix: every non-switch/raise task can
+    // carry its own "then" (CommonTaskProps, see dsl.ts) overriding this
+    // positional fallthrough - deriveEdges previously always used
+    // positionalTarget unconditionally, so the canvas silently drew the
+    // WRONG edge for any task using an explicit override.
+    const target = resolveThenTarget(task.then, positionalTarget);
     edges.push({ id: `${task.name}->${target}`, source: task.name, target });
   });
   return edges;
+}
+
+export type EdgeEndpoint = { source: string; target: string; sourceHandle?: string | null };
+
+// True for an edge that exists purely because nothing overrides it - the
+// Start->first-task edge (no field to override it with at all), or a
+// regular task whose own "then" is unset/"continue". False for every switch
+// case (sourceHandle set - always an explicit routing decision) and every
+// task using an explicit "then". Mirrors resolveThenTarget's own notion of
+// "positional" above.
+export function isPositionalEdge(tasks: Task[], edge: EdgeEndpoint): boolean {
+  if (edge.sourceHandle) return false;
+  if (edge.source === START_ID) return true;
+  const sourceTask = tasks.find((t) => t.name === edge.source);
+  return sourceTask ? sourceTask.then === undefined || sourceTask.then === "continue" : false;
+}
+
+/**
+ * Splices a new task directly into an existing edge - "inject a step
+ * between two already-connected tasks, anywhere," via InsertableEdge's "+"
+ * button, not just append-after-the-last-task the way the node
+ * palette/drag-drop already does.
+ *
+ * A positional edge (the common case) needs nothing beyond array position:
+ * inserting the new task right between source and target in "do:" order
+ * makes source -> newTask -> target true by pure positional fallthrough, no
+ * "then" anywhere. An explicit-override edge (a switch case, or a task's
+ * own "then") instead gets the new task's own "then" pointed at the old
+ * target, and the source's specific routing field (the switch case, or the
+ * task's "then") rewritten to the new task's name - array position there is
+ * cosmetic (still placed right after source, for a sane initial layout),
+ * the "then" chain is what's actually load-bearing. Returns `tasks`
+ * unchanged if `edge.source` isn't a real task and isn't Start.
+ */
+export function spliceTaskOnEdge(tasks: Task[], edge: EdgeEndpoint, newTask: Task): Task[] {
+  const { source, target, sourceHandle } = edge;
+  if (source === START_ID) {
+    // Always positional (Start has no routing field to override) - prepend,
+    // letting array order alone make it the new first task.
+    return [newTask, ...tasks];
+  }
+
+  const sourceIndex = tasks.findIndex((t) => t.name === source);
+  if (sourceIndex < 0) return tasks;
+
+  if (isPositionalEdge(tasks, edge)) {
+    return [...tasks.slice(0, sourceIndex + 1), newTask, ...tasks.slice(sourceIndex + 1)];
+  }
+
+  const withThen: Task = { ...newTask, then: target === END_ID ? "exit" : target };
+  const next = [...tasks.slice(0, sourceIndex + 1), withThen, ...tasks.slice(sourceIndex + 1)];
+  const sourceTask = next[sourceIndex];
+  next[sourceIndex] =
+    sourceTask.kind === "switch" && sourceHandle
+      ? {
+          ...sourceTask,
+          cases: sourceTask.cases.map((switchCase) =>
+            switchCase.name === sourceHandle ? { ...switchCase, then: newTask.name } : switchCase,
+          ),
+        }
+      : { ...sourceTask, then: newTask.name };
+  return next;
+}
+
+/**
+ * Dragging an edge's target handle to a different node - "re-route" without
+ * going through Source view. `newTargetName` is whatever `Connection.target`
+ * React Flow resolved the drag to; returns `undefined` for "reject this
+ * reconnection" (an unrecognized source, or dragging Start's edge onto End
+ * itself, which isn't a meaningful "run nothing" operation here).
+ *
+ * Reconnecting FROM Start is a different operation entirely (Start has no
+ * "then" to rewrite) - handled as "move the new target to the front of
+ * do:", the only way to change what runs first at all.
+ */
+export function reconnectEdgeTarget(
+  tasks: Task[],
+  oldEdge: EdgeEndpoint,
+  newTargetName: string,
+): Task[] | undefined {
+  if (oldEdge.source === START_ID) {
+    if (newTargetName === END_ID) return undefined;
+    const targetTask = tasks.find((t) => t.name === newTargetName);
+    if (!targetTask) return undefined;
+    return [targetTask, ...tasks.filter((t) => t.name !== newTargetName)];
+  }
+
+  const sourceIndex = tasks.findIndex((t) => t.name === oldEdge.source);
+  if (sourceIndex < 0) return undefined;
+  const sourceTask = tasks[sourceIndex];
+  const resolvedTarget = newTargetName === END_ID ? "exit" : newTargetName;
+  const nextSourceTask: Task =
+    sourceTask.kind === "switch" && oldEdge.sourceHandle
+      ? {
+          ...sourceTask,
+          cases: sourceTask.cases.map((switchCase) =>
+            switchCase.name === oldEdge.sourceHandle
+              ? { ...switchCase, then: resolvedTarget }
+              : switchCase,
+          ),
+        }
+      : { ...sourceTask, then: resolvedTarget };
+  return tasks.map((task, index) => (index === sourceIndex ? nextSourceTask : task));
 }
 
 /**
@@ -251,9 +378,32 @@ export function WorkflowCanvas({
   const reactFlowInstanceRef = useRef<
     ReactFlowInstance<Node<CanvasNodeData>, Edge> | undefined
   >(undefined);
+  // Set right before commitTasks by an edit that changes the graph's
+  // SHAPE, not just one task's own content - inserting a task via
+  // InsertableEdge's "+" button is the motivating case: the new node gets
+  // a correct fresh column, but every already-existing downstream node
+  // would otherwise keep its old (now one column too far left) preserved
+  // position, landing exactly on top of the node that used to sit there.
+  // "Preserve positions" is the right default for the common case (editing
+  // one task's fields shouldn't reshuffle everything) - this is the
+  // explicit opt-out for the structural edits where reflowing the rest of
+  // the graph is exactly what the user asked for.
+  const forceFullLayoutRef = useRef(false);
+
+  // Every edge renders as InsertableEdge (its "+" button is the only way to
+  // inject a task between two already-connected tasks anywhere in the flow,
+  // not just append at the end) - attached here rather than baked into
+  // deriveEdges/layout, which stay pure data functions with no callback
+  // wiring or component-lifetime concerns.
+  function withEdgeData(rawEdges: Edge[]): Edge[] {
+    const data: InsertableEdgeData = { onInsert: insertTaskOnEdge };
+    return rawEdges.map((edge) => ({ ...edge, type: "insertable", data }));
+  }
 
   useEffect(() => {
     const computed = layout(tasksInView);
+    const forceFullLayout = forceFullLayoutRef.current;
+    forceFullLayoutRef.current = false;
     setNodes((current) => {
       const existingById = new Map(current.map((node) => [node.id, node]));
       // Sticky notes are pure canvas-layer annotations layout() knows
@@ -269,6 +419,7 @@ export function WorkflowCanvas({
                 data: { ...node.data, trace: trace.get(traceKey(path, node.id)) },
               }
             : node;
+        if (forceFullLayout) return withTrace;
         const pending = pendingPositionRef.current;
         if (pending && node.id === pending.name) {
           pendingPositionRef.current = undefined;
@@ -281,7 +432,7 @@ export function WorkflowCanvas({
       });
       return [...taskAndAnchorNodes, ...stickyNodes];
     });
-    setEdges(computed.edges);
+    setEdges(withEdgeData(computed.edges));
     // Deliberately keyed only on tasksInView (which already changes
     // reference whenever `path` does, so drilling in/out re-attaches trace
     // at the new depth too) and `trace` itself - not nodes/setNodes, since
@@ -320,6 +471,21 @@ export function WorkflowCanvas({
       ...current,
       { id, type: "sticky", position, data, draggable: true },
     ]);
+  }
+
+  // Unlike the resync effect above (which deliberately keeps every existing
+  // node's current position, manual drags included), this discards them and
+  // reseeds every task/anchor node from layout()'s columns - the explicit
+  // "start over" action for when manual dragging (or a lot of edited
+  // routing) has left the graph a mess. Sticky notes are layout()'s blind
+  // spot the same way they are there, so still carried forward untouched.
+  function autoLayout() {
+    const computed = layout(tasksInView);
+    setNodes((current) => [
+      ...computed.nodes,
+      ...current.filter((node) => node.type === "sticky"),
+    ]);
+    setEdges(withEdgeData(computed.edges));
   }
 
   const selectedTask = tasksInView.find((t) => t.name === selectedTaskName);
@@ -369,17 +535,53 @@ export function WorkflowCanvas({
       groupTask,
       ...remaining.slice(insertAt),
     ];
+    forceFullLayoutRef.current = true;
     commitTasks(next);
     setSelectedTaskName(groupName);
   }
 
   function addTask(kind: Task["kind"], position?: { x: number; y: number }) {
     const name = uniqueTaskName(tasksInView.map((t) => t.name));
-    if (position) pendingPositionRef.current = { name, position };
+    if (position) {
+      // A palette drag/drop chose this exact spot deliberately - preserve
+      // every other node's position and only seed this one, same as
+      // before. Without a position (a palette click), the new task just
+      // appends before End, which otherwise has ITS OLD (now one column
+      // too far left) preserved position waiting right where the new task
+      // needs to go - the same collision insertTaskOnEdge below fixes for
+      // the "+"-on-edge case, here for plain append.
+      pendingPositionRef.current = { name, position };
+    } else {
+      forceFullLayoutRef.current = true;
+    }
     const next = [...tasksInView, emptyTask(kind, name)];
     commitTasks(next);
     setSelectedTaskName(name);
   }
+
+  function insertTaskOnEdge(edgeId: string, kind: Task["kind"]) {
+    const edge = edges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const name = uniqueTaskName(tasksInView.map((t) => t.name));
+    forceFullLayoutRef.current = true;
+    commitTasks(spliceTaskOnEdge(tasksInView, edge, emptyTask(kind, name)));
+    setSelectedTaskName(name);
+  }
+
+  // Scoped to the target end only: if the source end moved instead
+  // (newConnection.source !== oldEdge.source), this no-ops and the drag
+  // visually snaps back on the next resync, since properly supporting that
+  // would mean tearing down the old source's override AND creating a new
+  // one elsewhere - a materially bigger, easier-to-get-wrong operation than
+  // "point this edge somewhere else," left out of this pass rather than
+  // half-built.
+  const handleReconnect: OnReconnect = (oldEdge, newConnection) => {
+    if (newConnection.source !== oldEdge.source) return;
+    const next = reconnectEdgeTarget(tasksInView, oldEdge, newConnection.target);
+    if (!next) return;
+    forceFullLayoutRef.current = true;
+    commitTasks(next);
+  };
 
   function updateTask(updated: Task) {
     const originalName = selectedTaskName;
@@ -423,24 +625,36 @@ export function WorkflowCanvas({
     <Box sx={{ display: "flex", height: "100%", minHeight: 480 }}>
       <NodePalette onAddTask={(kind) => addTask(kind)} />
       <Box sx={{ flex: 1, position: "relative" }}>
-        <Tooltip title="Add a sticky note">
-          <IconButton
-            size="small"
-            onClick={addStickyNote}
-            sx={{
-              position: "absolute",
-              top: 8,
-              right: 8,
-              zIndex: 1,
-              bgcolor: "background.paper",
-              border: 1,
-              borderColor: "divider",
-              "&:hover": { bgcolor: "action.hover" },
-            }}
-          >
-            <AddCommentOutlinedIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
+        <Box sx={{ position: "absolute", top: 8, right: 8, zIndex: 1, display: "flex", gap: 1 }}>
+          <Tooltip title="Auto layout">
+            <IconButton
+              size="small"
+              onClick={autoLayout}
+              sx={{
+                bgcolor: "background.paper",
+                border: 1,
+                borderColor: "divider",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <AutoFixHighOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Add a sticky note">
+            <IconButton
+              size="small"
+              onClick={addStickyNote}
+              sx={{
+                bgcolor: "background.paper",
+                border: 1,
+                borderColor: "divider",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              <AddCommentOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Box>
         {selectedTaskIds.length >= 2 && (
           <Button
             size="small"
@@ -491,10 +705,12 @@ export function WorkflowCanvas({
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             onInit={(instance) => {
               reactFlowInstanceRef.current = instance;
             }}
             onNodesChange={onNodesChange}
+            onReconnect={handleReconnect}
             onNodeClick={(_event, node) =>
               setSelectedTaskName(node.type === "task" ? node.id : undefined)
             }
@@ -525,17 +741,43 @@ export function WorkflowCanvas({
             }}
             fitView
             proOptions={{ hideAttribution: true }}
+            snapToGrid
+            snapGrid={SNAP_GRID}
             defaultEdgeOptions={{
               type: "smoothstep",
               markerEnd: { type: MarkerType.ArrowClosed, color: theme.palette.text.secondary },
               style: { stroke: theme.palette.text.secondary, strokeWidth: 1.5 },
             }}
+            style={
+              {
+                // React Flow themes Controls/MiniMap entirely through these
+                // custom properties (see @xyflow/react/dist/style.css) - it
+                // ships light-mode defaults (white button/minimap
+                // backgrounds) with no dark-mode awareness, so left unset
+                // its control icons render in this app's light "--text"
+                // token color on a near-white button background and
+                // disappear, and the minimap is a stark white box. Themed
+                // here with the same MUI tokens the rest of this component
+                // already reads via useTheme(), rather than a separate CSS
+                // file that would drift from theme.ts.
+                "--xy-controls-button-background-color": theme.palette.background.paper,
+                "--xy-controls-button-background-color-hover": theme.palette.action.hover,
+                "--xy-controls-button-color": theme.palette.text.primary,
+                "--xy-controls-button-color-hover": theme.palette.primary.main,
+                "--xy-controls-button-border-color": theme.palette.divider,
+                "--xy-minimap-background-color": theme.palette.background.paper,
+                "--xy-minimap-mask-background-color": alpha(theme.palette.text.primary, 0.12),
+                "--xy-minimap-mask-stroke-color": theme.palette.primary.main,
+                "--xy-minimap-mask-stroke-width": "2",
+              } as CSSProperties
+            }
           >
             <Background />
-            <Controls />
+            <Controls showZoom showFitView showInteractive style={{ boxShadow: theme.shadows[2] }} />
             <MiniMap
               pannable
               zoomable
+              style={{ border: `1px solid ${theme.palette.divider}`, borderRadius: 4 }}
               nodeColor={(node) => {
                 const task = tasksInView.find((t) => t.name === node.id);
                 if (!task) return theme.palette.divider;

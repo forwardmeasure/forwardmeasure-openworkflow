@@ -235,7 +235,10 @@ small {
   background: var(--code-bg);
   border: 1px solid var(--code-border);
   border-radius: var(--radius-sm);
-  font: 0.85rem var(--font-mono);
+  /* Plain metadata text, not code - font-mono here was inherited from the
+     adjacent .editor/source-view styling and never corrected; every other
+     UI surface (canvas included) already renders in font-sans. */
+  font: 0.85rem var(--font-sans);
 }
 .metadata input:focus-visible {
   outline: 2px solid var(--focus-ring);
