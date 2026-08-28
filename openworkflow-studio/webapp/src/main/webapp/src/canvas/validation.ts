@@ -13,11 +13,16 @@
 // to compile at all (see openworkflow-280 and WorkflowGovernanceServiceImpl)
 // - this exists to make problems visible immediately, in-place, not to
 // reintroduce the "can't save WIP" friction that change just removed.
-import Ajv2020 from "ajv/dist/2020";
-import addFormats from "ajv-formats";
 import type { ErrorObject } from "ajv";
 import { load } from "js-yaml";
-import schema from "./workflow-schema.json";
+// Precompiled by scripts/generate-workflow-validator.mjs, not ajv.compile()'d
+// here at runtime - AJV's default compilation runs the schema through
+// `new Function(...)`, which the deployed app's CSP (script-src 'self', no
+// 'unsafe-eval') blocks outright. That surfaced as an uncaught exception at
+// module-load time in production, which is worse than validation merely not
+// working - it broke evaluation of the whole bundle. See that script for
+// the regeneration command (only needed if workflow-schema.json changes).
+import validateDocument from "./generated-workflow-validator.js";
 
 export type ValidationIssue = {
   // undefined = a workflow-level problem (document/, input/, use/, ...),
@@ -26,10 +31,6 @@ export type ValidationIssue = {
   message: string;
   pointer: string;
 };
-
-const ajv = new Ajv2020({ allErrors: true, strict: false });
-addFormats(ajv);
-const validateDocument = ajv.compile(schema);
 
 /**
  * Parses a JSON Pointer into this canvas's {containerPath, taskName}
