@@ -3,6 +3,7 @@ import {
   deriveEdges,
   isPositionalEdge,
   layout,
+  nearestEdge,
   reconnectEdgeTarget,
   spliceTaskOnEdge,
 } from "./WorkflowCanvas";
@@ -94,6 +95,59 @@ describe("deriveEdges", () => {
     ];
     expect(deriveEdges(exitTasks).find((e) => e.source === "a")?.target).toBe("__end__");
     expect(deriveEdges(endTasks).find((e) => e.source === "a")?.target).toBe("__end__");
+  });
+
+  it("draws no edge for a raise task with no explicit then - it faults, it doesn't fall through", () => {
+    // Regression test for the real bug report: "RAISE has no output, so I
+    // have no idea what to do with it" turned out to mean the OPPOSITE of
+    // what the old code assumed - the task still needs a source handle to
+    // let you set an explicit route, it just shouldn't get a default one.
+    const tasks: Task[] = [
+      { kind: "raise", name: "a", error: { type: "", status: 400 } },
+      { kind: "set", name: "b", set: {} },
+    ];
+    const edges = deriveEdges(tasks);
+    expect(edges.find((e) => e.source === "a")).toBeUndefined();
+  });
+
+  it("draws a raise task's edge when then is explicitly set", () => {
+    const tasks: Task[] = [
+      {
+        kind: "raise",
+        name: "a",
+        error: { type: "", status: 400 },
+        then: "b",
+      },
+      { kind: "set", name: "b", set: {} },
+    ];
+    const edges = deriveEdges(tasks);
+    expect(edges.find((e) => e.source === "a")?.target).toBe("b");
+  });
+});
+
+describe("nearestEdge", () => {
+  it("picks the edge whose source/target midpoint is closest to the drop position", () => {
+    const tasks: Task[] = [
+      { kind: "set", name: "a", set: {} },
+      { kind: "set", name: "b", set: {} },
+      { kind: "set", name: "c", set: {} },
+    ];
+    const edges = deriveEdges(tasks);
+    const positions = new Map([
+      ["__start__", { x: 0, y: 0 }],
+      ["a", { x: 200, y: 0 }],
+      ["b", { x: 400, y: 0 }],
+      ["c", { x: 600, y: 0 }],
+      ["__end__", { x: 800, y: 0 }],
+    ]);
+    // Dropped right on top of b - closest to the a->b or b->c midpoint, not
+    // to Start->a or c->End far off at the edges of the graph.
+    const chosen = nearestEdge({ x: 400, y: 0 }, positions, edges);
+    expect(["a", "b"]).toContain(chosen?.source);
+  });
+
+  it("returns undefined when no edge has both endpoints positioned", () => {
+    expect(nearestEdge({ x: 0, y: 0 }, new Map(), [])).toBeUndefined();
   });
 });
 

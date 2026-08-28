@@ -10,6 +10,7 @@ import {
   type Edge,
   type Node,
   type NodeChange,
+  type OnConnect,
   type OnReconnect,
   type ReactFlowInstance,
 } from "@xyflow/react";
@@ -66,8 +67,10 @@ const END_ID = "__end__";
  * except a "switch" task, which always redirects via its cases instead of
  * falling through positionally, matching the spec. A case's "then: exit"
  * (or the final task's positional fallthrough) targets the End anchor.
- * "raise" gets no outgoing edge at all (see TaskNode.tsx) - it always
- * terminates or transitions to error handling, never falls through.
+ * "raise" only gets an outgoing edge when its own "then" is explicitly set
+ * (see the "raise" branch below) - reaching one with no "then" faults or
+ * terminates the workflow rather than falling through positionally, unlike
+ * every other kind here.
  */
 // "continue"/"exit"/"end" are the three CNCF terminal directives a "then"
 // can hold besides a task name (confirmed against OpenWorkflowCompiler's
@@ -110,6 +113,19 @@ export function deriveEdges(tasks: Task[]): Edge[] {
       return;
     }
     if (task.kind === "raise") {
+      // Unlike every other kind below, reaching a raise task with no
+      // explicit "then" faults/terminates the workflow rather than falling
+      // through positionally - so no edge is drawn by default. It still
+      // gets a source handle in TaskNode.tsx, though: dragging a connection
+      // out of it (via WorkflowCanvas's onConnect) or setting "then" in the
+      // Inspector is how you explicitly route what happens after it, which
+      // "no handle at all" previously made impossible without leaving the
+      // canvas for Source view.
+      if (task.then !== undefined) {
+        const next = tasks[index + 1];
+        const target = resolveThenTarget(task.then, next ? next.name : END_ID);
+        edges.push({ id: `${task.name}->${target}`, source: task.name, target });
+      }
       return;
     }
     const next = tasks[index + 1];
@@ -226,6 +242,37 @@ export function reconnectEdgeTarget(
         }
       : { ...sourceTask, then: resolvedTarget };
   return tasks.map((task, index) => (index === sourceIndex ? nextSourceTask : task));
+}
+
+/**
+ * Which edge a drop position is closest to, by distance to that edge's
+ * source/target node midpoint - used so a palette drag-drop lands the new
+ * task where it visually looks like it goes (spliced between whatever it
+ * was dropped near), instead of always executing last regardless of where
+ * it landed on screen. Returns undefined only if there are no edges at all
+ * (never happens in practice - Start always has at least one, to the first
+ * task or straight to End).
+ */
+export function nearestEdge(
+  position: { x: number; y: number },
+  nodePositions: Map<string, { x: number; y: number }>,
+  edges: Edge[],
+): Edge | undefined {
+  let best: Edge | undefined;
+  let bestDistance = Infinity;
+  for (const edge of edges) {
+    const sourcePos = nodePositions.get(edge.source);
+    const targetPos = nodePositions.get(edge.target);
+    if (!sourcePos || !targetPos) continue;
+    const midX = (sourcePos.x + targetPos.x) / 2;
+    const midY = (sourcePos.y + targetPos.y) / 2;
+    const distance = Math.hypot(position.x - midX, position.y - midY);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      best = edge;
+    }
+  }
+  return best;
 }
 
 /**
@@ -610,6 +657,26 @@ export function WorkflowCanvas({
     commitTasks(next);
   };
 
+  // Drawing a BRAND NEW connection - dragging out of a handle that doesn't
+  // already have an edge, the only way this canvas previously had none of:
+  // "raise" (no handle at all, before this fix), or any other task's
+  // already-positional handle if you want to give it an explicit override
+  // without going near an existing edge's endpoint. Reuses
+  // reconnectEdgeTarget wholesale - it only ever reads .source/.sourceHandle
+  // off its "old edge" argument, so a synthetic one built straight from the
+  // Connection works identically to a real pre-existing edge.
+  const handleConnect: OnConnect = (connection) => {
+    if (!connection.source || !connection.target) return;
+    const next = reconnectEdgeTarget(
+      tasksInView,
+      { source: connection.source, sourceHandle: connection.sourceHandle, target: connection.target },
+      connection.target,
+    );
+    if (!next) return;
+    forceFullLayoutRef.current = true;
+    commitTasks(next);
+  };
+
   function updateTask(updated: Task) {
     const originalName = selectedTaskName;
     const next = tasksInView.map((t) =>
@@ -762,6 +829,7 @@ export function WorkflowCanvas({
             }}
             onNodesChange={onNodesChange}
             onReconnect={handleReconnect}
+            onConnect={handleConnect}
             onNodeClick={(_event, node) =>
               setSelectedTaskName(node.type === "task" ? node.id : undefined)
             }
@@ -788,7 +856,18 @@ export function WorkflowCanvas({
                 x: event.clientX,
                 y: event.clientY,
               });
-              addTask(kind, position);
+              // Splice into whatever edge the drop is closest to, so a task
+              // dropped between two others actually runs between them -
+              // addTask always ran the new task last regardless of where it
+              // visually landed, which is exactly the "why does it need to
+              // be wired up separately" complaint this fixes.
+              const target = nearestEdge(
+                position,
+                new Map(nodes.map((node) => [node.id, node.position])),
+                edges,
+              );
+              if (target) insertTaskOnEdge(target.id, kind);
+              else addTask(kind, position);
             }}
             fitView
             proOptions={{ hideAttribution: true }}

@@ -189,12 +189,7 @@ export function TaskNode({
           </Typography>
         )}
       </CardContent>
-      {task.kind === "raise" ? (
-        // raise always terminates or transitions to error handling, never
-        // falls through positionally like every other kind here - no source
-        // handle at all, rather than a misleading "next" edge.
-        undefined
-      ) : task.kind === "switch" ? (
+      {task.kind === "switch" ? (
         // One named source handle per case, spread down the right edge, so
         // each branch's edge visibly leaves from its own case rather than
         // all cases bunching into a single point.
