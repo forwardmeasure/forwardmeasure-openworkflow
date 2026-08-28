@@ -1028,6 +1028,7 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     expect(parseWorkflowSettings(source)).toEqual({
       timeout: "PT1H",
       schedule: { cron: "0 0 * * *" },
+      evaluateMode: undefined,
       input: undefined,
       output: undefined,
       documentTitle: undefined,
@@ -1053,6 +1054,7 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     expect(parseWorkflowSettings(SAMPLE)).toEqual({
       timeout: undefined,
       schedule: undefined,
+      evaluateMode: undefined,
       input: undefined,
       output: undefined,
       documentTitle: undefined,
@@ -1068,6 +1070,38 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
       catalogs: undefined,
       secrets: undefined,
     });
+  });
+
+  it("parses evaluate.mode, normalizing case the same way ExpressionMode.parse() does server-side", () => {
+    const withLoose = [
+      "document:",
+      "  dsl: '1.0.0'",
+      "  namespace: examples",
+      "  name: with-evaluate",
+      "  version: '0.1.0'",
+      "evaluate:",
+      "  language: jq",
+      "  mode: LOOSE",
+      "do:",
+      "  - greet:",
+      "      set:",
+      "        message: hi",
+      "",
+    ].join("\n");
+    expect(parseWorkflowSettings(withLoose).evaluateMode).toBe("loose");
+  });
+
+  it("treats a document with no evaluate: block as undefined (the compiler's own default is strict)", () => {
+    expect(parseWorkflowSettings(SAMPLE).evaluateMode).toBeUndefined();
+  });
+
+  it("round-trips evaluate.mode: loose, and omits evaluate: entirely for strict (the default)", () => {
+    const withLoose = applyWorkflowSettings(SAMPLE, { evaluateMode: "loose" });
+    expect(parseWorkflowSettings(withLoose).evaluateMode).toBe("loose");
+
+    const backToStrict = applyWorkflowSettings(withLoose, { evaluateMode: "strict" });
+    expect(parseWorkflowSettings(backToStrict).evaluateMode).toBeUndefined();
+    expect(backToStrict).not.toContain("evaluate:");
   });
 
   it("parses workflow-level input/output, the same {schema, from/as} shape a task's own input/output carries", () => {
@@ -1171,6 +1205,7 @@ describe("workflow-level settings (parseWorkflowSettings / applyWorkflowSettings
     expect(parseWorkflowSettings(rewritten)).toEqual({
       timeout: "PT1H",
       schedule: undefined,
+      evaluateMode: undefined,
       input: undefined,
       output: undefined,
       documentTitle: undefined,

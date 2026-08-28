@@ -837,6 +837,13 @@ export function toYaml(source: string, graph: TaskGraph): string {
 export type WorkflowSettings = {
   timeout?: unknown;
   schedule?: unknown;
+  // Root-level "evaluate.mode" - confirmed against OpenWorkflowCompiler's
+  // expressionConfiguration(): a real, bounded enum (ExpressionMode.java:
+  // STRICT default, or LOOSE) governing runtime-expression recognition
+  // for the whole workflow. "evaluate.language" is NOT modeled here - the
+  // compiler hard-rejects any value other than "jq" (throws unsupported),
+  // so it isn't a real per-workflow choice worth a field.
+  evaluateMode?: "strict" | "loose";
   // Root-level "input"/"output" - the same {schema, from/as} shape a task's
   // own input/output carries (CommonTaskProps above), just applied to the
   // whole workflow instead of one task. Confirmed against
@@ -870,9 +877,17 @@ export function parseWorkflowSettings(source: string): WorkflowSettings {
   const parsed = (load(source) as Record<string, unknown>) ?? {};
   const use = (parsed.use ?? {}) as Record<string, unknown>;
   const document = (parsed.document ?? {}) as Record<string, unknown>;
+  const evaluate = (parsed.evaluate ?? {}) as Record<string, unknown>;
+  // ExpressionMode.parse() uppercases before matching, so "Strict"/"LOOSE"
+  // etc. are all valid on the wire - normalize the same way here rather
+  // than only recognizing the lowercase spelling this panel itself writes.
+  const evaluateModeRaw =
+    typeof evaluate.mode === "string" ? evaluate.mode.toLowerCase() : undefined;
   return {
     timeout: parsed.timeout,
     schedule: parsed.schedule,
+    evaluateMode:
+      evaluateModeRaw === "strict" || evaluateModeRaw === "loose" ? evaluateModeRaw : undefined,
     input: parsed.input,
     output: parsed.output,
     documentTitle: typeof document.title === "string" ? document.title : undefined,
@@ -905,6 +920,12 @@ export function applyWorkflowSettings(
   else delete parsed.timeout;
   if (settings.schedule !== undefined) parsed.schedule = settings.schedule;
   else delete parsed.schedule;
+  // Omitting "evaluate" entirely is equivalent to {language: jq, mode:
+  // strict} (the compiler's own defaults) - only write it out when the
+  // author picked the non-default "loose" mode, never write "language"
+  // (it isn't a real per-workflow choice, see WorkflowSettings above).
+  if (settings.evaluateMode === "loose") parsed.evaluate = { mode: "loose" };
+  else delete parsed.evaluate;
   if (settings.input !== undefined) parsed.input = settings.input;
   else delete parsed.input;
   if (settings.output !== undefined) parsed.output = settings.output;

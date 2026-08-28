@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import Box from "@mui/material/Box";
+import FormControl from "@mui/material/FormControl";
+import InputLabel from "@mui/material/InputLabel";
+import MenuItem from "@mui/material/MenuItem";
+import Select from "@mui/material/Select";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import {
@@ -131,12 +135,18 @@ const EMPTY_STATE: SettingsState = {
 // syntax error mid-edit in the Source tab shouldn't crash this panel (no
 // error boundary sits above it), it should show the same "not valid enough
 // yet" message and leave the fields blank until the source parses again.
-function safeStateOf(source: string): { state: SettingsState; parseError?: string } {
+function safeStateOf(source: string): {
+  state: SettingsState;
+  evaluateMode: "strict" | "loose";
+  parseError?: string;
+} {
   try {
-    return { state: stateOf(parseWorkflowSettings(source)) };
+    const settings = parseWorkflowSettings(source);
+    return { state: stateOf(settings), evaluateMode: settings.evaluateMode ?? "strict" };
   } catch (error) {
     return {
       state: EMPTY_STATE,
+      evaluateMode: "strict",
       parseError: `This source isn't valid enough to load settings from yet: ${
         error instanceof Error ? error.message : String(error)
       }`,
@@ -212,14 +222,19 @@ export function WorkflowSettingsPanel({
   onSourceChange: (source: string) => void;
 }) {
   const [state, setState] = useState<SettingsState>(() => safeStateOf(source).state);
+  const [evaluateMode, setEvaluateMode] = useState<"strict" | "loose">(
+    () => safeStateOf(source).evaluateMode,
+  );
   const [parseError, setParseError] = useState<string>();
   const [errors, setErrors] = useState<
     Partial<Record<keyof SettingsState, string>>
   >({});
 
   useEffect(() => {
-    const { state: nextState, parseError: nextParseError } = safeStateOf(source);
+    const { state: nextState, evaluateMode: nextEvaluateMode, parseError: nextParseError } =
+      safeStateOf(source);
     setState(nextState);
+    setEvaluateMode(nextEvaluateMode);
     setParseError(nextParseError);
     setErrors({});
   }, [source]);
@@ -228,7 +243,7 @@ export function WorkflowSettingsPanel({
     setState((current) => ({ ...current, [field]: value }));
   }
 
-  function commit() {
+  function commit(nextEvaluateMode?: "strict" | "loose") {
     // Editing while the source doesn't parse would just throw again inside
     // applyWorkflowSettings (it calls the same js-yaml load() fromYaml
     // does) - field edits stay local until the source is valid again, same
@@ -237,6 +252,12 @@ export function WorkflowSettingsPanel({
     const { settings, errors: fieldErrors } = resolveSettings(state);
     setErrors(fieldErrors);
     if (Object.keys(fieldErrors).length > 0) return;
+    // Same stale-closure trap this session's TaskInspector.tsx hit with MUI
+    // Select: onChange fires in the same tick as its own setState, so
+    // reading "evaluateMode" here would still see the OLD value on the
+    // very change that's supposed to update it - an explicit override
+    // parameter sidesteps that instead of relying on the closure.
+    settings.evaluateMode = nextEvaluateMode ?? evaluateMode;
     onSourceChange(applyWorkflowSettings(source, settings));
   }
 
@@ -266,29 +287,60 @@ export function WorkflowSettingsPanel({
         </Typography>
       )}
       {SECTIONS.map((section) => (
-        <Box key={section.heading} sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          <Typography variant="subtitle2">{section.heading}</Typography>
-          {section.fields.map((field) => {
-            const isPlainText = PLAIN_TEXT_FIELDS.includes(field);
-            const isJson = field !== "timeout" && !isPlainText;
-            return (
-              <TextField
-                key={field}
-                label={isJson ? `${FIELD_LABEL[field]} (JSON)` : FIELD_LABEL[field]}
-                placeholder={
-                  field === "timeout" ? "PT30S, or a name from use.timeouts" : undefined
-                }
-                helperText={errors[field] ?? FIELD_HINT[field]}
-                error={Boolean(errors[field])}
-                multiline={isJson}
-                minRows={isJson ? 3 : undefined}
-                size="small"
-                value={state[field]}
-                onChange={(event) => setField(field, event.target.value)}
-                onBlur={commit}
-              />
-            );
-          })}
+        <Box
+          key={section.heading}
+          sx={{ display: "contents" }}
+        >
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            <Typography variant="subtitle2">{section.heading}</Typography>
+            {section.fields.map((field) => {
+              const isPlainText = PLAIN_TEXT_FIELDS.includes(field);
+              const isJson = field !== "timeout" && !isPlainText;
+              return (
+                <TextField
+                  key={field}
+                  label={isJson ? `${FIELD_LABEL[field]} (JSON)` : FIELD_LABEL[field]}
+                  placeholder={
+                    field === "timeout" ? "PT30S, or a name from use.timeouts" : undefined
+                  }
+                  helperText={errors[field] ?? FIELD_HINT[field]}
+                  error={Boolean(errors[field])}
+                  multiline={isJson}
+                  minRows={isJson ? 3 : undefined}
+                  size="small"
+                  value={state[field]}
+                  onChange={(event) => setField(field, event.target.value)}
+                  onBlur={() => commit()}
+                />
+              );
+            })}
+          </Box>
+          {section.heading === "Data flow" && (
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+              <Typography variant="subtitle2">Expressions</Typography>
+              <FormControl size="small">
+                <InputLabel id="evaluate-mode-label">Evaluate mode</InputLabel>
+                <Select
+                  labelId="evaluate-mode-label"
+                  label="Evaluate mode"
+                  value={evaluateMode}
+                  onChange={(event) => {
+                    const next = event.target.value as "strict" | "loose";
+                    setEvaluateMode(next);
+                    commit(next);
+                  }}
+                >
+                  <MenuItem value="strict">Strict</MenuItem>
+                  <MenuItem value="loose">Loose</MenuItem>
+                </Select>
+              </FormControl>
+              <Typography variant="caption" color="text.secondary">
+                Runtime-expression recognition for every "${'{'} ... {'}'}" in
+                this workflow. Strict (the default) rejects malformed
+                expressions; loose is more permissive.
+              </Typography>
+            </Box>
+          )}
         </Box>
       ))}
     </Box>
