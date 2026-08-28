@@ -4,9 +4,6 @@ export OPENWORKFLOW_HTTP_EGRESS_ALLOWLIST=tenant=operations.example
 export OPENWORKFLOW_DEFINITION_RESOURCE_ALLOWED_HOSTS=contracts.example
 #export OPENWORKFLOW_GCP_PROJECT_ID=genai-llm-393115
 #export OPENWORKFLOW_DATABASE_USERNAME=openworkflow
-#export
-OPENWORKFLOW_CLOUDSQL_INSTANCE_CONNECTION_NAME=genai-llm-393115:us-central1:openworkflow-prod-postgres
-#export
-OPENWORKFLOW_RUNTIME_GSA_EMAIL=openworkflow-prod-runtime@genai-llm-393115.iam.gserviceaccount.com
-#export
-OPENWORKFLOW_MIGRATIONS_GSA_EMAIL=openworkflow-prod-migrations@genai-llm-393115.iam.gserviceaccount.com
+export OPENWORKFLOW_CLOUDSQL_INSTANCE_CONNECTION_NAME=genai-llm-393115:us-central1:openworkflow-prod-postgres
+export OPENWORKFLOW_RUNTIME_GSA_EMAIL=openworkflow-prod-runtime@genai-llm-393115.iam.gserviceaccount.com
+export OPENWORKFLOW_MIGRATIONS_GSA_EMAIL=openworkflow-prod-migrations@genai-llm-393115.iam.gserviceaccount.com
