@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { taskPathForPointer, validateWorkflowSource } from "./validation";
+import {
+  parseContractViolations,
+  taskPathForPointer,
+  validateWorkflowSource,
+} from "./validation";
 
 const HEADER = `document:
   dsl: "1.0.0"
@@ -111,5 +115,40 @@ describe("taskPathForPointer", () => {
 
   it("returns undefined for a pointer with no task list at all", () => {
     expect(taskPathForPointer("/document/namespace")).toBeUndefined();
+  });
+});
+
+describe("parseContractViolations", () => {
+  it("attributes a real WorkflowContractAnalyzer violation to the consuming task", () => {
+    // Verbatim shape from WorkflowContractAnalyzerTest's
+    // rejectsAnIncompatibleSequentialTaskEdge (Java) - producer emits a
+    // string, consumer requires an integer.
+    const violations = [
+      "Schema compatibility /do/0/produce/output/schema -> /do/1/consume/input/schema [INCOMPATIBLE] producer type string is not accepted",
+    ];
+    const issues = parseContractViolations(violations);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].taskPath).toEqual({ containerPath: [], taskName: "consume" });
+    expect(issues[0].message).toContain("/do/0/produce/output/schema");
+    expect(issues[0].message).toContain("producer type string is not accepted");
+    expect(issues[0].message).toContain("INCOMPATIBLE");
+  });
+
+  it("attributes a nested-container violation correctly", () => {
+    const issues = parseContractViolations([
+      "Schema compatibility /do/0/group/do/1/consume/input/schema -> /do/2/produce/output/schema [UNPROVEN] cannot prove pattern constraint inclusion",
+    ]);
+    expect(issues[0].taskPath).toEqual({ containerPath: [], taskName: "produce" });
+  });
+
+  it("falls back to an untargeted issue for a string that doesn't match the known shape", () => {
+    const issues = parseContractViolations(["some other backend error entirely"]);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].taskPath).toBeUndefined();
+    expect(issues[0].message).toBe("some other backend error entirely");
+  });
+
+  it("returns an empty array for no violations", () => {
+    expect(parseContractViolations([])).toEqual([]);
   });
 });

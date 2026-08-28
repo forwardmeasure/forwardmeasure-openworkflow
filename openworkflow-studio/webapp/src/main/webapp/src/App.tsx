@@ -17,6 +17,7 @@ import { DiffView } from "./canvas/DiffView";
 import { WorkflowCanvas } from "./canvas/WorkflowCanvas";
 import { buildTraceMap } from "./canvas/executionTrace";
 import { WorkflowSettingsPanel } from "./canvas/WorkflowSettingsPanel";
+import { parseContractViolations, type ValidationIssue } from "./canvas/validation";
 import type { StudioIdentity } from "./runtime";
 import { tenantFromToken } from "./session";
 import { createStudioMuiTheme } from "./theme";
@@ -92,6 +93,14 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
   const [definitionVersion, setDefinitionVersion] = useState("1.0.0");
   const [displayName, setDisplayName] = useState("Hello Studio");
   const [diagnostics, setDiagnostics] = useState("Not yet validated.");
+  // Schema-compatibility findings (WorkflowContractAnalyzer, via
+  // validate()'s validateWorkflowDefinition call) attributed to canvas task
+  // badges - previously the ONLY place these surfaced at all was buried
+  // inside the diagnostics string above. Stays stale between Validate
+  // clicks, same as diagnostics already does.
+  const [serverValidationIssues, setServerValidationIssues] = useState<
+    ValidationIssue[]
+  >([]);
   const [busy, setBusy] = useState(false);
   const [workflows, setWorkflows] = useState<Workflow[]>([]);
   const [definitions, setDefinitions] = useState<WorkflowDefinition[]>([]);
@@ -203,10 +212,13 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
         workflowId: currentDefinition.workflowId,
         definitionId: currentDefinition.id,
       });
+      setServerValidationIssues(
+        result.valid ? [] : parseContractViolations(result.violations),
+      );
       setDiagnostics(
         result.valid
           ? `Valid Open Workflow definition. Source digest ${result.sourceSha256.slice(0, 12)}.`
-          : `Validation failed: ${result.violations.join("; ")}`,
+          : `Validation failed - see the canvas for which task(s): ${result.violations.join("; ")}`,
       );
     } catch (error) {
       setDiagnostics(await diagnostic(error));
@@ -508,7 +520,11 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
               />
             ) : editorView === "canvas" ? (
               <div className="canvas-shell">
-                <WorkflowCanvas source={source} onSourceChange={setSource} />
+                <WorkflowCanvas
+                  source={source}
+                  onSourceChange={setSource}
+                  serverIssues={serverValidationIssues}
+                />
               </div>
             ) : (
               <div className="canvas-shell">

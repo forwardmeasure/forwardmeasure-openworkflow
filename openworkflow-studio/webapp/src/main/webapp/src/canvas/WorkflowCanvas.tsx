@@ -361,6 +361,7 @@ export function WorkflowCanvas({
   source,
   onSourceChange,
   trace,
+  serverIssues,
 }: {
   source: string;
   onSourceChange: (source: string) => void;
@@ -371,6 +372,15 @@ export function WorkflowCanvas({
   // normal authoring case) renders exactly as before - trace is additive,
   // nothing about the editable canvas changes when it's absent.
   trace?: Map<string, TraceEntry>;
+  // Schema-compatibility findings from the last real backend Validate call
+  // (App.tsx's validate(), parsed via validation.ts's
+  // parseContractViolations) - unlike validationIssues below, these can't
+  // be recomputed on every keystroke: they need the actually-compiled
+  // WorkflowPlan, which only exists on the backend. Stays stale until the
+  // next Validate click, same as the source status banner already did -
+  // this just ALSO attributes them to a task badge instead of only a
+  // sentence in that banner.
+  serverIssues?: ValidationIssue[];
 }) {
   const theme = useTheme();
   const parsed = useMemo(() => {
@@ -398,7 +408,17 @@ export function WorkflowCanvas({
   // breadcrumb currently sits. Keyed the same way trace already is
   // (traceKey(containerPath, taskName)) so both attach to nodes via the
   // identical lookup below.
-  const validationIssues = useMemo(() => validateWorkflowSource(source), [source]);
+  const clientValidationIssues = useMemo(() => validateWorkflowSource(source), [source]);
+  // Client-side (instant, every keystroke) and server-side (only as fresh
+  // as the last Validate click) issues are just concatenated - both are
+  // already the same ValidationIssue shape, and there's no meaningful
+  // overlap to de-duplicate: AJV's schema check and
+  // WorkflowContractAnalyzer's cross-task compatibility check are
+  // disjoint concerns, never flagging the identical thing twice.
+  const validationIssues = useMemo(
+    () => [...clientValidationIssues, ...(serverIssues ?? [])],
+    [clientValidationIssues, serverIssues],
+  );
   const validationIssuesByKey = useMemo(() => {
     const map = new Map<string, ValidationIssue[]>();
     for (const issue of validationIssues) {

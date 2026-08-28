@@ -202,3 +202,47 @@ export function validateWorkflowSource(source: string): ValidationIssue[] {
   }
   return issues;
 }
+
+// Matches WorkflowContractAnalyzer's SchemaCompatibilityFinding.diagnostic()
+// (Java: producerSchemaPath + " -> " + consumerSchemaPath + " [" + status +
+// "] " + reason), prefixed with "Schema compatibility " by
+// OpenWorkflowCompiler before it's thrown - see
+// WorkflowGovernanceServiceImpl's validateWorkflowDefinition, the only
+// place this string shape reaches the browser today (as one opaque entry
+// in WorkflowDefinitionValidation.violations). Both schema paths are kept
+// even though only the consumer's is used to attribute a canvas badge -
+// the message itself still names both ends, so opening either task's
+// tooltip explains the mismatch, not just the one that's flagged.
+const CONTRACT_VIOLATION = /^Schema compatibility (\S+) -> (\S+) \[(\w+)\] (.*)$/;
+
+/**
+ * "Wire two tasks together and have their schemas checked for
+ * compatibility" (the real ask behind "I cannot select the output of a
+ * step and attach it to the input of another... we enforce those and
+ * ensure compatibility between outputs and inputs") already runs on the
+ * backend, via WorkflowContractAnalyzer - OpenWorkflowCompiler.compile()
+ * calls it and validateWorkflowDefinition already surfaces its failures.
+ * What was missing was ever showing them anywhere but one raw joined
+ * string in App.tsx's generic status banner. This turns each one back
+ * into the same ValidationIssue shape validateWorkflowSource produces, so
+ * they attribute to a task badge instead of a sentence nobody reads.
+ *
+ * Unlike validateWorkflowSource, this can't run client-side - it needs
+ * the actually-compiled WorkflowPlan (resolved $refs, control-flow-aware
+ * edge discovery through named "then" jumps and nested containers), which
+ * only exists on the backend. Called with whatever
+ * WorkflowDefinitionValidation.violations comes back from a real
+ * validateWorkflowDefinition call (see App.tsx's validate()).
+ */
+export function parseContractViolations(violations: string[]): ValidationIssue[] {
+  return violations.map((violation) => {
+    const match = CONTRACT_VIOLATION.exec(violation);
+    if (!match) return { message: violation, pointer: "" };
+    const [, producerPath, consumerPath, status, reason] = match;
+    return {
+      taskPath: taskPathForPointer(consumerPath),
+      message: `incompatible with ${producerPath}: ${reason} (${status})`,
+      pointer: consumerPath,
+    };
+  });
+}
