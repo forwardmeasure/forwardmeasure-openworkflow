@@ -642,6 +642,24 @@ export function WorkflowCanvas({
     setSelectedTaskName(name);
   }
 
+  // A palette CLICK (as opposed to a drag - see onDrop below) carries no
+  // position at all, so nearestEdge can't help here - this was the other
+  // half of "you still automatically add a new task to the end of the
+  // flow": onDrop got fixed, but a plain click still fell straight through
+  // to addTask's unconditional append. The fix here is to use the one
+  // piece of context a click DOES carry - whatever task is currently
+  // selected - and splice onto ITS outgoing edge, same machinery as
+  // dropping onto an edge directly. Only genuinely falls back to
+  // appending at the end when nothing is selected (or the selected task
+  // has no outgoing edge to splice onto, e.g. a "raise" with no "then").
+  function addTaskFromPalette(kind: Task["kind"]) {
+    const outgoingEdge = selectedTaskName
+      ? edges.find((e) => e.source === selectedTaskName)
+      : undefined;
+    if (outgoingEdge) insertTaskOnEdge(outgoingEdge.id, kind);
+    else addTask(kind);
+  }
+
   // Scoped to the target end only: if the source end moved instead
   // (newConnection.source !== oldEdge.source), this no-ops and the drag
   // visually snaps back on the next resync, since properly supporting that
@@ -717,7 +735,7 @@ export function WorkflowCanvas({
 
   return (
     <Box sx={{ display: "flex", height: "100%", minHeight: 480 }}>
-      <NodePalette onAddTask={(kind) => addTask(kind)} />
+      <NodePalette onAddTask={addTaskFromPalette} />
       <Box sx={{ flex: 1, position: "relative" }}>
         <Box sx={{ position: "absolute", top: 8, right: 8, zIndex: 1, display: "flex", gap: 1 }}>
           {validationIssues.length > 0 && (

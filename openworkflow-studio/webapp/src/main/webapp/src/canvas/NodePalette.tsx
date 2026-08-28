@@ -19,9 +19,10 @@ const CATEGORY_ORDER: TaskCategory[] = ["action", "control", "integration"];
 /**
  * A persistent, categorized, draggable node palette - the primary way to
  * add a task, replacing the earlier small "Add task" dropdown menu. Drag a
- * row onto the canvas to place a task at that exact drop position
- * (WorkflowCanvas.tsx's onDrop); click a row to add it at the default
- * auto-layout position instead, for anyone who'd rather click than drag.
+ * row onto the canvas to splice a task into whichever edge it's dropped
+ * closest to (WorkflowCanvas.tsx's onDrop); click a row to splice it onto
+ * the currently selected task's own outgoing edge instead (or append at
+ * the very end if nothing's selected) - see addTaskFromPalette there.
  */
 export function NodePalette({
   onAddTask,
