@@ -47,6 +47,15 @@ export type CommonTaskProps = {
   // so this stays untyped rather than modeling the (rarer) inline-object
   // timeout-definition shape.
   timeout?: unknown;
+  // An explicit flow-control override: another task's name, or one of
+  // "continue"/"exit"/"end" - confirmed as the 7th and last entry in
+  // OpenWorkflowCompiler's own COMMON_TASK_PROPERTIES constant, read by
+  // taskDataFlow() for every task kind (not just "switch" cases, which
+  // carry their own separate per-case "then" - see SwitchCase below).
+  // Previously missing entirely here, which meant a hand-authored "then:"
+  // on any non-switch task was silently dropped the moment toYaml()
+  // rewrote "do:" - a real data-loss bug, not just a missing form field.
+  then?: string;
   metadata?: unknown;
 };
 
@@ -311,6 +320,7 @@ function commonPropsFromYamlEntry(body: Record<string, unknown>): CommonTaskProp
   if ("output" in body) props.output = body.output;
   if ("export" in body) props.export = body.export;
   if ("timeout" in body) props.timeout = body.timeout;
+  if (typeof body.then === "string") props.then = body.then;
   if ("metadata" in body) props.metadata = body.metadata;
   return props;
 }
@@ -623,6 +633,7 @@ function commonPropsToYamlEntry(task: CommonTaskProps): Record<string, unknown> 
   if (task.output !== undefined) props.output = task.output;
   if (task.export !== undefined) props.export = task.export;
   if (task.timeout !== undefined) props.timeout = task.timeout;
+  if (task.then !== undefined) props.then = task.then;
   if (task.metadata !== undefined) props.metadata = task.metadata;
   return props;
 }

@@ -137,6 +137,7 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
       "      input:",
       "        schema: {}",
       "      timeout: PT30S",
+      "      then: notify",
       "      metadata:",
       "        owner: team-a",
       "      set:",
@@ -151,7 +152,48 @@ describe("canvas <-> Serverless Workflow DSL conversion", () => {
         if: "${ .enabled }",
         input: { schema: {} },
         timeout: "PT30S",
+        then: "notify",
         metadata: { owner: "team-a" },
+      },
+    ]);
+  });
+
+  it("preserves a non-switch task's own \"then\" through a canvas round-trip (previously silently dropped)", () => {
+    // Ground truth: OpenWorkflowCompiler's taskDataFlow() reads task.path("then")
+    // for every task kind, not just "switch" cases - a set/call/emit/etc. task
+    // can name an explicit next step, overriding positional fall-through. Before
+    // CommonTaskProps carried "then", toYaml() rewriting "do:" from the parsed
+    // graph would silently drop this on any edit made through the canvas.
+    const rewritten = toYaml(SAMPLE, {
+      tasks: [
+        { kind: "set", name: "greet", set: { message: "hi" }, then: "notify" },
+        { kind: "set", name: "notify", set: { message: "bye" } },
+      ],
+    });
+    expect(fromYaml(rewritten).tasks).toEqual([
+      { kind: "set", name: "greet", set: { message: "hi" }, then: "notify" },
+      { kind: "set", name: "notify", set: { message: "bye" } },
+    ]);
+  });
+
+  it("keeps a switch task's own \"then\" separate from its cases' per-case \"then\"", () => {
+    const source = [
+      "do:",
+      "  - route:",
+      "      then: fallback",
+      "      switch:",
+      "        - toA:",
+      "            when: ${ .a }",
+      "            then: taskA",
+      "",
+    ].join("\n");
+    const tasks = fromYaml(source).tasks;
+    expect(tasks).toEqual([
+      {
+        kind: "switch",
+        name: "route",
+        then: "fallback",
+        cases: [{ name: "toA", when: "${ .a }", then: "taskA" }],
       },
     ]);
   });

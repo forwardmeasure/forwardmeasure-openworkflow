@@ -62,6 +62,7 @@ const KIND_LABEL: Record<Task["kind"], string> = {
 type AdvancedState = {
   if: string;
   timeout: string;
+  then: string;
   input: string;
   output: string;
   export: string;
@@ -80,6 +81,7 @@ function advancedStateOf(task: Task): AdvancedState {
   return {
     if: task.if ?? "",
     timeout: toText(task.timeout),
+    then: task.then ?? "",
     input: toText(task.input),
     output: toText(task.output),
     export: toText(task.export),
@@ -107,6 +109,7 @@ function resolveCommonProps(state: AdvancedState): {
       props.timeout = state.timeout;
     }
   }
+  if (state.then.trim()) props.then = state.then.trim();
   for (const field of ADVANCED_JSON_FIELDS) {
     const text = state[field];
     if (!text.trim()) continue;
@@ -1347,6 +1350,15 @@ export function TaskInspector({
             onChange={(event) =>
               setAdvancedField("timeout", event.target.value)
             }
+            onBlur={commitAdvanced}
+          />
+          <TextField
+            label="then (optional)"
+            size="small"
+            placeholder="a task name, or continue / exit / end"
+            helperText="Explicit next step after this task, overriding the default fall-through to whatever follows it here."
+            value={advanced.then}
+            onChange={(event) => setAdvancedField("then", event.target.value)}
             onBlur={commitAdvanced}
           />
           {ADVANCED_JSON_FIELDS.map((field) => (
