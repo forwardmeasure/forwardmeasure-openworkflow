@@ -10,6 +10,15 @@
   color: var(--text);
   background: var(--bg);
   font-synthesis: none;
+  /* "Fonts are rather large, and too much real estate is taken up" - the
+     whole app was inheriting the browser's unstyled 16px default with
+     nothing here overriding it. 14px (87.5%) shrinks every rem-sized thing
+     at once - text AND the rem-based padding/spacing throughout this file
+     - rather than hunting down individual font-size rules one at a time.
+     theme.ts's htmlFontSize: 14 keeps MUI's own components (Buttons,
+     TextFields, the canvas Inspector, ...) sized consistently with this,
+     not calculated against the old 16px assumption. */
+  font-size: 87.5%;
 }
 * {
   box-sizing: border-box;

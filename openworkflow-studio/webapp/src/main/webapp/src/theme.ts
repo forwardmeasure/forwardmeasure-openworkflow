@@ -131,7 +131,12 @@ export function createStudioMuiTheme(
       text: { primary: tokens.text, secondary: tokens.muted },
     },
     shape: { borderRadius: parseInt(tokens.radiusSm, 10) },
-    typography: { fontFamily: tokens.fontSans },
+    // htmlFontSize matches styles.css's :root font-size: 87.5% (14px, not
+    // the browser's unstyled 16px default) - MUI computes every component's
+    // rem-based sizing against this value, so leaving it at MUI's own
+    // 16px-assuming default here would make Buttons/TextFields/etc. render
+    // LARGER than the 14px root they're actually laid out against.
+    typography: { fontFamily: tokens.fontSans, htmlFontSize: 14 },
   });
 }
 /*
