@@ -61,7 +61,6 @@ const NODE_TYPES = { task: TaskNode, anchor: AnchorNode, sticky: StickyNoteNode 
 const EDGE_TYPES = { insertable: InsertableEdge };
 type CanvasNodeData = TaskNodeData | AnchorNodeData | StickyNoteData;
 const COLUMN_WIDTH = 260;
-const ROW_HEIGHT = 130;
 const GRID_SIZE = 16;
 const SNAP_GRID: [number, number] = [GRID_SIZE, GRID_SIZE];
 // Sentinel ids for the Start/End anchors - unlikely enough not to collide
@@ -333,21 +332,70 @@ export function layout(
     if (!hasIncomingEdge.has(task.name)) column.set(task.name, index + 1);
   });
 
+  const taskByName = new Map(tasks.map((task) => [task.name, task]));
+  // Rough estimate of a card's actual rendered height - "auto-layout is
+  // completely broken" turned out to be real and specific: ROW_HEIGHT was
+  // a flat 130px for every card regardless of content, so a switch with
+  // several cases (each rendering its own line) grew taller than that and
+  // visually covered whatever sibling landed below it in the same column.
+  // Confirmed live: a 5-case switch's card bottom overlapped a plain "set"
+  // sibling sharing its column. This can't measure the REAL DOM (layout()
+  // runs before anything renders), so it's an approximation matched
+  // against what TaskNode.tsx actually draws per line, not a made-up
+  // constant - close enough to stop cards colliding, not pixel-perfect.
+  const BASE_CARD_SIZE = 95;
+  const SWITCH_CASE_LINE = 20;
+  const GAP = 20;
+  function estimateNodeSize(id: string): number {
+    const task = taskByName.get(id);
+    if (!task) return BASE_CARD_SIZE; // Start/End anchors
+    return task.kind === "switch"
+      ? BASE_CARD_SIZE + Math.max(0, task.cases.length - 1) * SWITCH_CASE_LINE
+      : BASE_CARD_SIZE;
+  }
+
+  // Vertical mode's depth axis (Y) has the identical overlap risk one axis
+  // over: consecutive DEPTH bands stacking top-to-bottom, where an earlier
+  // band's tallest card needs to be cleared before the next band starts.
+  // Precomputed once, per column, as the cumulative height of every
+  // earlier column's tallest member - unlike the sibling axis below, this
+  // can't be built incrementally node-by-node (a later column's start
+  // position depends on EVERY node already placed in every earlier
+  // column, not just the ones before it in tasks[] order).
+  const columnDepthOffset = new Map<number, number>();
+  if (orientation === "vertical") {
+    const maxSizeByColumn = new Map<number, number>();
+    for (const id of nodeIds) {
+      const col = column.get(id) ?? 0;
+      maxSizeByColumn.set(col, Math.max(maxSizeByColumn.get(col) ?? 0, estimateNodeSize(id)));
+    }
+    const maxColumn = Math.max(0, ...maxSizeByColumn.keys());
+    let cursor = 0;
+    for (let col = 0; col <= maxColumn; col += 1) {
+      columnDepthOffset.set(col, cursor);
+      cursor += (maxSizeByColumn.get(col) ?? BASE_CARD_SIZE) + GAP;
+    }
+  }
+
   const rowInColumn = new Map<number, number>();
-  // Horizontal: depth (column, longest path from Start) runs left-to-right
-  // on X, parallel siblings stack on Y. Vertical: the exact same two
-  // numbers, just swapped onto the other axis - depth runs top-to-bottom
-  // on Y, siblings spread left-to-right on X. Same COLUMN_WIDTH/ROW_HEIGHT
-  // constants either way (each is already sized for "gap along the axis a
-  // card's own long/short side occupies," which is what still matters
-  // after the swap, not which literal axis it happens to be on).
+  const siblingOffset = new Map<number, number>();
   function nextPosition(id: string): { x: number; y: number } {
     const col = column.get(id) ?? 0;
-    const row = rowInColumn.get(col) ?? 0;
-    rowInColumn.set(col, row + 1);
-    return orientation === "vertical"
-      ? { x: row * COLUMN_WIDTH, y: col * ROW_HEIGHT }
-      : { x: col * COLUMN_WIDTH, y: row * ROW_HEIGHT };
+    if (orientation === "vertical") {
+      // Sibling axis (X): card WIDTH barely varies with content (cases add
+      // lines, not columns), so plain fixed spacing is fine here - only
+      // the depth axis (Y, precomputed above) needed to become
+      // content-aware.
+      const siblingIndex = rowInColumn.get(col) ?? 0;
+      rowInColumn.set(col, siblingIndex + 1);
+      return { x: siblingIndex * COLUMN_WIDTH, y: columnDepthOffset.get(col) ?? 0 };
+    }
+    // Horizontal: depth axis (X) fixed, same reasoning (width is roughly
+    // constant). Sibling axis (Y): content-aware, cumulative - this is the
+    // one that was actually observed overlapping.
+    const offset = siblingOffset.get(col) ?? 0;
+    siblingOffset.set(col, offset + estimateNodeSize(id) + GAP);
+    return { x: col * COLUMN_WIDTH, y: offset };
   }
 
   const startNode: Node<AnchorNodeData> = {
