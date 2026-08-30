@@ -26,6 +26,7 @@ import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
+import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Tooltip from "@mui/material/Tooltip";
@@ -1019,16 +1020,44 @@ export function WorkflowCanvas({
           </ReactFlow>
         </ReactFlowProvider>
       </Box>
-      {selectedTask && (
-        <Box sx={{ borderLeft: 1, borderColor: "divider" }}>
+      <Drawer
+        anchor="right"
+        variant="temporary"
+        open={Boolean(selectedTask)}
+        onClose={() => setSelectedTaskName(undefined)}
+        // No backdrop, no scrim, no focus trap: "selecting a task opens the
+        // inspector on the main canvas and makes it impossible to work
+        // with" - the previous inline sidebar permanently reserved 320px
+        // of layout width (compounding with the palette's 220px and the
+        // Derived view's 300px+), squeezing the actual canvas down to
+        // almost nothing. A floating overlay never reserves layout space
+        // at all - it draws on top, closes itself via the exact same
+        // "click empty canvas clears selectedTaskName" path that already
+        // existed (onPaneClick above), and the canvas underneath stays
+        // fully visible and interactive everywhere the panel doesn't
+        // physically cover.
+        hideBackdrop
+        ModalProps={{ keepMounted: true }}
+        slotProps={{
+          paper: {
+            sx: {
+              width: 320,
+              boxShadow: 6,
+              pointerEvents: "auto",
+            },
+          },
+        }}
+        sx={{ pointerEvents: "none" }}
+      >
+        {selectedTask && (
           <TaskInspector
             key={selectedTask.name}
             task={selectedTask}
             onChange={updateTask}
             onDelete={deleteSelectedTask}
           />
-        </Box>
-      )}
+        )}
+      </Drawer>
     </Box>
   );
 }
