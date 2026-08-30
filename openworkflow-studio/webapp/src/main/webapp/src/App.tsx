@@ -125,6 +125,16 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       definition.workflowId === currentWorkflow?.id &&
       definition.version === definitionVersion,
   );
+  // Same comparison validate() already relies on (see its "Save the current
+  // source before validating it" guard below) - reused here rather than a
+  // separate flag, so this can never drift out of sync with what "unsaved"
+  // actually means elsewhere in this component. Falls back to comparing
+  // against SAMPLE (source's own initial value) when there's no saved
+  // definition yet at all, so a genuinely untouched fresh editor doesn't
+  // read as dirty before the author has typed anything.
+  const isDirty = currentDefinition
+    ? currentDefinition.source !== source
+    : source !== SAMPLE;
   // Every governed revision of the workflow currently loaded in the editor,
   // newest first - the pool the compare-against selector picks from.
   const revisionsForCurrentWorkflow = definitions
@@ -150,6 +160,20 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
   useEffect(() => {
     void refreshDefinitions();
   }, []);
+  // Browsers ignore any custom message here and show their own generic
+  // "leave site / changes may not be saved" prompt - preventDefault (plus
+  // setting returnValue, still needed for older engines) is what actually
+  // triggers that prompt at all. Only registered while isDirty is true, so
+  // navigating away from a saved, untouched editor never prompts.
+  useEffect(() => {
+    if (!isDirty) return;
+    function onBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [isDirty]);
   useEffect(() => {
     const mergePermissions = (decisions: Record<string, boolean>) =>
       setPermissions((previous) => ({ ...previous, ...decisions }));
@@ -438,7 +462,15 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
             <div className="panel-heading">
               <div>
                 <p className="eyebrow">Lossless source</p>
-                <h2 id="editor-title">Workflow definition</h2>
+                <h2 id="editor-title">
+                  Workflow definition
+                  {isDirty && (
+                    <span className="dirty-marker" title="Unsaved changes">
+                      {" "}
+                      *
+                    </span>
+                  )}
+                </h2>
               </div>
               <div className="actions">
                 <button
