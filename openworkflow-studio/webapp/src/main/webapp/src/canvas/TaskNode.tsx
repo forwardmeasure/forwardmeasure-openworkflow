@@ -1,4 +1,4 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
+import { Handle, NodeResizer, Position, type NodeProps } from "@xyflow/react";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import ErrorIcon from "@mui/icons-material/Error";
 import PendingIcon from "@mui/icons-material/Pending";
@@ -34,6 +34,17 @@ export type TaskNodeData = {
   orientation?: "horizontal" | "vertical";
 };
 
+// Container kinds hold a variable number of nested children (rendered
+// elsewhere via drill-down, not on this card) - their natural content
+// height is just a fixed caption line regardless of how much they
+// actually contain, which is exactly what made auto-layout's flat-height
+// assumption wrong before (see WorkflowCanvas.tsx's estimateNodeSize).
+// Letting the author manually resize these gives them a visual cue for
+// "this holds more than the caption suggests" independent of that
+// estimate. Leaf kinds (set/call/switch/...) keep their auto-sizing -
+// resizing a single-line card has no real content to reveal.
+const RESIZABLE_KINDS = new Set<Task["kind"]>(["do", "for", "fork", "try", "switch"]);
+
 const TRACE_ICON = {
   entered: PendingIcon,
   completed: CheckCircleIcon,
@@ -57,12 +68,15 @@ export function TaskNode({
   const category = KIND_CATEGORY[task.kind];
   const categoryColor = CATEGORY_COLOR[category];
   const TraceIcon = trace ? TRACE_ICON[trace.status] : undefined;
+  const isResizable = RESIZABLE_KINDS.has(task.kind);
   return (
-    <Box sx={{ position: "relative" }}>
+    <Box sx={{ position: "relative", height: isResizable ? "100%" : undefined }}>
+      {isResizable && <NodeResizer minWidth={220} minHeight={72} isVisible={selected} />}
       <Card
         variant="outlined"
         sx={{
           minWidth: 220,
+          height: isResizable ? "100%" : undefined,
           borderRadius: 3,
           borderColor: trace
             ? `${TRACE_COLOR[trace.status]}.main`
