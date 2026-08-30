@@ -572,10 +572,15 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
             )}
           </section>
           <aside className="panel diagram" aria-labelledby="diagram-title">
-            <p className="eyebrow">Derived view</p>
-            <h2 id="diagram-title">Execution flow</h2>
-            <p className="muted">The diagram never rewrites the source.</p>
-            <ol>
+            <details>
+              <summary>
+                <p className="eyebrow" style={{ display: "inline" }}>
+                  Derived view
+                </p>
+              </summary>
+              <h2 id="diagram-title">Execution flow</h2>
+              <p className="muted">The diagram never rewrites the source.</p>
+              <ol>
               {tasks.length ? (
                 tasks.map((task, index) => (
                   <li key={`${task}-${index}`}>
@@ -586,7 +591,8 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
               ) : (
                 <li className="empty">No sequential tasks detected.</li>
               )}
-            </ol>
+              </ol>
+            </details>
             <h3>Governed revisions</h3>
             {definitions.length === 0 ? (
               <p className="muted">No definitions in this tenant.</p>

@@ -1335,17 +1335,19 @@ export function TaskInspector({
           sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
         >
           <TextField
-            label="if (expression, optional)"
+            label="Only run if (condition)"
             size="small"
             placeholder="${ .age >= 18 }"
+            helperText="A true/false expression. If it evaluates false when the workflow reaches this task, the task is skipped entirely - the workflow just moves on to whatever's next, as if this task weren't here."
             value={advanced.if}
             onChange={(event) => setAdvancedField("if", event.target.value)}
             onBlur={commitAdvanced}
           />
           <TextField
-            label="timeout (optional)"
+            label="Timeout"
             size="small"
             placeholder="PT30S, or a name from use.timeouts"
+            helperText="How long to let this task run before giving up on it, e.g. PT30S = 30 seconds. Leave blank for no limit."
             value={advanced.timeout}
             onChange={(event) =>
               setAdvancedField("timeout", event.target.value)
@@ -1353,28 +1355,70 @@ export function TaskInspector({
             onBlur={commitAdvanced}
           />
           <TextField
-            label="then (optional)"
+            label="Then go to"
             size="small"
             placeholder="a task name, or continue / exit / end"
-            helperText="Explicit next step after this task, overriding the default fall-through to whatever follows it here."
+            helperText="Normally the workflow runs whatever this task is connected to next on the canvas. Set this to jump somewhere else instead - another task's name, end/exit to stop the workflow right here, or continue to go back to following the connection."
             value={advanced.then}
             onChange={(event) => setAdvancedField("then", event.target.value)}
             onBlur={commitAdvanced}
           />
-          {ADVANCED_JSON_FIELDS.map((field) => (
-            <TextField
-              key={field}
-              label={`${field} (JSON, optional)`}
-              multiline
-              minRows={2}
-              size="small"
-              value={advanced[field]}
-              error={Boolean(advancedErrors[field])}
-              helperText={advancedErrors[field]}
-              onChange={(event) => setAdvancedField(field, event.target.value)}
-              onBlur={commitAdvanced}
-            />
-          ))}
+          <TextField
+            label="Input (JSON)"
+            multiline
+            minRows={2}
+            size="small"
+            helperText={
+              advancedErrors.input ??
+              "Reshape or validate the data this task receives, before it runs."
+            }
+            error={Boolean(advancedErrors.input)}
+            value={advanced.input}
+            onChange={(event) => setAdvancedField("input", event.target.value)}
+            onBlur={commitAdvanced}
+          />
+          <TextField
+            label="Output (JSON)"
+            multiline
+            minRows={2}
+            size="small"
+            helperText={
+              advancedErrors.output ??
+              "Reshape or validate the data this task produces, before it's passed on to whatever's next."
+            }
+            error={Boolean(advancedErrors.output)}
+            value={advanced.output}
+            onChange={(event) => setAdvancedField("output", event.target.value)}
+            onBlur={commitAdvanced}
+          />
+          <TextField
+            label="Export (JSON)"
+            multiline
+            minRows={2}
+            size="small"
+            helperText={
+              advancedErrors.export ??
+              "Save values from this task into the workflow's shared context, so ANY later task can reference them - not just the one connected next."
+            }
+            error={Boolean(advancedErrors.export)}
+            value={advanced.export}
+            onChange={(event) => setAdvancedField("export", event.target.value)}
+            onBlur={commitAdvanced}
+          />
+          <TextField
+            label="Metadata (JSON)"
+            multiline
+            minRows={2}
+            size="small"
+            helperText={
+              advancedErrors.metadata ??
+              "Freeform notes/tags attached to this task - not used by the workflow itself."
+            }
+            error={Boolean(advancedErrors.metadata)}
+            value={advanced.metadata}
+            onChange={(event) => setAdvancedField("metadata", event.target.value)}
+            onBlur={commitAdvanced}
+          />
         </AccordionDetails>
       </Accordion>
       <Box>

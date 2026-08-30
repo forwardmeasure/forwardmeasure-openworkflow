@@ -663,21 +663,46 @@ export function WorkflowCanvas({
   }
 
   // A palette CLICK (as opposed to a drag - see onDrop below) carries no
-  // position at all, so nearestEdge can't help here - this was the other
-  // half of "you still automatically add a new task to the end of the
-  // flow": onDrop got fixed, but a plain click still fell straight through
-  // to addTask's unconditional append. The fix here is to use the one
-  // piece of context a click DOES carry - whatever task is currently
-  // selected - and splice onto ITS outgoing edge, same machinery as
-  // dropping onto an edge directly. Only genuinely falls back to
-  // appending at the end when nothing is selected (or the selected task
-  // has no outgoing edge to splice onto, e.g. a "raise" with no "then").
+  // drop position at all, so this was the other half of "you still
+  // automatically add a new task to the end of the flow": onDrop got
+  // fixed, but a plain click still fell straight through to addTask's
+  // unconditional append. First choice: splice onto whatever task is
+  // currently SELECTED - the one piece of real context a click does
+  // carry. Second choice, when nothing's selected (the common case for a
+  // very first click): reuse nearestEdge against the current viewport's
+  // own center, so even a contextless click lands wherever the canvas
+  // happens to be showing right now, not blindly at the array's end -
+  // that blind append was a real, confirmed bug of its own: with ANY
+  // upstream task using an explicit "then" (skipping the positional
+  // fallthrough), the appended task landed after something unreachable
+  // and was orphaned the instant it was created. Only genuinely falls
+  // back to a bare append when there's no ReactFlow instance yet to
+  // convert a screen position from (shouldn't happen post-mount).
   function addTaskFromPalette(kind: Task["kind"]) {
     const outgoingEdge = selectedTaskName
       ? edges.find((e) => e.source === selectedTaskName)
       : undefined;
-    if (outgoingEdge) insertTaskOnEdge(outgoingEdge.id, kind);
-    else addTask(kind);
+    if (outgoingEdge) {
+      insertTaskOnEdge(outgoingEdge.id, kind);
+      return;
+    }
+    const instance = reactFlowInstanceRef.current;
+    if (instance) {
+      const center = instance.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+      const edge = nearestEdge(
+        center,
+        new Map(nodes.map((node) => [node.id, node.position])),
+        edges,
+      );
+      if (edge) {
+        insertTaskOnEdge(edge.id, kind);
+        return;
+      }
+    }
+    addTask(kind);
   }
 
   // Scoped to the target end only: if the source end moved instead
