@@ -637,30 +637,6 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                             Submit
                           </button>
                         )}
-                      {definition.status === "in_review" && (
-                        <>
-                          {permissions["definition:approve"] && (
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                void transition(definition, "approve")
-                              }
-                            >
-                              Approve
-                            </button>
-                          )}
-                          {permissions["definition:reject"] && (
-                            <button
-                              disabled={busy}
-                              onClick={() =>
-                                void transition(definition, "reject")
-                              }
-                            >
-                              Reject
-                            </button>
-                          )}
-                        </>
-                      )}
                       {definition.status === "approved" &&
                         permissions["definition:publish"] && (
                           <button

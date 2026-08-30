@@ -739,7 +739,13 @@ export function WorkflowCanvas({
     if (newConnection.source !== oldEdge.source) return;
     const next = reconnectEdgeTarget(tasksInView, oldEdge, newConnection.target);
     if (!next) return;
-    forceFullLayoutRef.current = true;
+    // Deliberately NOT forcing a full relayout here (or in handleConnect
+    // below) - re-pointing an existing edge doesn't create a new node, so
+    // there's nothing that NEEDS a fresh position the way inserting a task
+    // does. Wiping every manually-placed node's position just because one
+    // edge changed was real, reported friction ("why does reconnecting
+    // trigger automatic layout?") - auto-layout stays exactly one explicit
+    // click away for anyone who wants a clean re-flow after rewiring.
     commitTasks(next);
   };
 
@@ -759,7 +765,8 @@ export function WorkflowCanvas({
       connection.target,
     );
     if (!next) return;
-    forceFullLayoutRef.current = true;
+    // Same reasoning as handleReconnect above - no new node, no forced
+    // relayout.
     commitTasks(next);
   };
 
@@ -960,6 +967,14 @@ export function WorkflowCanvas({
             proOptions={{ hideAttribution: true }}
             snapToGrid
             snapGrid={SNAP_GRID}
+            // When two+ edges land on the same handle, their reconnect
+            // drag-targets sit exactly on top of each other - whichever
+            // rendered last wins every click, making the others
+            // ungrabbable. Selecting an edge (now that clicking one
+            // actually applies selection - see onEdgesChange above)
+            // raises it above its siblings, so click-then-drag reaches
+            // the one you actually want.
+            elevateEdgesOnSelect
             defaultEdgeOptions={{
               type: "smoothstep",
               markerEnd: { type: MarkerType.ArrowClosed, color: theme.palette.text.secondary },

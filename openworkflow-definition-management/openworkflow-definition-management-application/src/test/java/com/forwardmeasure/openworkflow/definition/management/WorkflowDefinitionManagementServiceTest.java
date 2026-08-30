@@ -41,7 +41,6 @@ import com.forwardmeasure.openworkflow.definition.domain.service.impl.WorkflowGo
 import com.forwardmeasure.openworkflow.definition.domain.service.impl.WorkflowManagementServiceImpl;
 import com.forwardmeasure.openworkflow.definition.management.api.model.CreateWorkflowDefinitionRequest;
 import com.forwardmeasure.openworkflow.definition.management.api.model.CreateWorkflowRequest;
-import com.forwardmeasure.openworkflow.definition.management.api.model.ReviewDecisionRequest;
 import com.forwardmeasure.openworkflow.definition.management.api.model.UpdateWorkflowDefinitionRequest;
 import java.util.ArrayList;
 import java.util.List;
@@ -106,7 +105,17 @@ class WorkflowDefinitionManagementServiceTest {
   }
 
   @Test
-  void enforcesLifecycleAndMakerCheckerRules() {
+  void enforcesLifecycleRulesWithNoManualReviewGate() {
+    // Submit goes straight to APPROVED now - "cut the manual approve/reject gate, makes no
+    // sense" (explicit product decision). No maker-checker REVIEW step between submit and
+    // publish anymore; a successful compile IS the approval. approveWorkflowDefinition/
+    // rejectWorkflowDefinition (and their own maker-checker enforcement) are left in the
+    // codebase for a definition already stuck in IN_REVIEW from before this change, but are no
+    // longer part of the live submit -> publish path this test exercises.
+    //
+    // publishWorkflowDefinition's OWN, separate requireDifferentAuthor check is untouched by
+    // this change (that's not the "approve/reject" gate that was asked to be cut) - REVIEWER
+    // still has to be the one publishing what AUTHOR submitted.
     Workflow workflow =
         workflows.createWorkflow(
             AUTHOR, "create-workflow", new CreateWorkflowRequest("orders", "Orders"));
@@ -114,32 +123,15 @@ class WorkflowDefinitionManagementServiceTest {
 
     governance.submitWorkflowDefinition(
         AUTHOR, "submit", workflow.getUuid(), definition.getUuid(), 0);
-    assertEquals(WorkflowLifecycleState.IN_REVIEW, definition.getLifecycleState());
-    assertThrows(
-        DefinitionManagementException.class,
-        () ->
-            governance.approveWorkflowDefinition(
-                AUTHOR,
-                "self-approve",
-                workflow.getUuid(),
-                definition.getUuid(),
-                0,
-                new ReviewDecisionRequest().reason("not independent")));
+    assertEquals(WorkflowLifecycleState.APPROVED, definition.getLifecycleState());
 
-    governance.approveWorkflowDefinition(
-        REVIEWER,
-        "approve",
-        workflow.getUuid(),
-        definition.getUuid(),
-        0,
-        new ReviewDecisionRequest().reason("reviewed"));
     governance.publishWorkflowDefinition(
         REVIEWER, "publish", workflow.getUuid(), definition.getUuid(), 0);
 
     assertEquals(WorkflowLifecycleState.PUBLISHED, definition.getLifecycleState());
-    assertEquals(1, store.reviews.size());
+    assertEquals(0, store.reviews.size());
     assertEquals(1, store.publications.size());
-    assertEquals(4, store.history.size());
+    assertEquals(3, store.history.size());
   }
 
   @Test
@@ -192,7 +184,8 @@ class WorkflowDefinitionManagementServiceTest {
     assertEquals(WorkflowLifecycleState.DRAFT, updated.getLifecycleState());
 
     // Fix it, then submit again - now it compiles for the first time, populating every
-    // compiled-derived field and actually transitioning to IN_REVIEW.
+    // compiled-derived field and actually transitioning to APPROVED (no manual review gate -
+    // see enforcesLifecycleRulesWithNoManualReviewGate).
     governance.updateWorkflowDefinition(
         AUTHOR,
         "update-fixed",
@@ -203,7 +196,7 @@ class WorkflowDefinitionManagementServiceTest {
     WorkflowDefinition submitted =
         governance.submitWorkflowDefinition(
             AUTHOR, "submit-fixed", workflow.getUuid(), definition.getUuid(), 0);
-    assertEquals(WorkflowLifecycleState.IN_REVIEW, submitted.getLifecycleState());
+    assertEquals(WorkflowLifecycleState.APPROVED, submitted.getLifecycleState());
     assertTrue(submitted.getResolvedDigest().matches("[0-9a-f]{64}"));
     assertEquals("tests", submitted.getNamespace());
   }

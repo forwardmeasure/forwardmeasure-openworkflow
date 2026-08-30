@@ -247,6 +247,14 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
     // updateWorkflowDefinition never managed to; a definition that still doesn't compile stays
     // DRAFT (the exception propagates uncaught - now a clean 422 via
     // WorkflowDefinitionExceptionMapper, not a state change).
+    //
+    // Transitions straight to APPROVED, not IN_REVIEW - "cut the manual approve/reject gate,
+    // makes no sense" (explicit product decision). Submit and publish stay two separate steps
+    // (submit still means "compiled and frozen," publish still means "actually live"), but there's
+    // no longer a manual human-review gate between them: a successful compile IS the approval.
+    // IN_REVIEW/approveWorkflowDefinition/rejectWorkflowDefinition are left in place (unreachable
+    // by this path, but not deleted) only so a definition already sitting in IN_REVIEW from before
+    // this change - requireState below still accepts it as a submit source - has a way through.
     authorize(actor, correlationId, workflowId.toString(), AuthorizationAction.DEFINITION_SUBMIT);
     Workflow workflow = requireWorkflow(workflowId);
     WorkflowDefinition definition = requireDefinition(workflow, definitionId);
@@ -263,11 +271,11 @@ public final class WorkflowGovernanceServiceImpl implements WorkflowGovernanceSe
         plan.compilerSha256(),
         plan.sourceSha256(),
         plan.definitionSha256());
-    definition.transitionTo(WorkflowLifecycleState.IN_REVIEW);
+    definition.transitionTo(WorkflowLifecycleState.APPROVED);
     history.record(
         definition,
         WorkflowLifecycleState.DRAFT,
-        WorkflowLifecycleState.IN_REVIEW,
+        WorkflowLifecycleState.APPROVED,
         actor.actorId(),
         correlationId);
     return definition;
