@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import {
+  applyEdgeChanges,
   applyNodeChanges,
   Background,
   Controls,
@@ -8,6 +9,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   type Edge,
+  type EdgeChange,
   type Node,
   type NodeChange,
   type OnConnect,
@@ -539,6 +541,20 @@ export function WorkflowCanvas({
     [],
   );
 
+  // Without this, clicking an edge fired React Flow's internal "select"
+  // interaction with nowhere to apply it - edges is a controlled prop, so
+  // the click's SelectionChange just had no handler to write edge.selected
+  // back to state through, and nothing ever visibly happened. Confirmed
+  // live: before this, a clicked edge's DOM class stayed exactly
+  // "react-flow__edge react-flow__edge-insertable nopan selectable" with
+  // no "selected" ever appearing - not a missing style, a missing handler.
+  // Mirrors onNodesChange above exactly.
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange<Edge>[]) =>
+      setEdges((current) => applyEdgeChanges(changes, current)),
+    [],
+  );
+
   const updateStickyText = useCallback((id: string, text: string) => {
     setNodes((current) =>
       current.map((node) =>
@@ -891,6 +907,7 @@ export function WorkflowCanvas({
               reactFlowInstanceRef.current = instance;
             }}
             onNodesChange={onNodesChange}
+            onEdgesChange={onEdgesChange}
             onReconnect={handleReconnect}
             onConnect={handleConnect}
             onNodeClick={(_event, node) =>

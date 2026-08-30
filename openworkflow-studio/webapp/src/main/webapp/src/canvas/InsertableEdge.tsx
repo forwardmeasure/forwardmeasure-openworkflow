@@ -7,6 +7,7 @@ import ListItemText from "@mui/material/ListItemText";
 import ListSubheader from "@mui/material/ListSubheader";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import { useTheme } from "@mui/material/styles";
 import {
   ALL_KINDS,
   CATEGORY_COLOR,
@@ -46,7 +47,9 @@ export function InsertableEdge({
   markerEnd,
   label,
   data,
+  selected,
 }: EdgeProps) {
+  const theme = useTheme();
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -58,10 +61,22 @@ export function InsertableEdge({
   });
   const onInsert = (data as InsertableEdgeData | undefined)?.onInsert;
   const buttonY = label ? labelY + 16 : labelY;
+  // React Flow tracks edge.selected internally (a plain click sets it) -
+  // this edge type never READ that prop before, so a click had genuinely
+  // no visible effect at all, which read as "there's no concept of
+  // selecting the connector." A selected edge now gets the same
+  // primary-color, thicker-stroke treatment a selected node already gets
+  // elsewhere in this canvas, and - the more important part - the small
+  // drag-to-reconnect handles at each endpoint (rendered by React Flow
+  // itself, not this component) are real and already work; they just had
+  // zero visual affordance pointing anyone at them.
+  const selectedStyle = selected
+    ? { ...style, stroke: theme.palette.primary.main, strokeWidth: 2.5 }
+    : style;
 
   return (
     <>
-      <BaseEdge id={id} path={edgePath} style={style} markerEnd={markerEnd} label={label} />
+      <BaseEdge id={id} path={edgePath} style={selectedStyle} markerEnd={markerEnd} label={label} />
       {onInsert && (
         <EdgeLabelRenderer>
           <Avatar
