@@ -354,6 +354,34 @@ describe("layout", () => {
     expect(columnOf("b")).toBeLessThan(columnOf("__end__"));
   });
 
+  it("places a linear flow in increasing rows, not columns, in vertical orientation", () => {
+    // "Can we get the ability to force the layout to be portrait v/s
+    // landscape?" - depth runs top-to-bottom (Y increasing) instead of
+    // left-to-right (X increasing), with X now holding whatever X used to
+    // (parallel siblings), not the other way around.
+    const tasks: Task[] = [
+      { kind: "set", name: "a", set: {} },
+      { kind: "set", name: "b", set: {} },
+    ];
+    const { nodes } = layout(tasks, "vertical");
+    const rowOf = (id: string) => nodes.find((n) => n.id === id)!.position.y;
+    expect(rowOf("__start__")).toBeLessThan(rowOf("a"));
+    expect(rowOf("a")).toBeLessThan(rowOf("b"));
+    expect(rowOf("b")).toBeLessThan(rowOf("__end__"));
+    // Every node sits in the same single-file column - nothing parallel
+    // here to spread sideways.
+    const columnOf = (id: string) => nodes.find((n) => n.id === id)!.position.x;
+    expect(columnOf("a")).toBe(columnOf("b"));
+  });
+
+  it("attaches orientation to every task/anchor node's data", () => {
+    const tasks: Task[] = [{ kind: "set", name: "a", set: {} }];
+    const { nodes } = layout(tasks, "vertical");
+    for (const node of nodes) {
+      expect((node.data as { orientation?: string }).orientation).toBe("vertical");
+    }
+  });
+
   it("does not hang or crash when a switch case points back at an earlier task", () => {
     const tasks: Task[] = [
       {

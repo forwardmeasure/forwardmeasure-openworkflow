@@ -19,6 +19,8 @@ import {
 import "@xyflow/react/dist/style.css";
 import AddCommentOutlinedIcon from "@mui/icons-material/AddCommentOutlined";
 import AutoFixHighOutlinedIcon from "@mui/icons-material/AutoFixHighOutlined";
+import ViewColumnOutlinedIcon from "@mui/icons-material/ViewColumnOutlined";
+import ViewStreamOutlinedIcon from "@mui/icons-material/ViewStreamOutlined";
 import GroupWorkOutlinedIcon from "@mui/icons-material/GroupWorkOutlined";
 import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
 import Alert from "@mui/material/Alert";
@@ -312,7 +314,10 @@ export function layerColumns(
   return column;
 }
 
-export function layout(tasks: Task[]): {
+export function layout(
+  tasks: Task[],
+  orientation: "horizontal" | "vertical" = "horizontal",
+): {
   nodes: Node<TaskNodeData | AnchorNodeData>[];
   edges: Edge[];
 } {
@@ -329,30 +334,39 @@ export function layout(tasks: Task[]): {
   });
 
   const rowInColumn = new Map<number, number>();
+  // Horizontal: depth (column, longest path from Start) runs left-to-right
+  // on X, parallel siblings stack on Y. Vertical: the exact same two
+  // numbers, just swapped onto the other axis - depth runs top-to-bottom
+  // on Y, siblings spread left-to-right on X. Same COLUMN_WIDTH/ROW_HEIGHT
+  // constants either way (each is already sized for "gap along the axis a
+  // card's own long/short side occupies," which is what still matters
+  // after the swap, not which literal axis it happens to be on).
   function nextPosition(id: string): { x: number; y: number } {
     const col = column.get(id) ?? 0;
     const row = rowInColumn.get(col) ?? 0;
     rowInColumn.set(col, row + 1);
-    return { x: col * COLUMN_WIDTH, y: row * ROW_HEIGHT };
+    return orientation === "vertical"
+      ? { x: row * COLUMN_WIDTH, y: col * ROW_HEIGHT }
+      : { x: col * COLUMN_WIDTH, y: row * ROW_HEIGHT };
   }
 
   const startNode: Node<AnchorNodeData> = {
     id: START_ID,
     type: "anchor",
     position: nextPosition(START_ID),
-    data: { label: "Start" },
+    data: { label: "Start", orientation },
   };
   const taskNodes: Node<TaskNodeData>[] = tasks.map((task) => ({
     id: task.name,
     type: "task",
     position: nextPosition(task.name),
-    data: { task },
+    data: { task, orientation },
   }));
   const endNode: Node<AnchorNodeData> = {
     id: END_ID,
     type: "anchor",
     position: nextPosition(END_ID),
-    data: { label: "End" },
+    data: { label: "End", orientation },
   };
 
   return { nodes: [startNode, ...taskNodes, endNode], edges };
@@ -442,6 +456,14 @@ export function WorkflowCanvas({
   }, [validationIssues]);
 
   const [selectedTaskName, setSelectedTaskName] = useState<string>();
+  // "Can we get the ability to force the layout to be portrait v/s
+  // landscape?" - a whole-canvas setting, not per-node/per-edge (see
+  // TaskNodeData.orientation and layout()'s own orientation parameter).
+  // Declared before nodes/edges below so their own useState initializers
+  // can read it.
+  const [orientation, setOrientation] = useState<"horizontal" | "vertical">(
+    "horizontal",
+  );
   // Breadcrumb of "do" task names drilled into - [] means the top-level
   // "do:" list itself. Every operation below (add/update/delete/layout)
   // operates on tasksInView, the task list this path currently resolves to,
@@ -462,9 +484,11 @@ export function WorkflowCanvas({
   // this component unmounts (e.g. switching to Source view and back) -
   // known first-slice limitation, not a persisted layout.
   const [nodes, setNodes] = useState<Node<CanvasNodeData>[]>(
-    () => layout(tasksInView).nodes,
+    () => layout(tasksInView, orientation).nodes,
   );
-  const [edges, setEdges] = useState<Edge[]>(() => layout(tasksInView).edges);
+  const [edges, setEdges] = useState<Edge[]>(
+    () => layout(tasksInView, orientation).edges,
+  );
   // Set by a palette drag-drop just before commitTasks triggers this
   // component's own re-render (see onDrop below) - the resync effect below
   // consumes it once, to seed that one new node at the exact drop position
@@ -524,7 +548,7 @@ export function WorkflowCanvas({
   }, []);
 
   useEffect(() => {
-    const computed = layout(tasksInView);
+    const computed = layout(tasksInView, orientation);
     const forceFullLayout = forceFullLayoutRef.current;
     forceFullLayoutRef.current = false;
     setNodes((current) => {
@@ -562,10 +586,13 @@ export function WorkflowCanvas({
     setEdges(withEdgeData(computed.edges));
     // Deliberately keyed only on tasksInView (which already changes
     // reference whenever `path` does, so drilling in/out re-attaches trace
-    // at the new depth too), `trace`, and `validationIssuesByKey` - not
-    // nodes/setNodes, since a drag's own setNodes call must not re-trigger
-    // this resync.
-  }, [tasksInView, trace, validationIssuesByKey, path]);
+    // at the new depth too), `trace`, `validationIssuesByKey`, and
+    // `orientation` - not nodes/setNodes, since a drag's own setNodes call
+    // must not re-trigger this resync. Orientation alone changing (with
+    // forceFullLayout NOT set) still only refreshes each node's data -
+    // toggleOrientation below is what actually sets forceFullLayoutRef so
+    // positions get recomputed for the new axis, not just handle sides.
+  }, [tasksInView, trace, validationIssuesByKey, path, orientation]);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<Node<CanvasNodeData>>[]) =>
@@ -622,12 +649,22 @@ export function WorkflowCanvas({
   // routing) has left the graph a mess. Sticky notes are layout()'s blind
   // spot the same way they are there, so still carried forward untouched.
   function autoLayout() {
-    const computed = layout(tasksInView);
+    const computed = layout(tasksInView, orientation);
     setNodes((current) => [
       ...computed.nodes,
       ...current.filter((node) => node.type === "sticky"),
     ]);
     setEdges(withEdgeData(computed.edges));
+  }
+
+  // Existing positions are meaningless once the axis itself changes (a
+  // horizontal-mode column of X coordinates has no sensible reading as
+  // vertical-mode Y coordinates) - unlike every other edit in this
+  // component, this is the one case where discarding manual placement
+  // outright is correct, not just convenient.
+  function toggleOrientation() {
+    setOrientation((current) => (current === "horizontal" ? "vertical" : "horizontal"));
+    forceFullLayoutRef.current = true;
   }
 
   const selectedTask = tasksInView.find((t) => t.name === selectedTaskName);
@@ -862,6 +899,30 @@ export function WorkflowCanvas({
               />
             </Tooltip>
           )}
+          <Tooltip
+            title={
+              orientation === "horizontal"
+                ? "Switch to portrait (top-to-bottom) layout"
+                : "Switch to landscape (left-to-right) layout"
+            }
+          >
+            <IconButton
+              size="small"
+              onClick={toggleOrientation}
+              sx={{
+                bgcolor: "background.paper",
+                border: 1,
+                borderColor: "divider",
+                "&:hover": { bgcolor: "action.hover" },
+              }}
+            >
+              {orientation === "horizontal" ? (
+                <ViewStreamOutlinedIcon fontSize="small" />
+              ) : (
+                <ViewColumnOutlinedIcon fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Auto layout">
             <IconButton
               size="small"

@@ -2,7 +2,11 @@ import { Handle, Position, type NodeProps } from "@xyflow/react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 
-export type AnchorNodeData = { label: "Start" | "End" };
+export type AnchorNodeData = {
+  label: "Start" | "End";
+  // See TaskNodeData.orientation - same whole-canvas setting, same reason.
+  orientation?: "horizontal" | "vertical";
+};
 
 // Purely a visual anchor - "start" and "end" aren't Serverless Workflow DSL
 // constructs (a "do:" list has no literal start/end task the way BPMN has
@@ -14,6 +18,9 @@ export type AnchorNodeData = { label: "Start" | "End" };
 // tip should get its own End node instead of all branches converging on one.
 export function AnchorNode({ data }: NodeProps & { data: AnchorNodeData }) {
   const isStart = data.label === "Start";
+  const orientation = data.orientation ?? "horizontal";
+  const targetPosition = orientation === "vertical" ? Position.Top : Position.Left;
+  const sourcePosition = orientation === "vertical" ? Position.Bottom : Position.Right;
   return (
     <Box
       sx={{
@@ -27,14 +34,14 @@ export function AnchorNode({ data }: NodeProps & { data: AnchorNodeData }) {
         fontWeight: 600,
       }}
     >
-      {isStart ? undefined : <Handle type="target" position={Position.Left} />}
+      {isStart ? undefined : <Handle type="target" position={targetPosition} />}
       <Typography
         variant="caption"
         sx={{ fontWeight: "inherit", color: "inherit" }}
       >
         {data.label}
       </Typography>
-      {isStart ? <Handle type="source" position={Position.Right} /> : undefined}
+      {isStart ? <Handle type="source" position={sourcePosition} /> : undefined}
     </Box>
   );
 }

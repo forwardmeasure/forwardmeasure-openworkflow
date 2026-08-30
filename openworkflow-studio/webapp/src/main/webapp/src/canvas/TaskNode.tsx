@@ -22,6 +22,16 @@ export type TaskNodeData = {
   // position and by the fact the two are never populated together: trace
   // only appears in the Executions view, validation only while authoring.
   validationIssues?: ValidationIssue[];
+  // "Boxes only allow connectors at the ends... if tasks accepted
+  // connections at even just the top and bottom in the middle, we'd have
+  // much better layout" - horizontal (the original, columns left-to-right,
+  // handles on Left/Right) or vertical (rows top-to-bottom, handles on
+  // Top/Bottom so a vertically-stacked flow connects in a straight line
+  // instead of an S-curve). A whole-canvas setting (see WorkflowCanvas.tsx's
+  // orientation state / the layout()/autoLayout() direction toggle), not
+  // per-node - defaults to horizontal so existing saved positions/exports
+  // that never set this keep rendering exactly as before.
+  orientation?: "horizontal" | "vertical";
 };
 
 const TRACE_ICON = {
@@ -40,7 +50,9 @@ export function TaskNode({
   data,
   selected,
 }: NodeProps & { data: TaskNodeData }) {
-  const { task, trace, validationIssues } = data;
+  const { task, trace, validationIssues, orientation = "horizontal" } = data;
+  const targetPosition = orientation === "vertical" ? Position.Top : Position.Left;
+  const sourcePosition = orientation === "vertical" ? Position.Bottom : Position.Right;
   const KindIcon = KIND_ICON[task.kind];
   const category = KIND_CATEGORY[task.kind];
   const categoryColor = CATEGORY_COLOR[category];
@@ -64,7 +76,7 @@ export function TaskNode({
           transition: "box-shadow 120ms ease, border-color 120ms ease",
         }}
       >
-      <Handle type="target" position={Position.Left} />
+      <Handle type="target" position={targetPosition} />
       <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Avatar
@@ -190,20 +202,25 @@ export function TaskNode({
         )}
       </CardContent>
       {task.kind === "switch" ? (
-        // One named source handle per case, spread down the right edge, so
-        // each branch's edge visibly leaves from its own case rather than
-        // all cases bunching into a single point.
+        // One named source handle per case, spread along the source edge
+        // (down the right edge in horizontal mode, across the bottom edge
+        // in vertical mode - same "%" trick, just the other axis), so each
+        // branch's edge visibly leaves from its own case rather than all
+        // cases bunching into a single point.
         task.cases.map((switchCase, index) => (
           <Handle
             key={switchCase.name}
             type="source"
-            position={Position.Right}
+            position={sourcePosition}
             id={switchCase.name}
-            style={{ top: `${((index + 1) / (task.cases.length + 1)) * 100}%` }}
+            style={{
+              [orientation === "vertical" ? "left" : "top"]:
+                `${((index + 1) / (task.cases.length + 1)) * 100}%`,
+            }}
           />
         ))
       ) : (
-        <Handle type="source" position={Position.Right} />
+        <Handle type="source" position={sourcePosition} />
       )}
       </Card>
       {trace && TraceIcon && (
