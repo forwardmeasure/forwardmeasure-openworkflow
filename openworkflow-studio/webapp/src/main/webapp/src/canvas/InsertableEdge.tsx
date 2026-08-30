@@ -69,7 +69,22 @@ export function InsertableEdge({
   });
   const insertableData = data as InsertableEdgeData | undefined;
   const onInsert = insertableData?.onInsert;
-  const buttonY = label ? labelY + 16 : labelY;
+  // "I can't align nodes because the + sign in the vertex is throwing
+  // things off" - the button sat exactly ON the edge's own path, dead
+  // center at its midpoint. For the common case (a plain edge, no label)
+  // that's precisely the pixel line someone needs a clear, unobstructed
+  // view of to judge whether two OTHER nodes line up against it - hiding
+  // it until hover (the earlier fix) didn't help, since hovering near
+  // that exact spot is what aligning nodes against it naturally involves.
+  // Now offset perpendicular to the edge's own dominant direction (off
+  // the line, not on it) instead of dead center - away from the label
+  // when there is one (switch case text), or straight off the line
+  // itself when there isn't.
+  const isMoreHorizontal = Math.abs(targetX - sourceX) >= Math.abs(targetY - sourceY);
+  const PERPENDICULAR_OFFSET = 14;
+  const buttonX = isMoreHorizontal ? labelX : labelX + PERPENDICULAR_OFFSET;
+  const buttonY =
+    (isMoreHorizontal ? labelY - PERPENDICULAR_OFFSET : labelY) + (label ? 16 : 0);
   const showInsertButton = Boolean(onInsert) && (insertableData?.isHovered || Boolean(anchorEl));
   // React Flow tracks edge.selected internally (a plain click sets it) -
   // this edge type never READ that prop before, so a click had genuinely
@@ -94,7 +109,7 @@ export function InsertableEdge({
             onClick={(event) => setAnchorEl(event.currentTarget)}
             sx={{
               position: "absolute",
-              left: labelX,
+              left: buttonX,
               top: buttonY,
               transform: "translate(-50%, -50%)",
               width: 18,
