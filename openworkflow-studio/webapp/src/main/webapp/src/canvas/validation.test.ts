@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   parseContractViolations,
   taskPathForPointer,
+  validateTaskReferences,
   validateWorkflowSource,
 } from "./validation";
+import type { Task } from "./dsl";
 
 const HEADER = `document:
   dsl: "1.0.0"
@@ -150,5 +152,106 @@ describe("parseContractViolations", () => {
 
   it("returns an empty array for no violations", () => {
     expect(parseContractViolations([])).toEqual([]);
+  });
+});
+
+describe("validateTaskReferences", () => {
+  it("flags a switch case's then pointing at a task that doesn't exist - the real reported case", () => {
+    // Verbatim shape from workflow (3).yaml: two cases, both "then"
+    // targets nonexistent.
+    const tasks: Task[] = [
+      {
+        kind: "switch",
+        name: "task3",
+        cases: [
+          { name: "default", when: "sdasdad", then: "lhljhlj" },
+          { name: "case2", then: "pppp" },
+        ],
+      },
+    ];
+    const issues = validateTaskReferences(tasks);
+    expect(issues).toHaveLength(2);
+    expect(issues.every((issue) => issue.taskPath?.taskName === "task3")).toBe(true);
+    expect(issues[0].message).toContain('"default"');
+    expect(issues[0].message).toContain("lhljhlj");
+    expect(issues[1].message).toContain('"case2"');
+    expect(issues[1].message).toContain("pppp");
+  });
+
+  it("accepts a switch case's then that names a real sibling task, or a terminal directive", () => {
+    const tasks: Task[] = [
+      {
+        kind: "switch",
+        name: "route",
+        cases: [
+          { name: "vip", then: "vipPath" },
+          { name: "default", then: "exit" },
+        ],
+      },
+      { kind: "set", name: "vipPath", set: {} },
+    ];
+    expect(validateTaskReferences(tasks)).toEqual([]);
+  });
+
+  it("flags two switch cases sharing the same name", () => {
+    const tasks: Task[] = [
+      {
+        kind: "switch",
+        name: "route",
+        cases: [
+          { name: "default", then: "exit" },
+          { name: "default", then: "exit" },
+        ],
+      },
+    ];
+    const issues = validateTaskReferences(tasks);
+    expect(issues.some((issue) => issue.message.includes("both named"))).toBe(true);
+  });
+
+  it("flags a plain task's own then pointing nowhere real - workflow (3).yaml's task5", () => {
+    const tasks: Task[] = [
+      { kind: "call", name: "task5", then: "task4", call: "", with: {} },
+    ];
+    const issues = validateTaskReferences(tasks);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].taskPath).toEqual({ containerPath: [], taskName: "task5" });
+    expect(issues[0].message).toContain("task4");
+  });
+
+  it("flags two tasks sharing the same name in the same list", () => {
+    const tasks: Task[] = [
+      { kind: "set", name: "dup", set: {} },
+      { kind: "set", name: "dup", set: {} },
+    ];
+    const issues = validateTaskReferences(tasks);
+    expect(issues.filter((issue) => issue.message.includes("also named"))).toHaveLength(1);
+  });
+
+  it("resolves a then target within a nested do's own scope, attributing to the right container", () => {
+    const tasks: Task[] = [
+      {
+        kind: "do",
+        name: "group",
+        children: [
+          { kind: "set", name: "inner", set: {}, then: "sibling" },
+          { kind: "set", name: "sibling", set: {} },
+        ],
+      },
+    ];
+    expect(validateTaskReferences(tasks)).toEqual([]);
+  });
+
+  it("does not let a then target reach outside its own task list", () => {
+    const tasks: Task[] = [
+      {
+        kind: "do",
+        name: "group",
+        children: [{ kind: "set", name: "inner", set: {}, then: "outside" }],
+      },
+      { kind: "set", name: "outside", set: {} },
+    ];
+    const issues = validateTaskReferences(tasks);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].taskPath).toEqual({ containerPath: ["group"], taskName: "inner" });
   });
 });

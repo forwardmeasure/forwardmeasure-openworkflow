@@ -39,7 +39,11 @@ import { traceKey, type TraceEntry } from "./executionTrace";
 import { CATEGORY_COLOR, KIND_CATEGORY } from "./taskKindMeta";
 import { TaskInspector } from "./TaskInspector";
 import { TaskNode, type TaskNodeData } from "./TaskNode";
-import { validateWorkflowSource, type ValidationIssue } from "./validation";
+import {
+  validateTaskReferences,
+  validateWorkflowSource,
+  type ValidationIssue,
+} from "./validation";
 import {
   emptyTask,
   fromYaml,
@@ -410,7 +414,10 @@ export function WorkflowCanvas({
   // breadcrumb currently sits. Keyed the same way trace already is
   // (traceKey(containerPath, taskName)) so both attach to nodes via the
   // identical lookup below.
-  const clientValidationIssues = useMemo(() => validateWorkflowSource(source), [source]);
+  const clientValidationIssues = useMemo(
+    () => [...validateWorkflowSource(source), ...validateTaskReferences(parsed.tasks)],
+    [source, parsed.tasks],
+  );
   // Client-side (instant, every keystroke) and server-side (only as fresh
   // as the last Validate click) issues are just concatenated - both are
   // already the same ValidationIssue shape, and there's no meaningful

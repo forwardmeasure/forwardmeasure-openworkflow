@@ -15,6 +15,7 @@
 // reintroduce the "can't save WIP" friction that change just removed.
 import type { ErrorObject } from "ajv";
 import { load } from "js-yaml";
+import type { Task } from "./dsl";
 // Precompiled by scripts/generate-workflow-validator.mjs, not ajv.compile()'d
 // here at runtime - AJV's default compilation runs the schema through
 // `new Function(...)`, which the deployed app's CSP (script-src 'self', no
@@ -245,4 +246,107 @@ export function parseContractViolations(violations: string[]): ValidationIssue[]
       pointer: consumerPath,
     };
   });
+}
+
+const TERMINAL_DIRECTIVES = new Set(["continue", "exit", "end"]);
+
+function invalidThenTarget(then: string | undefined, namesInScope: Set<string>): boolean {
+  return then !== undefined && !TERMINAL_DIRECTIVES.has(then) && !namesInScope.has(then);
+}
+
+/**
+ * "I can have identical default and named cases... the target of the then
+ * clause can be a task that doesn't even exist" - real gaps in the parsed
+ * Task tree itself (workflow (3).yaml is the confirmed real-world case:
+ * switch cases with then: lhljhlj / then: pppp, neither ever a real task
+ * anywhere), not something the JSON-Schema pass above can catch - the
+ * schema only knows "then is a string," it has no notion of what other
+ * task names exist. Walks the ALREADY-PARSED task tree (not raw source,
+ * unlike validateWorkflowSource) since every "which names are in scope
+ * here" question is trivial once cases/children are already real arrays,
+ * not YAML entries to re-walk.
+ *
+ * A "then" only ever resolves within its OWN task list - a case in a
+ * switch nested inside a "do" can't jump to a task outside that "do", so
+ * namesInScope is always just "the sibling task names in this exact
+ * list," recomputed fresh at each recursion level. try's catch.do is its
+ * own separate list (a different scope from the try block's own
+ * children), matching CatchClause.children being a distinct field, not a
+ * sibling of TryTask.children.
+ *
+ * Deliberately NOT validating "when" expression syntax here - that would
+ * need a real jq/runtime-expression parser this canvas doesn't have; this
+ * only catches structural reference errors (nonexistent targets,
+ * duplicate names), which is most of what made workflow (3).yaml
+ * concretely broken.
+ */
+export function validateTaskReferences(
+  tasks: Task[],
+  containerPath: string[] = [],
+): ValidationIssue[] {
+  const issues: ValidationIssue[] = [];
+  const namesInScope = new Set(tasks.map((task) => task.name));
+  const seenNames = new Set<string>();
+
+  for (const task of tasks) {
+    const taskPath = { containerPath, taskName: task.name };
+    const pointerBase = [...containerPath, task.name].join("/");
+
+    if (seenNames.has(task.name)) {
+      issues.push({
+        taskPath,
+        message: `Another task in this same list is also named "${task.name}" - task names must be unique within a "do" list.`,
+        pointer: `/${pointerBase}`,
+      });
+    }
+    seenNames.add(task.name);
+
+    if (invalidThenTarget(task.then, namesInScope)) {
+      issues.push({
+        taskPath,
+        message: `"then: ${task.then}" doesn't match any task in this same list, and isn't continue/exit/end.`,
+        pointer: `/${pointerBase}/then`,
+      });
+    }
+
+    if (task.kind === "switch") {
+      const seenCaseNames = new Set<string>();
+      for (const switchCase of task.cases) {
+        if (seenCaseNames.has(switchCase.name)) {
+          issues.push({
+            taskPath,
+            message: `Two cases here are both named "${switchCase.name}" - only the first one can ever match.`,
+            pointer: `/${pointerBase}/${switchCase.name}`,
+          });
+        }
+        seenCaseNames.add(switchCase.name);
+        if (invalidThenTarget(switchCase.then, namesInScope)) {
+          issues.push({
+            taskPath,
+            message: `Case "${switchCase.name}"'s "then: ${switchCase.then}" doesn't match any task in this same list, and isn't continue/exit/end.`,
+            pointer: `/${pointerBase}/${switchCase.name}/then`,
+          });
+        }
+      }
+    }
+
+    if (task.kind === "try" && invalidThenTarget(task.catchClause.then, namesInScope)) {
+      issues.push({
+        taskPath,
+        message: `The catch block's "then: ${task.catchClause.then}" doesn't match any task in this same list, and isn't continue/exit/end.`,
+        pointer: `/${pointerBase}/catch/then`,
+      });
+    }
+
+    if ("children" in task) {
+      issues.push(...validateTaskReferences(task.children, [...containerPath, task.name]));
+    }
+    if (task.kind === "try") {
+      issues.push(
+        ...validateTaskReferences(task.catchClause.children, [...containerPath, task.name]),
+      );
+    }
+  }
+
+  return issues;
 }
