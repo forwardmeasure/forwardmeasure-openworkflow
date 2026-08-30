@@ -23,6 +23,14 @@ const CATEGORY_ORDER: TaskCategory[] = ["action", "control", "integration"];
 
 export type InsertableEdgeData = {
   onInsert: (edgeId: string, kind: Task["kind"]) => void;
+  // Only true for whichever edge the mouse is currently over (see
+  // WorkflowCanvas.tsx's onEdgeMouseEnter/Leave) - the "+" button used to
+  // render unconditionally at every edge's midpoint, permanent clutter
+  // sitting exactly on the line a user is trying to judge alignment
+  // against ("the + sign makes it impossible to horizontally align task
+  // boxes"). Kept visible while its own menu is open even if the mouse
+  // has moved off the edge in the meantime (see anchorEl below).
+  isHovered: boolean;
 };
 
 /**
@@ -59,8 +67,10 @@ export function InsertableEdge({
     targetY,
     targetPosition,
   });
-  const onInsert = (data as InsertableEdgeData | undefined)?.onInsert;
+  const insertableData = data as InsertableEdgeData | undefined;
+  const onInsert = insertableData?.onInsert;
   const buttonY = label ? labelY + 16 : labelY;
+  const showInsertButton = Boolean(onInsert) && (insertableData?.isHovered || Boolean(anchorEl));
   // React Flow tracks edge.selected internally (a plain click sets it) -
   // this edge type never READ that prop before, so a click had genuinely
   // no visible effect at all, which read as "there's no concept of
@@ -77,7 +87,7 @@ export function InsertableEdge({
   return (
     <>
       <BaseEdge id={id} path={edgePath} style={selectedStyle} markerEnd={markerEnd} label={label} />
-      {onInsert && (
+      {showInsertButton && (
         <EdgeLabelRenderer>
           <Avatar
             className="nodrag nopan"

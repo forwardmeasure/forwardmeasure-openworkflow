@@ -495,9 +495,33 @@ export function WorkflowCanvas({
   // deriveEdges/layout, which stay pure data functions with no callback
   // wiring or component-lifetime concerns.
   function withEdgeData(rawEdges: Edge[]): Edge[] {
-    const data: InsertableEdgeData = { onInsert: insertTaskOnEdge };
+    const data: InsertableEdgeData = { onInsert: insertTaskOnEdge, isHovered: false };
     return rawEdges.map((edge) => ({ ...edge, type: "insertable", data }));
   }
+
+  // "The + sign on an edge makes it impossible to horizontally align task
+  // boxes" - it used to render at every edge's midpoint unconditionally,
+  // permanent visual clutter sitting exactly on the line you're trying to
+  // judge alignment against. Now only the actually-hovered edge shows its
+  // button; every other edge's data.isHovered stays false. Cheap even for
+  // a large graph - toggling one boolean on already-existing edge objects,
+  // not recomputing topology.
+  const handleEdgeMouseEnter = useCallback((_event: unknown, hovered: Edge) => {
+    setEdges((current) =>
+      current.map((edge) => ({
+        ...edge,
+        data: { ...(edge.data as InsertableEdgeData), isHovered: edge.id === hovered.id },
+      })),
+    );
+  }, []);
+  const handleEdgeMouseLeave = useCallback(() => {
+    setEdges((current) =>
+      current.map((edge) => ({
+        ...edge,
+        data: { ...(edge.data as InsertableEdgeData), isHovered: false },
+      })),
+    );
+  }, []);
 
   useEffect(() => {
     const computed = layout(tasksInView);
@@ -923,6 +947,8 @@ export function WorkflowCanvas({
             }}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
+            onEdgeMouseEnter={handleEdgeMouseEnter}
+            onEdgeMouseLeave={handleEdgeMouseLeave}
             onReconnect={handleReconnect}
             onConnect={handleConnect}
             onNodeClick={(_event, node) =>
