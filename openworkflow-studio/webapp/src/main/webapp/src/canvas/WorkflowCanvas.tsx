@@ -567,8 +567,18 @@ export function WorkflowCanvas({
   // deriveEdges/layout, which stay pure data functions with no callback
   // wiring or component-lifetime concerns.
   function withEdgeData(rawEdges: Edge[]): Edge[] {
-    const data: InsertableEdgeData = { onInsert: insertTaskOnEdge, isHovered: false };
-    return rawEdges.map((edge) => ({ ...edge, type: "insertable", data }));
+    return rawEdges.map((edge) => {
+      const data: InsertableEdgeData = {
+        onInsert: insertTaskOnEdge,
+        onDelete: disconnectEdge,
+        // See disconnectEdge above - Start's outgoing edge can't be cut,
+        // so its delete button never renders in the first place rather
+        // than rendering a button that silently does nothing on click.
+        canDelete: edge.source !== START_ID,
+        isHovered: false,
+      };
+      return { ...edge, type: "insertable", data };
+    });
   }
 
   // "The + sign on an edge makes it impossible to horizontally align task
@@ -735,6 +745,48 @@ export function WorkflowCanvas({
     [source, onSourceChange, parsed.tasks, path],
   );
 
+  // React Flow's OWN default Backspace/Delete handling (disabled below via
+  // deleteKeyCode={null}) only ever removed the node/edge from this
+  // component's local nodes/edges state via applyNodeChanges/
+  // applyEdgeChanges - it never touched tasksInView, so the task stayed in
+  // the saved YAML the whole time. The card visually vanished; the source
+  // didn't change at all until some unrelated edit forced a resync, at
+  // which point the "deleted" task silently reappeared. Every path here
+  // instead goes through commitTasks, exactly like every other edit in this
+  // component - deleting on canvas is now indistinguishable from deleting
+  // in Source view.
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Backspace" && event.key !== "Delete") return;
+      const target = event.target as HTMLElement | null;
+      // Don't hijack Backspace while the user is editing text anywhere
+      // (Inspector fields, sticky note text, palette search, ...) - only a
+      // click on the canvas itself (a node or edge, never a form control)
+      // should ever mean "delete this."
+      if (target?.closest("input, textarea, [contenteditable='true']")) return;
+      if (selectedTaskIds.length > 0) {
+        const toDelete = new Set(selectedTaskIds);
+        commitTasks(tasksInView.filter((t) => !toDelete.has(t.name)));
+        setSelectedTaskName(undefined);
+        return;
+      }
+      if (selectedTaskName) {
+        commitTasks(tasksInView.filter((t) => t.name !== selectedTaskName));
+        setSelectedTaskName(undefined);
+        return;
+      }
+      const selectedSticky = nodes.find((n) => n.type === "sticky" && n.selected);
+      if (selectedSticky) {
+        deleteSticky(selectedSticky.id);
+        return;
+      }
+      const selectedEdge = edges.find((e) => e.selected);
+      if (selectedEdge) disconnectEdge(selectedEdge.id);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [selectedTaskIds, selectedTaskName, nodes, edges, tasksInView, commitTasks, deleteSticky]);
+
   /**
    * Wraps every selected task into one new "do" task, in their original
    * order - not necessarily contiguous in tasksInView (nothing here
@@ -793,6 +845,21 @@ export function WorkflowCanvas({
     forceFullLayoutRef.current = true;
     commitTasks(spliceTaskOnEdge(tasksInView, edge, emptyTask(kind, name)));
     setSelectedTaskName(name);
+  }
+
+  // "Delete" for a connection, not a task: cuts the edge by rewriting its
+  // SOURCE's "then" (or switch case's "then") to "exit" - reuses
+  // reconnectEdgeTarget wholesale, exactly the same way handleConnect above
+  // does, by treating END_ID as the reconnection target. That function
+  // already refuses to touch the Start->first-task edge (returns undefined),
+  // which is also why InsertableEdge never renders a delete button on it -
+  // "cut the entry point" isn't a meaningful operation here.
+  function disconnectEdge(edgeId: string) {
+    const edge = edges.find((e) => e.id === edgeId);
+    if (!edge) return;
+    const next = reconnectEdgeTarget(tasksInView, edge, END_ID);
+    if (!next) return;
+    commitTasks(next);
   }
 
   // A palette CLICK (as opposed to a drag - see onDrop below) carries no
@@ -898,6 +965,39 @@ export function WorkflowCanvas({
     // same way it already is for other hand-editable mistakes.
     commitTasks(tasksInView.filter((t) => t.name !== selectedTaskName));
     setSelectedTaskName(undefined);
+  }
+
+  // Unlike inserting on an edge (which deliberately splices into the live
+  // flow), a duplicate is NOT spliced into the task array next to the
+  // original - in this DSL, array position IS positional-fallthrough
+  // wiring, so inserting right after the original would silently
+  // reroute the original's own "next task" through the clone instead of
+  // wherever it used to go. Appended at the end instead, with every
+  // outbound "then" (including per-case, for "switch") reset to "exit" -
+  // a self-contained, disconnected copy the author wires up deliberately,
+  // matching Flowise's own "clear inbound bindings on the clone"
+  // behavior. Placed a fixed offset from the original's current canvas
+  // position (mirroring how a palette drag-drop seeds pendingPositionRef)
+  // rather than wherever auto-layout's column algorithm would put it.
+  function duplicateSelectedTask() {
+    if (!selectedTask) return;
+    const name = uniqueTaskName(tasksInView.map((t) => t.name));
+    const cloneBase: Task = { ...selectedTask, name, then: "exit" };
+    const clone: Task =
+      cloneBase.kind === "switch"
+        ? { ...cloneBase, cases: cloneBase.cases.map((c) => ({ ...c, then: "exit" })) }
+        : cloneBase;
+    const originalNode = nodes.find((n) => n.id === selectedTask.name);
+    if (originalNode) {
+      pendingPositionRef.current = {
+        name,
+        position: { x: originalNode.position.x + 40, y: originalNode.position.y + 40 },
+      };
+    } else {
+      forceFullLayoutRef.current = true;
+    }
+    commitTasks([...tasksInView, clone]);
+    setSelectedTaskName(name);
   }
 
   function drillInto(taskName: string) {
@@ -1060,6 +1160,16 @@ export function WorkflowCanvas({
             onEdgeMouseLeave={handleEdgeMouseLeave}
             onReconnect={handleReconnect}
             onConnect={handleConnect}
+            // Rejected live, mid-drag (React Flow highlights the connection
+            // line red while dragging over a handle this returns false
+            // for), not just after drop: a self-loop is never meaningful,
+            // and Start has no target handle rendered in the first place
+            // (AnchorNode only gives it a source handle) - this is the
+            // defense-in-depth backstop for both, evaluated against every
+            // handle the pointer passes over during the drag.
+            isValidConnection={(connection) =>
+              connection.source !== connection.target && connection.target !== START_ID
+            }
             onNodeClick={(_event, node) =>
               setSelectedTaskName(node.type === "task" ? node.id : undefined)
             }
@@ -1103,6 +1213,12 @@ export function WorkflowCanvas({
             proOptions={{ hideAttribution: true }}
             snapToGrid
             snapGrid={SNAP_GRID}
+            // React Flow's built-in Backspace/Delete handling only ever
+            // updates local nodes/edges state, bypassing tasksInView
+            // entirely - a real desync bug (see the keydown effect above,
+            // which replaces it with task-aware deletion routed through
+            // commitTasks).
+            deleteKeyCode={null}
             // When two+ edges land on the same handle, their reconnect
             // drag-targets sit exactly on top of each other - whichever
             // rendered last wins every click, making the others
@@ -1190,6 +1306,7 @@ export function WorkflowCanvas({
             task={selectedTask}
             onChange={updateTask}
             onDelete={deleteSelectedTask}
+            onDuplicate={duplicateSelectedTask}
           />
         )}
       </Drawer>

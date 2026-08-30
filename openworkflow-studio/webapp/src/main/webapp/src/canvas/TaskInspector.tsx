@@ -419,10 +419,12 @@ export function TaskInspector({
   task,
   onChange,
   onDelete,
+  onDuplicate,
 }: {
   task: Task;
   onChange: (task: Task) => void;
   onDelete: () => void;
+  onDuplicate: () => void;
 }) {
   const [name, setName] = useState(task.name);
   const [callTarget, setCallTarget] = useState(
@@ -1421,7 +1423,10 @@ export function TaskInspector({
           />
         </AccordionDetails>
       </Accordion>
-      <Box>
+      <Box sx={{ display: "flex", gap: 1 }}>
+        <Button size="small" onClick={onDuplicate}>
+          Duplicate task
+        </Button>
         <Button color="error" size="small" onClick={onDelete}>
           Delete task
         </Button>

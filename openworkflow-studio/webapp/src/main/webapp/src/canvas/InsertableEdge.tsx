@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { BaseEdge, EdgeLabelRenderer, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
 import AddIcon from "@mui/icons-material/Add";
+import CloseIcon from "@mui/icons-material/Close";
 import Avatar from "@mui/material/Avatar";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
@@ -31,6 +32,16 @@ export type InsertableEdgeData = {
   // boxes"). Kept visible while its own menu is open even if the mouse
   // has moved off the edge in the meantime (see anchorEl below).
   isHovered: boolean;
+  // "Delete" this connection - clears the source task's (or switch case's)
+  // "then" override back to "exit" rather than removing anything from the
+  // task list (see WorkflowCanvas.tsx's disconnectEdge). Mirrors onInsert:
+  // WorkflowCanvas owns the actual task-array logic, this component only
+  // renders the button and reports which edge was clicked.
+  onDelete: (edgeId: string) => void;
+  // False only for the Start->first-task edge (see WorkflowCanvas.tsx's
+  // withEdgeData) - cutting the entry point isn't a meaningful operation,
+  // so that edge never gets a delete button in the first place.
+  canDelete: boolean;
 };
 
 /**
@@ -85,7 +96,16 @@ export function InsertableEdge({
   const buttonX = isMoreHorizontal ? labelX : labelX + PERPENDICULAR_OFFSET;
   const buttonY =
     (isMoreHorizontal ? labelY - PERPENDICULAR_OFFSET : labelY) + (label ? 16 : 0);
+  // Mirrored to the OTHER side of the edge's own path from the "+" button
+  // above (same offset, opposite sign) - same "off the line, not on it"
+  // reasoning, and keeps the two buttons from sitting on top of each other.
+  const deleteButtonX = isMoreHorizontal ? labelX : labelX - PERPENDICULAR_OFFSET;
+  const deleteButtonY =
+    (isMoreHorizontal ? labelY + PERPENDICULAR_OFFSET : labelY) + (label ? 16 : 0);
   const showInsertButton = Boolean(onInsert) && (insertableData?.isHovered || Boolean(anchorEl));
+  const onDelete = insertableData?.onDelete;
+  const showDeleteButton =
+    Boolean(onDelete) && insertableData?.canDelete !== false && insertableData?.isHovered;
   // React Flow tracks edge.selected internally (a plain click sets it) -
   // this edge type never READ that prop before, so a click had genuinely
   // no visible effect at all, which read as "there's no concept of
@@ -124,6 +144,34 @@ export function InsertableEdge({
             }}
           >
             <AddIcon sx={{ fontSize: 13 }} />
+          </Avatar>
+        </EdgeLabelRenderer>
+      )}
+      {showDeleteButton && (
+        <EdgeLabelRenderer>
+          <Avatar
+            className="nodrag nopan"
+            onClick={(event) => {
+              event.stopPropagation();
+              onDelete?.(id);
+            }}
+            sx={{
+              position: "absolute",
+              left: deleteButtonX,
+              top: deleteButtonY,
+              transform: "translate(-50%, -50%)",
+              width: 18,
+              height: 18,
+              bgcolor: "background.paper",
+              color: "text.secondary",
+              border: 1,
+              borderColor: "divider",
+              cursor: "pointer",
+              pointerEvents: "all",
+              "&:hover": { color: "error.main", borderColor: "error.main" },
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 13 }} />
           </Avatar>
         </EdgeLabelRenderer>
       )}
