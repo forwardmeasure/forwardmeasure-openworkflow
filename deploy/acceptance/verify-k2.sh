@@ -30,7 +30,7 @@ namespace=forwardmeasure-openworkflow
 identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
 identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
 keycloak_port=18100
-service="openworkflow-definition-${framework}"
+service="openworkflow-definition-management-${framework}"
 definition="k2-${framework}-$(date +%s)"
 work=$(mktemp -d)
 cleanup() {

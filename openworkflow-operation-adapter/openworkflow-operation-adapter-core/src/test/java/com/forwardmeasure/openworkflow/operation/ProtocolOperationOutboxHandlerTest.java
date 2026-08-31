@@ -87,6 +87,63 @@ final class ProtocolOperationOutboxHandlerTest {
   }
 
   @Test
+  void correlatedWorkerRequestedStartsBothItsCommandAndEventsCoordinators() {
+    var executionId = execution();
+    var calls = new ArrayList<String>();
+    var handler =
+        new ProtocolOperationOutboxHandler(
+            (routed, operationId) -> {
+              calls.add(operationId);
+              return CompletableFuture.completedFuture(
+                  new ProtocolOperationCoordinatorReply(routed, operationId, true));
+            });
+
+    handler
+        .process(
+            envelope(
+                executionId,
+                new EngineEvent.CorrelatedWorkerRequested(
+                    UUID.randomUUID(),
+                    "/execute",
+                    JsonNodeFactory.instance.objectNode(),
+                    JsonNodeFactory.instance.objectNode(),
+                    0,
+                    "worker-1",
+                    descriptor("worker-1"),
+                    descriptor("worker-1:events"),
+                    descriptor("worker-1:cancel"),
+                    AT)))
+        .toCompletableFuture()
+        .join();
+
+    assertEquals(List.of("worker-1", "worker-1:events"), calls);
+  }
+
+  @Test
+  void correlatedWorkerCancellationDispatchedStartsOnlyTheCancellationCoordinator() {
+    var executionId = execution();
+    var calls = new ArrayList<String>();
+    var handler =
+        new ProtocolOperationOutboxHandler(
+            (routed, operationId) -> {
+              calls.add(operationId);
+              return CompletableFuture.completedFuture(
+                  new ProtocolOperationCoordinatorReply(routed, operationId, true));
+            });
+
+    handler
+        .process(
+            envelope(
+                executionId,
+                new EngineEvent.CorrelatedWorkerCancellationDispatched(
+                    UUID.randomUUID(), "/execute", "worker-1", descriptor("worker-1:cancel"), AT)))
+        .toCompletableFuture()
+        .join();
+
+    assertEquals(List.of("worker-1:cancel"), calls);
+  }
+
+  @Test
   void ignoresEventsThatDoNotRequestAProtocolOperation() {
     var handler =
         new ProtocolOperationOutboxHandler(

@@ -67,6 +67,8 @@
         <!-- Product-specific quality plugins not owned by the shared Java parent. -->
         <apache.rat.version>0.17</apache.rat.version>
         <duplicate.finder.version>2.0.1</duplicate.finder.version>
+        <cyclonedx.maven.version>2.9.2</cyclonedx.maven.version>
+        <dependency.check.version>12.2.2</dependency.check.version>
 
         <!-- Product-wide aggregate coverage contract. -->
         <jacoco.minimum.line.coverage>0.85</jacoco.minimum.line.coverage>
@@ -81,8 +83,6 @@
         <module>openworkflow-expression-jq</module>
         <module>openworkflow-definition</module>
         <module>openworkflow-authorization</module>
-        <module>openworkflow-tenant-provisioning</module>
-        <module>openworkflow-migrations</module>
         <module>openworkflow-definition-management</module>
         <module>openworkflow-api-language-bindings</module>
         <module>openworkflow-engine</module>
@@ -308,6 +308,11 @@
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-pekko-eventing-cassandra</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-eventing-jpa</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -560,6 +565,28 @@
                 <artifactId>openworkflow-studio-webapp</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <!-- Pre-existing internal conflict inside liquibase-cassandra's own transitive tree
+            (openworkflow-migrations -> liquibase-cassandra pulls liquibase-core:4.33.0 ->
+            opencsv:5.11.2 directly AND cassandra-jdbc-wrapper:4.16.3 -> opencsv:5.12.0) - never
+            tripped the reactor's dependency-convergence enforcer before Phase 14's
+            ProvisionedTenantSchemas made openworkflow-migrations a compile-scope dependency of a
+            module reachable from an enforcer-checked deployable. Pinned here (not at either
+            caller) so every module in the reactor converges on the same resolved version. -->
+            <dependency>
+                <groupId>com.opencsv</groupId>
+                <artifactId>opencsv</artifactId>
+                <version>5.12.0</version>
+            </dependency>
+            <!-- Same Phase 14 shape: openworkflow-migrations -> liquibase-core pulls
+            snakeyaml:2.6, openworkflow-pekko-runtime -> jackson-dataformat-yaml pulls
+            snakeyaml:2.5 - both now meet wherever openworkflow-migrations is a compile-scope
+            dependency alongside the Pekko runtime. Pinned to the higher, liquibase-required
+            version. -->
+            <dependency>
+                <groupId>org.yaml</groupId>
+                <artifactId>snakeyaml</artifactId>
+                <version>2.6</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -650,6 +677,28 @@
                     </systemPropertyVariables>
                 </configuration>
             </plugin>
+            <!--
+                 Bound unconditionally (not behind a separate opt-in profile) - openworkflow-coverage's
+                 aggregate check runs on every `verify`, not just when someone remembers a coverage
+                 profile flag. Without prepare-agent running somewhere before tests execute, every
+                 module's jacoco.exec is simply never written, and the aggregate check's 85%/75%/
+                 0-missed-classes rule then evaluates against zero collected data - which JaCoCo
+                 reports as trivially passing (0 missed out of 0 measured), not as "coverage is
+                 good." Same gap, same fix, as forwardmeasure-entity-intelligence's root pom (which
+                 itself flagged this exact gap here first).
+            -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
@@ -705,7 +754,7 @@
                         <!-- Exact Apache-2.0 upstream conformance fixtures; integrity is
                         SHA-pinned. -->
                         <inputExclude>**/official-v1.0.3/**</inputExclude>
-                        <inputExclude>openworkflow-tenant-provisioning/src/main/resources/*.json</inputExclude>
+                        <inputExclude>openworkflow-deployments/tenant-provisioning/src/main/resources/*.json</inputExclude>
                         <inputExclude>docs/diagrams/**</inputExclude>
                         <!-- Helm chart metadata and generated bootstrap CQL are distribution
                         assets. -->
@@ -822,6 +871,65 @@
                 <skipITs>false</skipITs>
                 <fullSuite>true</fullSuite>
             </properties>
+        </profile>
+        <profile>
+            <id>supply-chain</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.cyclonedx</groupId>
+                        <artifactId>cyclonedx-maven-plugin</artifactId>
+                        <version>${cyclonedx.maven.version}</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>aggregate-java-sbom</id>
+                                <phase>verify</phase>
+                                <goals><goal>makeAggregateBom</goal></goals>
+                                <configuration>
+                                    <outputName>openworkflow-java-bom</outputName>
+                                    <outputFormat>all</outputFormat>
+                                    <includeBomSerialNumber>true</includeBomSerialNumber>
+                                    <includeCompileScope>true</includeCompileScope>
+                                    <includeRuntimeScope>true</includeRuntimeScope>
+                                    <includeTestScope>false</includeTestScope>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+        <profile>
+            <id>vulnerability-audit</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.owasp</groupId>
+                        <artifactId>dependency-check-maven</artifactId>
+                        <version>${dependency.check.version}</version>
+                        <inherited>false</inherited>
+                        <executions>
+                            <execution>
+                                <id>aggregate-vulnerability-audit</id>
+                                <phase>verify</phase>
+                                <goals><goal>aggregate</goal></goals>
+                                <configuration>
+                                    <failBuildOnCVSS>7.0</failBuildOnCVSS>
+                                    <suppressionFiles>
+                                        <suppressionFile>${maven.multiModuleProjectDirectory}/security/dependency-check-suppressions.xml</suppressionFile>
+                                    </suppressionFiles>
+                                    <formats>
+                                        <format>HTML</format>
+                                        <format>JSON</format>
+                                        <format>SARIF</format>
+                                    </formats>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
         </profile>
     </profiles>
 </project>

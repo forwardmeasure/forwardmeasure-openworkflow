@@ -10,6 +10,9 @@
  */
 package com.forwardmeasure.openworkflow.eventing.postgresql;
 
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
+import com.forwardmeasure.openworkflow.actor.PostgresConnectionSettings;
+import com.forwardmeasure.openworkflow.actor.TenantPersistencePlugins;
 import com.forwardmeasure.openworkflow.actor.WorkflowEntity;
 import com.forwardmeasure.openworkflow.actor.WorkflowSharding;
 import com.forwardmeasure.openworkflow.engine.api.EngineEvent;
@@ -22,7 +25,6 @@ import java.util.Objects;
 import javax.sql.DataSource;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.cluster.sharding.typed.javadsl.ShardedDaemonProcess;
-import org.apache.pekko.persistence.jdbc.query.javadsl.JdbcReadJournal;
 import org.apache.pekko.persistence.query.Offset;
 import org.apache.pekko.projection.HandlerRecoveryStrategy;
 import org.apache.pekko.projection.Projection;
@@ -33,28 +35,37 @@ import org.apache.pekko.projection.eventsourced.javadsl.EventSourcedProvider;
 import org.apache.pekko.projection.javadsl.SourceProvider;
 import org.apache.pekko.projection.jdbc.javadsl.JdbcProjection;
 
-/** PostgreSQL-backed durable offsets for the CloudEvent publication outbox. */
+/**
+ * PostgreSQL-backed durable offsets for the CloudEvent publication outbox - one instance per
+ * tenant, since the journal it reads and the offset store it writes both live inside that tenant's
+ * own Postgres schema.
+ */
 public final class PostgresqlCloudEventOutbox {
   private PostgresqlCloudEventOutbox() {}
 
   public static void start(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       WorkflowSharding workflows,
       CloudEventPublisher publisher,
       Duration askTimeout,
       ExecutionQueryRepository executions) {
     Objects.requireNonNull(system, "system");
+    Objects.requireNonNull(schema, "schema");
     ShardedDaemonProcess.get(system)
         .init(
             ProjectionBehavior.Command.class,
-            "openworkflow-eventing-postgresql",
+            "openworkflow-eventing-postgresql-" + schema.value(),
             WorkflowEntity.PROJECTION_TAG_COUNT,
             index ->
                 ProjectionBehavior.create(
                     projection(
                         system,
                         dataSource,
+                        schema,
+                        connection,
                         workflows,
                         publisher,
                         askTimeout,
@@ -66,17 +77,23 @@ public final class PostgresqlCloudEventOutbox {
   private static Projection<EventEnvelope<EngineEvent>> projection(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       WorkflowSharding workflows,
       CloudEventPublisher publisher,
       Duration askTimeout,
       ExecutionQueryRepository executions,
       String tag) {
     SourceProvider<Offset, EventEnvelope<EngineEvent>> source =
-        EventSourcedProvider.eventsByTag(system, JdbcReadJournal.Identifier(), tag);
+        EventSourcedProvider.eventsByTag(
+            system,
+            TenantPersistencePlugins.readJournalPluginId(schema),
+            TenantPersistencePlugins.readJournalPluginConfig(system, schema, connection),
+            tag);
     return JdbcProjection.atLeastOnceAsync(
-            ProjectionId.of("openworkflow-eventing", tag),
+            ProjectionId.of("openworkflow-eventing-" + schema.value(), tag),
             source,
-            () -> new DataSourceJdbcSession(dataSource),
+            () -> new DataSourceJdbcSession(dataSource, schema),
             () ->
                 new CloudEventOutboxHandler(
                     workflows, publisher, askTimeout, Clock.systemUTC(), executions),

@@ -12,6 +12,7 @@ package com.forwardmeasure.openworkflow.actor;
 
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import java.util.Objects;
+import java.util.Optional;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Props;
 import org.apache.pekko.cluster.sharding.typed.ClusterShardingSettings;
@@ -33,8 +34,16 @@ public final class SubworkflowCoordinatorSharding {
 
   public static SubworkflowCoordinatorSharding initialize(
       ActorSystem<?> system, WorkflowSharding workflows) {
+    return initialize(system, workflows, Optional.empty());
+  }
+
+  public static SubworkflowCoordinatorSharding initialize(
+      ActorSystem<?> system,
+      WorkflowSharding workflows,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     Objects.requireNonNull(system, "system");
     Objects.requireNonNull(workflows, "workflows");
+    Objects.requireNonNull(postgresConnection, "postgresConnection");
     ClusterSharding sharding = ClusterSharding.get(system);
     var settings =
         ClusterShardingSettings.create(system)
@@ -46,7 +55,9 @@ public final class SubworkflowCoordinatorSharding {
                 TYPE_KEY,
                 context ->
                     SubworkflowCoordinatorEntity.create(
-                        ExecutionId.fromEntityId(context.getEntityId()), workflows))
+                        ExecutionId.fromEntityId(context.getEntityId()),
+                        workflows,
+                        postgresConnection))
             .withSettings(settings)
             .withEntityProps(Props.empty().withMailboxFromConfig("openworkflow.entity-mailbox")));
     return new SubworkflowCoordinatorSharding(sharding);

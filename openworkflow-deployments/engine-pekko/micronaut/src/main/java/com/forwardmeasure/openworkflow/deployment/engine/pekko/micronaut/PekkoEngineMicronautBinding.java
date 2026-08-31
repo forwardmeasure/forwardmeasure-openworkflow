@@ -1,23 +1,77 @@
 /* Licensed to the Apache Software Foundation (ASF) under one or more contributor license agreements. */
 package com.forwardmeasure.openworkflow.deployment.engine.pekko.micronaut;
 
+import com.datastax.oss.driver.api.core.CqlSession;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.forwardmeasure.jpa.tenancy.TenantScope;
 import com.forwardmeasure.openworkflow.actor.PekkoClusterRuntime;
 import com.forwardmeasure.openworkflow.actor.PekkoEngineRuntime;
+import com.forwardmeasure.openworkflow.actor.PostgresConnectionSettings;
+import com.forwardmeasure.openworkflow.actor.ScheduledExecutionDispatcher;
+import com.forwardmeasure.openworkflow.actor.SubworkflowCoordinatorSharding;
+import com.forwardmeasure.openworkflow.actor.TenantProjectionSupervisor;
+import com.forwardmeasure.openworkflow.actor.WorkflowScheduleSharding;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProvider;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEventSink;
 import com.forwardmeasure.openworkflow.engine.http.HttpExecutionEventSink;
 import com.forwardmeasure.openworkflow.engine.http.server.EngineCommandResource;
+import com.forwardmeasure.openworkflow.eventing.CloudEventHttpDecoder;
+import com.forwardmeasure.openworkflow.eventing.CloudEventIngress;
+import com.forwardmeasure.openworkflow.eventing.CloudEventIngressGateway;
+import com.forwardmeasure.openworkflow.eventing.CloudEventPublisher;
+import com.forwardmeasure.openworkflow.eventing.CloudEventSubscriptionRepository;
+import com.forwardmeasure.openworkflow.eventing.HttpCloudEventPublisher;
+import com.forwardmeasure.openworkflow.eventing.cassandra.CassandraCloudEventOutbox;
+import com.forwardmeasure.openworkflow.eventing.cassandra.CassandraCloudEventSubscriptionProjection;
+import com.forwardmeasure.openworkflow.eventing.cassandra.CassandraCloudEventSubscriptionRepository;
+import com.forwardmeasure.openworkflow.eventing.cassandra.CassandraSubworkflowOutbox;
+import com.forwardmeasure.openworkflow.eventing.jaxrs.AuthenticatedActorProvider;
+import com.forwardmeasure.openworkflow.eventing.jaxrs.AuthzenAuthenticatedActorProvider;
+import com.forwardmeasure.openworkflow.eventing.jaxrs.CloudEventIngressResource;
+import com.forwardmeasure.openworkflow.eventing.persistence.HibernateSessionExecutionQueryRepository;
+import com.forwardmeasure.openworkflow.eventing.persistence.HibernateSessionSubworkflowPlanResolver;
+import com.forwardmeasure.openworkflow.eventing.postgresql.PostgresqlCloudEventOutbox;
+import com.forwardmeasure.openworkflow.eventing.postgresql.PostgresqlCloudEventSubscriptionProjection;
+import com.forwardmeasure.openworkflow.eventing.postgresql.PostgresqlCloudEventSubscriptionRepository;
+import com.forwardmeasure.openworkflow.eventing.postgresql.PostgresqlSubworkflowOutbox;
+import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.persistence.PersistenceConfigLoader;
 import com.forwardmeasure.openworkflow.persistence.PersistenceProfile;
 import com.typesafe.config.ConfigFactory;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Value;
 import jakarta.inject.Singleton;
+import jakarta.persistence.EntityManagerFactory;
+import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.util.List;
+import java.util.Optional;
+import javax.sql.DataSource;
 
+/**
+ * publish:emit: CloudEvents, run:workflow: subworkflows, and receive:/listen: steps all durably
+ * record a pending interaction and then rely on a separate at-least-once Pekko Projection (the
+ * "outbox"/"subscription projection") reading the same journal to actually dispatch/launch/route
+ * them - unlike Kafka-Streams, where the topology itself is the always-running dispatch mechanism,
+ * Pekko needs these started explicitly. Until this class started them, none of the three were
+ * reachable on a real Pekko deployment: the actor correctly recorded the pending state and then
+ * waited forever, since nothing was running to pick it up (verified by grepping the whole
+ * deployable surface for production, non-test callers - there were none, anywhere, before this). A
+ * fourth, closely related gap found the same way: event-triggered schedules had no production
+ * consumer for the {@code ScheduledExecutionRequest} they emit, so a matched CloudEvent would have
+ * silently never launched the schedule's execution - see {@link ScheduledExecutionDispatcher}.
+ *
+ * <p>{@code startEventing} is a plain {@code @Singleton} factory method, not an explicit startup
+ * event listener - {@code CloudEventIngressResource} (like the existing, unchanged {@code
+ * EngineCommandResource}) is a {@code @Path}-annotated HTTP resource Micronaut's own HTTP server
+ * eagerly discovers and constructs at startup, which transitively forces this method (and
+ * everything it depends on) to run at the right time, same as {@code provider}/{@code runtime}
+ * already do.
+ */
 @Factory
 public class PekkoEngineMicronautBinding {
   @Singleton
@@ -27,6 +81,37 @@ public class PekkoEngineMicronautBinding {
       @Value("${openworkflow.execution-events.timeout}") Duration timeout) {
     return new HttpExecutionEventSink(
         url, HttpClient.newBuilder().connectTimeout(timeout).build(), mapper, timeout);
+  }
+
+  @Singleton
+  CloudEventPublisher cloudEventPublisher(
+      ObjectMapper mapper,
+      @Value("${openworkflow.cloud-events.publish-url}") URI url,
+      @Value("${openworkflow.cloud-events.timeout}") Duration timeout) {
+    return new HttpCloudEventPublisher(url, mapper, timeout);
+  }
+
+  @Singleton
+  ExecutionQueryRepository executionQueries(
+      TenantScope tenants, EntityManagerFactory entityManagerFactory, ObjectMapper mapper) {
+    return new HibernateSessionExecutionQueryRepository(tenants, entityManagerFactory, mapper);
+  }
+
+  @Singleton
+  HibernateSessionSubworkflowPlanResolver subworkflowPlanResolver(
+      TenantScope tenants, EntityManagerFactory entityManagerFactory) {
+    return new HibernateSessionSubworkflowPlanResolver(tenants, entityManagerFactory);
+  }
+
+  @Singleton
+  AuthenticatedActorProvider authenticatedActorProvider(
+      ActiveOrganizationProvider organizations, AuthorizationService authorization) {
+    return new AuthzenAuthenticatedActorProvider(organizations, authorization);
+  }
+
+  @Singleton
+  CloudEventHttpDecoder cloudEventHttpDecoder(ObjectMapper mapper) {
+    return new CloudEventHttpDecoder(mapper);
   }
 
   @Singleton
@@ -54,13 +139,91 @@ public class PekkoEngineMicronautBinding {
             username,
             password,
             datacenter);
+    Optional<PostgresConnectionSettings> postgresConnection =
+        profile == PersistenceProfile.POSTGRESQL
+            ? Optional.of(new PostgresConnectionSettings(endpoint, username, password))
+            : Optional.empty();
     return new PekkoEngineRuntime(
         systemName,
         configuration,
         new PekkoClusterRuntime.Settings(
             discovery, podIp, arteryPort, managementPort, contacts, role),
         askTimeout,
-        events);
+        events,
+        postgresConnection);
+  }
+
+  /**
+   * {@code ShardedDaemonProcess} needs {@code runtime}'s already-live actor system, not a fresh
+   * one, so this reuses {@code runtime.actorSystem()}/{@code runtime.workflows()} rather than
+   * constructing its own.
+   */
+  @Singleton
+  CloudEventIngress startEventing(
+      PekkoEngineRuntime runtime,
+      CloudEventPublisher publisher,
+      ExecutionQueryRepository executions,
+      HibernateSessionSubworkflowPlanResolver subworkflows,
+      DataSource dataSource,
+      @Value("${openworkflow.persistence.profile}") String profileName,
+      @Value("${openworkflow.persistence.endpoint:}") String endpoint,
+      @Value("${openworkflow.persistence.local-datacenter:datacenter1}") String datacenter,
+      @Value("${openworkflow.eventing.ask-timeout}") Duration askTimeout,
+      @Value("${openworkflow.eventing.tenant-rescan-interval:3m}") Duration tenantRescanInterval) {
+    var system = runtime.actorSystem();
+    var workflows = runtime.workflows();
+    var coordinators =
+        SubworkflowCoordinatorSharding.initialize(system, workflows, runtime.postgresConnection());
+    var dispatch = ScheduledExecutionDispatcher.spawn(system, workflows);
+    var schedules =
+        WorkflowScheduleSharding.initialize(system, dispatch, runtime.postgresConnection());
+    // Not its own Micronaut bean deliberately - only exists at all for the Cassandra profile, and
+    // not explicitly closed on shutdown - this process only ever terminates by the JVM exiting,
+    // which closes the socket; nothing else in this class needs the session directly.
+    CloudEventSubscriptionRepository subscriptions;
+    if (PersistenceProfile.parse(profileName) == PersistenceProfile.CASSANDRA) {
+      CqlSession session =
+          CqlSession.builder()
+              .addContactPoint(contactPoint(endpoint))
+              .withLocalDatacenter(datacenter)
+              .build();
+      subscriptions = new CassandraCloudEventSubscriptionRepository(session);
+      CassandraCloudEventOutbox.start(system, workflows, publisher, askTimeout, executions);
+      CassandraSubworkflowOutbox.start(system, subworkflows, coordinators, askTimeout);
+      CassandraCloudEventSubscriptionProjection.start(system, subscriptions);
+    } else {
+      subscriptions = new PostgresqlCloudEventSubscriptionRepository(dataSource);
+      PostgresConnectionSettings connection =
+          runtime
+              .postgresConnection()
+              .orElseThrow(
+                  () ->
+                      new IllegalStateException(
+                          "Postgres persistence profile requires connection settings"));
+      TenantProjectionSupervisor.start(
+          system,
+          dataSource,
+          connection,
+          tenantRescanInterval,
+          List.of(
+              (sys, ds, schema, conn) ->
+                  PostgresqlCloudEventOutbox.start(
+                      sys, ds, schema, conn, workflows, publisher, askTimeout, executions),
+              (sys, ds, schema, conn) ->
+                  PostgresqlSubworkflowOutbox.start(
+                      sys, ds, schema, conn, subworkflows, coordinators, askTimeout),
+              (sys, ds, schema, conn) ->
+                  PostgresqlCloudEventSubscriptionProjection.start(
+                      sys, ds, schema, conn, subscriptions)));
+    }
+    return new CloudEventIngressGateway(
+        workflows, schedules, system, askTimeout, subscriptions, 10_000);
+  }
+
+  @Singleton
+  CloudEventIngressResource cloudEventIngress(
+      CloudEventIngress ingress, AuthenticatedActorProvider actors, CloudEventHttpDecoder decoder) {
+    return new CloudEventIngressResource(ingress, actors, decoder);
   }
 
   @Singleton
@@ -71,5 +234,14 @@ public class PekkoEngineMicronautBinding {
   @Singleton
   EngineCommandResource commands(ExecutionEngineProvider provider) {
     return new EngineCommandResource(provider);
+  }
+
+  private static InetSocketAddress contactPoint(String endpoint) {
+    int separator = endpoint.lastIndexOf(':');
+    if (separator < 0) {
+      throw new IllegalArgumentException("Cassandra endpoint must be host:port: " + endpoint);
+    }
+    return new InetSocketAddress(
+        endpoint.substring(0, separator), Integer.parseInt(endpoint.substring(separator + 1)));
   }
 }

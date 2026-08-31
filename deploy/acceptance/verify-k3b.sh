@@ -7,8 +7,13 @@
 
 set -euo pipefail
 
+# Kafka-Streams engine releases are framework-suffixed (execution-engines.yaml.gotmpl:
+# openworkflow-engine-kafka-streams-<framework>), so this needs the same framework argument
+# every other per-framework acceptance script takes.
+framework=${1:?usage: verify-k3b.sh quarkus|spring|micronaut}
+
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-OPENWORKFLOW_K3A_RUNTIME=openworkflow-kafka \
+OPENWORKFLOW_K3A_RUNTIME=openworkflow-engine-kafka-streams-$framework \
 OPENWORKFLOW_K3A_PERSISTENCE=Kafka-Streams \
 OPENWORKFLOW_ACCEPTANCE_ENGINE=kafka-streams \
 OPENWORKFLOW_ACCEPTANCE_CHECKPOINT=K3B \

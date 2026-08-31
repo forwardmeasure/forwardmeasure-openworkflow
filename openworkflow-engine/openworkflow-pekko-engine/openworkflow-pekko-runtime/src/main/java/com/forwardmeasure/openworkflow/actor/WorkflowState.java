@@ -12,7 +12,9 @@ package com.forwardmeasure.openworkflow.actor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.forwardmeasure.openworkflow.definition.CallPlan;
 import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
+import com.forwardmeasure.openworkflow.engine.api.BlockingConstructs;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionStatus;
 import java.time.Instant;
@@ -154,6 +156,22 @@ public sealed interface WorkflowState
 
     @Override
     public ExecutionStatus status() {
+      // A pending correlated-worker call is a real wait, not active computation - same semantic
+      // WAITING already carries for the dedicated Waiting FSM state (timers/retries). Without
+      // this, an execution blocked on an external worker for hours reports RUNNING the whole
+      // time, indistinguishable from genuine computation through the public contract. See
+      // docs/engine-construct-gap-audit.md gap #4. Routed through the same
+      // BlockingConstructs.isBlocking(CORRELATED_WORKER) check openworkflow-kafka-streams-engine
+      // consults, instead of a second independently-authored WAITING rule - see gap #4's Phase 4
+      // note.
+      for (TaskExecutionFrame frame : taskStack) {
+        EventExecutionFrame event = frame.event();
+        if (event != null
+            && event.kind() == EventExecutionFrame.Kind.CORRELATED_WORKER
+            && BlockingConstructs.isBlocking(CallPlan.Kind.CORRELATED_WORKER)) {
+          return ExecutionStatus.WAITING;
+        }
+      }
       return ExecutionStatus.RUNNING;
     }
   }

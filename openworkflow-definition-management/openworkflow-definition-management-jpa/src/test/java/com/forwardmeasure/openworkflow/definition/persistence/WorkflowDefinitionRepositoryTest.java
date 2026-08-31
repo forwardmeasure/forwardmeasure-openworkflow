@@ -47,7 +47,7 @@ class WorkflowDefinitionRepositoryTest {
   void persistsWorkflowAndDefinitionsWithoutCrossTenantVisibility(
       PostgreSqlTestContainer database) {
     OpenWorkflowTenantMigrator migrator =
-        new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+        new OpenWorkflowTenantMigrator(database.dataSource(), "openworkflow_runtime");
     migrator.ensureRuntimeRole(database.password());
     migrator.provisionAndMigrate(TENANT_A);
     migrator.provisionAndMigrate(TENANT_B);
@@ -78,7 +78,7 @@ class WorkflowDefinitionRepositoryTest {
   void persistsTheCompleteGovernanceHistoryAndOneImmutablePublication(
       PostgreSqlTestContainer database) {
     OpenWorkflowTenantMigrator migrator =
-        new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+        new OpenWorkflowTenantMigrator(database.dataSource(), "openworkflow_runtime");
     migrator.ensureRuntimeRole(database.password());
     migrator.provisionAndMigrate(TENANT_A);
 

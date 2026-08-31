@@ -22,6 +22,5 @@
   <name>ForwardMeasure OpenWorkflow :: Quarkus Bindings</name>
   <modules>
     <module>openworkflow-quarkus-binding</module>
-    <module>openworkflow-quarkus-service</module>
   </modules>
 </project>

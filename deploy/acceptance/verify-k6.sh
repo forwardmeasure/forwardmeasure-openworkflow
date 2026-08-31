@@ -5,19 +5,25 @@ set -euo pipefail
 script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 if [[ ${OPENWORKFLOW_K6_CHILD:-false} != true ]]; then
+  # A platform deploys exactly the framework selected by workflowPlatformFramework, not all
+  # three simultaneously (deploy/helmfile/helmfiles/studios.yaml.gotmpl); every engine release is
+  # also framework-suffixed (execution-engines.yaml.gotmpl: openworkflow-engine-<engine>-
+  # <framework>) - so this needs the one deployed framework, parameterized like verify-k2.sh,
+  # instead of hardcoding a loop over all three (Pekko included) that would fail outright on the
+  # ones not deployed.
+  framework=${1:?usage: verify-k6.sh quarkus|spring|micronaut}
   for profile in postgresql cassandra; do
     OPENWORKFLOW_K6_CHILD=true \
-    OPENWORKFLOW_K6_SERVICE="openworkflow-pekko-$profile" \
+    OPENWORKFLOW_K6_SERVICE="openworkflow-engine-pekko-$profile-$framework" \
     OPENWORKFLOW_K6_ENGINE=pekko \
       "$script_dir/verify-k6.sh"
   done
-  for framework in quarkus spring micronaut; do
-    OPENWORKFLOW_K6_CHILD=true \
-    OPENWORKFLOW_K6_SERVICE="openworkflow-definition-$framework" \
-    OPENWORKFLOW_K6_ENGINE=kafka-streams \
-      "$script_dir/verify-k6.sh"
-  done
-  printf 'K6 verified: immutable resource-bundle execution and NATS delivery across both engines, both Pekko stores, and all framework gateways.\n'
+  OPENWORKFLOW_K6_CHILD=true \
+  OPENWORKFLOW_K6_SERVICE="openworkflow-definition-management-$framework" \
+  OPENWORKFLOW_K6_ENGINE=kafka-streams \
+    "$script_dir/verify-k6.sh"
+  printf 'K6 verified: immutable resource-bundle execution and NATS delivery across both engines, both Pekko stores, and the %s framework gateway.\n' \
+    "$framework"
   exit 0
 fi
 
@@ -25,7 +31,7 @@ context=${OPENWORKFLOW_ACCEPTANCE_CONTEXT:-kind-openworkflow-acceptance}
 namespace=${OPENWORKFLOW_ACCEPTANCE_NAMESPACE:-forwardmeasure-openworkflow}
 identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
 identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
-service=${OPENWORKFLOW_K6_SERVICE:-openworkflow-definition-quarkus}
+service=${OPENWORKFLOW_K6_SERVICE:-openworkflow-definition-management-quarkus}
 expected_engine=${OPENWORKFLOW_K6_ENGINE:-kafka-streams}
 keycloak_port=$((18100 + RANDOM % 300))
 service_port=$((18400 + RANDOM % 300))

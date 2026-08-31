@@ -12,7 +12,10 @@
   <modules>
     <module>execution-management/quarkus</module><module>execution-management/spring</module><module>execution-management/micronaut</module>
     <module>engine-kafka-streams/quarkus</module><module>engine-kafka-streams/spring</module><module>engine-kafka-streams/micronaut</module>
-    <module>engine-pekko/quarkus</module><module>engine-pekko/spring</module><module>engine-pekko/micronaut</module>
+    <module>engine-pekko/quarkus</module><module>engine-pekko/spring</module><module>engine-pekko/micronaut</module><module>engine-pekko/k3s-verification</module>
     <module>operation-adapter/quarkus</module><module>operation-adapter/spring</module><module>operation-adapter/micronaut</module>
+    <module>definition-management/quarkus</module><module>definition-management/spring</module><module>definition-management/micronaut</module>
+    <module>studio/quarkus</module><module>studio/spring</module><module>studio/micronaut</module>
+    <module>migrations</module><module>tenant-provisioning</module>
   </modules>
 </project>

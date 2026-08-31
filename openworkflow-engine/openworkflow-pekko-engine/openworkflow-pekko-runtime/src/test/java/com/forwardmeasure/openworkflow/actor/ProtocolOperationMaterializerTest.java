@@ -313,4 +313,153 @@ final class ProtocolOperationMaterializerTest {
     assertEquals(resources.getFirst().sha256(), descriptor.document().sha256());
     assertEquals(resources.get(1).content(), descriptor.protocolDependencies().get("shared.proto"));
   }
+
+  @Test
+  void materializesCorrelatedWorkerCommandEventsAndCancellationAsIndependentDurableIntents() {
+    byte[] source =
+        """
+        document:
+          dsl: '1.0.3'
+          namespace: forwardmeasure
+          name: correlated-worker
+          version: '1.0.0'
+        do:
+          - execute:
+              call: com.forwardmeasure.oks.correlated-worker
+              with:
+                document:
+                  endpoint: https://contracts.example.test/workers.yaml
+                command:
+                  channel: workers.commands
+                  message:
+                    payload:
+                      request: hello
+                events:
+                  channel: workers.events
+                  subscription:
+                    consume:
+                      until: '${ .payload.status == "SUCCEEDED" }'
+                      for: PT30M
+                cancellation:
+                  channel: workers.cancellations
+                  message:
+                    payload:
+                      reason: abandoned
+        """
+            .getBytes(StandardCharsets.UTF_8);
+    var resources =
+        new WorkflowResourceResolver()
+            .resolve(
+                source,
+                request ->
+                    ResolvedWorkflowResource.of(
+                        request.uri(),
+                        "application/yaml",
+                        """
+                        asyncapi: 2.6.0
+                        info: {title: Workers, version: 1.0.0}
+                        servers:
+                          test: {url: kafka.test:9092, protocol: kafka}
+                        channels:
+                          workers.commands:
+                            servers: [test]
+                            publish: {message: {name: WorkerCommand}}
+                          workers.events:
+                            servers: [test]
+                            subscribe: {message: {name: WorkerEvent}}
+                          workers.cancellations:
+                            servers: [test]
+                            publish: {message: {name: WorkerCancellation}}
+                        """));
+    var plan = new OpenWorkflowCompiler().compile(source, resources);
+    var step = plan.steps().getFirst();
+    var deadline = java.time.Instant.parse("2026-01-01T00:30:00Z");
+
+    ProtocolOperationMaterializer.CorrelatedWorkerOperations operations =
+        ProtocolOperationMaterializer.materializeCorrelatedWorker(
+            plan, step, step.callPlan().arguments(), "worker-1", null, deadline);
+
+    assertEquals("worker-1", operations.command().operationId());
+    assertEquals(ProtocolOperationDescriptor.Kind.ASYNC_API, operations.command().kind());
+    assertEquals(ProtocolOperationDescriptor.Mode.PUBLISH, operations.command().mode());
+    assertEquals("kafka", operations.command().protocol());
+    assertEquals(
+        "kafka://kafka.test:9092/workers.commands", operations.command().endpoint().toString());
+    assertEquals(
+        "hello", operations.command().request().required("payload").required("request").asText());
+    assertEquals(
+        "worker-1",
+        operations.command().request().required("payload").required("operationId").asText());
+
+    assertEquals("worker-1:events", operations.events().operationId());
+    assertEquals(ProtocolOperationDescriptor.Mode.SUBSCRIBE, operations.events().mode());
+    assertEquals(deadline, operations.events().subscriptionDeadline());
+
+    assertEquals("worker-1:cancel", operations.cancellation().operationId());
+    assertEquals(ProtocolOperationDescriptor.Mode.PUBLISH, operations.cancellation().mode());
+    assertEquals(
+        "abandoned",
+        operations.cancellation().request().required("payload").required("reason").asText());
+    assertEquals(
+        "worker-1",
+        operations.cancellation().request().required("payload").required("operationId").asText());
+  }
+
+  @Test
+  void materializedCorrelatedWorkerHasNoCancellationOperationWhenTheCallDeclaresNone() {
+    byte[] source =
+        """
+        document:
+          dsl: '1.0.3'
+          namespace: forwardmeasure
+          name: correlated-worker-no-cancel
+          version: '1.0.0'
+        do:
+          - execute:
+              call: com.forwardmeasure.oks.correlated-worker
+              with:
+                document:
+                  endpoint: https://contracts.example.test/workers.yaml
+                command:
+                  channel: workers.commands
+                  message:
+                    payload: {}
+                events:
+                  channel: workers.events
+                  subscription:
+                    consume:
+                      until: '${ .payload.status == "SUCCEEDED" }'
+                      for: PT30M
+        """
+            .getBytes(StandardCharsets.UTF_8);
+    var resources =
+        new WorkflowResourceResolver()
+            .resolve(
+                source,
+                request ->
+                    ResolvedWorkflowResource.of(
+                        request.uri(),
+                        "application/yaml",
+                        """
+                        asyncapi: 2.6.0
+                        info: {title: Workers, version: 1.0.0}
+                        servers:
+                          test: {url: kafka.test:9092, protocol: kafka}
+                        channels:
+                          workers.commands:
+                            servers: [test]
+                            publish: {message: {name: WorkerCommand}}
+                          workers.events:
+                            servers: [test]
+                            subscribe: {message: {name: WorkerEvent}}
+                        """));
+    var plan = new OpenWorkflowCompiler().compile(source, resources);
+    var step = plan.steps().getFirst();
+
+    ProtocolOperationMaterializer.CorrelatedWorkerOperations operations =
+        ProtocolOperationMaterializer.materializeCorrelatedWorker(
+            plan, step, step.callPlan().arguments(), "worker-2", null, null);
+
+    assertEquals(null, operations.cancellation());
+  }
 }

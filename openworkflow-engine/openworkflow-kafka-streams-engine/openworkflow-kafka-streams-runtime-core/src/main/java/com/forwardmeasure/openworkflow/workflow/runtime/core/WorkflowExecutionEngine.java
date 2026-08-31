@@ -85,6 +85,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Pure OpenWorkflow state machine layered on the generic durable-processing contract.
@@ -103,6 +104,7 @@ public final class WorkflowExecutionEngine
               WorkflowExecutionEngine.class.getPackage().getImplementationVersion())
           .orElse("development");
   static final int MAX_DURABLE_STATE_BYTES = 512 * 1024;
+  private static final String OPERATION_KIND_RUN_WORKFLOW = "run-workflow";
   private static final ObjectMapper DURABLE_STATE_JSON =
       new ObjectMapper().findAndRegisterModules();
   private final WorkflowDefinitionResolver definitions;
@@ -3988,6 +3990,9 @@ public final class WorkflowExecutionEngine
                 operationEffect(
                     current, command, step, operation, WorkflowEffectType.DISPATCH_OPERATION, "")));
       }
+    } else if (step.kind() == PlanStepKind.RUN && step.runPlan().kind() == RunPlan.Kind.WORKFLOW) {
+      return dispatchSubworkflow(
+          context, current, command, step, rawInput, taskInput, parentAdvanced, sequence, events);
     } else if (step.kind() == PlanStepKind.RUN) {
       RunPlan run = step.runPlan();
       DataReference arguments =
@@ -4072,6 +4077,147 @@ public final class WorkflowExecutionEngine
 
     return finishTaskTransition(
         context, current, command, output, workflowContext, cursor, sequence, events);
+  }
+
+  /**
+   * Dispatches a {@code run: workflow:} step. The child is not reachable through {@link
+   * ProtocolOperationMaterializer} - it is not a protocol call, it is another OpenWorkflow
+   * execution started by this same runtime. The pending interaction is still an {@link
+   * ActiveOperationState} (operation kind {@value #OPERATION_KIND_RUN_WORKFLOW}) so that fork
+   * routing, cancellation racing and pause buffering are the same proven machinery used for every
+   * other RUN kind; only effect materialization differs, via {@link
+   * WorkflowEffectType#START_SUBWORKFLOW} and {@link WorkflowEffectType#CONTROL_SUBWORKFLOW}
+   * instead of {@code DISPATCH_OPERATION}/{@code CANCEL_OPERATION}.
+   */
+  private DurableTransition<
+          ExecutionSnapshot, ExecutionCommand, ExecutionHistoryEvent, WorkflowEffect>
+      dispatchSubworkflow(
+          DurableProcessContext context,
+          ExecutionSnapshot current,
+          AdvanceExecutionCommand command,
+          PlanStep step,
+          DataReference rawInput,
+          DataReference taskInput,
+          ExecutionCursor parentAdvanced,
+          long sequence,
+          List<ExecutionHistoryEvent> events) {
+    RunPlan run = step.runPlan();
+    com.forwardmeasure.openworkflow.definition.ResolvedSubflow subflow = run.subflow();
+    DataReference arguments =
+        transform(
+            run.configuration(),
+            taskInput,
+            expressions.requiresEvaluation(run.configuration(), current.plan().expressions().mode())
+                ? expressionArguments(current, step, rawInput, taskInput, null, null, command)
+                : null,
+            current.plan());
+    JsonNode configuredInput = inline(arguments).get("input");
+    DataReference childInput = configuredInput == null ? taskInput : reference(configuredInput);
+
+    com.forwardmeasure.openworkflow.workflow.runtime.api.WorkflowDefinitionReference
+        childDefinition =
+            new com.forwardmeasure.openworkflow.workflow.runtime.api.WorkflowDefinitionReference(
+                new com.forwardmeasure.openworkflow.workflow.runtime.api.WorkflowDefinitionKey(
+                    current.key().tenantId(), subflow.coordinates()),
+                subflow.sourceSha256(),
+                subflow.definitionSha256());
+    // The compiler already pinned and admitted this exact child at compile time; this is a
+    // defensive re-validation, matching every other durable dispatch in this class.
+    requireDefinition(childDefinition);
+
+    String childExecutionIdValue =
+        UUID.nameUUIDFromBytes(
+                (current.key().canonical()
+                        + "|subworkflow|"
+                        + step.path()
+                        + "|"
+                        + sequence
+                        + "|"
+                        + subflow.canonical())
+                    .getBytes(StandardCharsets.UTF_8))
+            .toString();
+    com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey childKey =
+        new com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey(
+            current.key().tenantId(),
+            new com.forwardmeasure.openworkflow.workflow.runtime.api.WorkflowExecutionId(
+                childExecutionIdValue));
+    String operationId = childKey.canonical();
+
+    ObjectNode subworkflowDescriptor = JsonNodeFactory.instance.objectNode();
+    subworkflowDescriptor.put("operationId", operationId);
+    subworkflowDescriptor.put("operationKind", OPERATION_KIND_RUN_WORKFLOW);
+    subworkflowDescriptor.put("executionKey", current.key().canonical());
+    subworkflowDescriptor.put("taskPath", step.path());
+    subworkflowDescriptor.put("parentExecutionKey", current.key().canonical());
+    subworkflowDescriptor.put("childExecutionKey", childKey.canonical());
+    subworkflowDescriptor.put("childNamespace", subflow.coordinates().namespace());
+    subworkflowDescriptor.put("childName", subflow.coordinates().name());
+    subworkflowDescriptor.put("childVersion", subflow.coordinates().version());
+    subworkflowDescriptor.put("childDsl", subflow.coordinates().dsl());
+    subworkflowDescriptor.put("childSourceSha256", subflow.sourceSha256());
+    subworkflowDescriptor.put("childDefinitionSha256", subflow.definitionSha256());
+    subworkflowDescriptor.put("awaitParent", run.await());
+    subworkflowDescriptor.set("childInput", DataReferenceJson.encode(childInput));
+    DataReference descriptor = controlReference(subworkflowDescriptor);
+
+    ActiveOperationState operation =
+        new ActiveOperationState(
+            operationId,
+            step.path(),
+            OPERATION_KIND_RUN_WORKFLOW,
+            rawInput,
+            taskInput,
+            parentAdvanced,
+            descriptor);
+    events.add(
+        event(
+            current,
+            command,
+            sequence++,
+            ExecutionEventType.OPERATION_DISPATCHED,
+            step,
+            taskInput,
+            descriptor));
+    WorkflowEffect dispatch =
+        operationEffect(
+            current, command, step, operation, WorkflowEffectType.START_SUBWORKFLOW, "");
+    if (!run.await()) {
+      DataReference detachedResult = reference(JsonNodeFactory.instance.nullNode());
+      ExecutionSnapshot detached =
+          withPendingInteraction(
+              current,
+              ExecutionPhase.RUNNING,
+              parentAdvanced,
+              current.context(),
+              detachedResult,
+              sequence,
+              null);
+      List<PlanStep> postRunSiblings = childrenForFrame(detached, parentAdvanced.current());
+      return withOutbox(
+          completeTask(
+              context,
+              detached,
+              command,
+              step,
+              rawInput,
+              taskInput,
+              detachedResult,
+              parentAdvanced,
+              postRunSiblings,
+              sequence,
+              events),
+          dispatch);
+    }
+    ExecutionSnapshot waiting =
+        withPendingInteraction(
+            current,
+            ExecutionPhase.RUNNING,
+            parentAdvanced,
+            current.context(),
+            taskInput,
+            sequence,
+            operation);
+    return DurableTransition.changed(waiting, events, List.of(), List.of(dispatch));
   }
 
   private WorkflowError workflowError(
@@ -6219,6 +6365,16 @@ public final class WorkflowExecutionEngine
     if (current.phase().terminal()) {
       throw new IllegalArgumentException("Cannot cancel terminal execution " + current.phase());
     }
+    // PURGING is deliberately not terminal() (it only starts once the execution already
+    // reached a terminal phase, and that phase must be restorable if the purge itself fails -
+    // see ActiveExecutionPurgeState) - but it is exactly as uncancellable as a terminal phase:
+    // there is no in-flight workflow logic left to cancel, only an external cleanup operation
+    // already in progress. Reject it with the same clear message shape as the terminal check
+    // above, instead of falling through to a confusing "Compiled plan does not contain task
+    // $purge" crash from requireStep() on the purge state's synthetic task path.
+    if (current.phase() == ExecutionPhase.PURGING) {
+      throw new IllegalArgumentException("Cannot cancel a purging execution");
+    }
     long sequence = current.nextSequence();
     List<ExecutionHistoryEvent> events = new ArrayList<>();
     sequence =
@@ -6352,37 +6508,49 @@ public final class WorkflowExecutionEngine
     ExecutionEventType type;
     DataReference input;
     DataReference output;
-    if (interaction instanceof ActiveListenState listen) {
-      type = ExecutionEventType.SUBSCRIPTION_CANCELLED;
-      input = listen.taskInput();
-      output = subscriptionDescriptor(current, step, listen);
-    } else if (interaction instanceof ActiveAsyncApiSubscriptionState subscription) {
-      type = ExecutionEventType.ASYNC_API_SUBSCRIPTION_CANCELLED;
-      input = subscription.taskInput();
-      output = subscription.descriptor();
-    } else if (interaction instanceof ActiveCorrelatedWorkerState worker) {
-      type = ExecutionEventType.CORRELATED_WORKER_CANCELLATION_REQUESTED;
-      input = worker.taskInput();
-      output = worker.subscriptionDescriptor();
-    } else if (interaction instanceof ActiveTimerState timer) {
-      type = ExecutionEventType.TIMER_CANCELLED;
-      input = timer.taskInput();
-      output = timerDescriptor(current, step, timer);
-    } else if (interaction instanceof ActiveRetryState retry) {
-      type = ExecutionEventType.TIMER_CANCELLED;
-      input = errorReference(retry.error());
-      output = retryTimerDescriptor(current, step, retry);
-    } else if (interaction instanceof ActiveOperationState operation) {
-      type = ExecutionEventType.OPERATION_CANCELLATION_REQUESTED;
-      input = operation.taskInput();
-      output = operation.descriptor();
-    } else if (interaction instanceof ActiveHumanTaskState humanTask) {
-      type = ExecutionEventType.HUMAN_TASK_CANCELLATION_REQUESTED;
-      input = humanTask.taskInput();
-      output = humanTask.descriptor();
-    } else {
-      throw new IllegalStateException(
-          "Unknown pending interaction " + interaction.getClass().getName());
+    switch (interaction) {
+      case ActiveListenState listen -> {
+        type = ExecutionEventType.SUBSCRIPTION_CANCELLED;
+        input = listen.taskInput();
+        output = subscriptionDescriptor(current, step, listen);
+      }
+      case ActiveAsyncApiSubscriptionState subscription -> {
+        type = ExecutionEventType.ASYNC_API_SUBSCRIPTION_CANCELLED;
+        input = subscription.taskInput();
+        output = subscription.descriptor();
+      }
+      case ActiveCorrelatedWorkerState worker -> {
+        type = ExecutionEventType.CORRELATED_WORKER_CANCELLATION_REQUESTED;
+        input = worker.taskInput();
+        output = worker.subscriptionDescriptor();
+      }
+      case ActiveTimerState timer -> {
+        type = ExecutionEventType.TIMER_CANCELLED;
+        input = timer.taskInput();
+        output = timerDescriptor(current, step, timer);
+      }
+      case ActiveRetryState retry -> {
+        type = ExecutionEventType.TIMER_CANCELLED;
+        input = errorReference(retry.error());
+        output = retryTimerDescriptor(current, step, retry);
+      }
+      case ActiveOperationState operation -> {
+        type = ExecutionEventType.OPERATION_CANCELLATION_REQUESTED;
+        input = operation.taskInput();
+        output = operation.descriptor();
+      }
+      case ActiveHumanTaskState humanTask -> {
+        type = ExecutionEventType.HUMAN_TASK_CANCELLATION_REQUESTED;
+        input = humanTask.taskInput();
+        output = humanTask.descriptor();
+      }
+      // A purge is a one-shot administrative action on completed/terminal executions, not
+      // itself a cancellable interaction - preserves the exact pre-refactor behavior for this
+      // case, but now as a compiler-checked arm: adding a 9th PendingInteraction variant fails
+      // the build here instead of silently reaching this same throw only at runtime.
+      case ActiveExecutionPurgeState purge ->
+          throw new IllegalStateException(
+              "Unknown pending interaction " + purge.getClass().getName());
     }
     events.add(
         interactionEvent(current, command, sequence++, type, step, input, output, cursor, forks));
@@ -6741,129 +6909,164 @@ public final class WorkflowExecutionEngine
       boolean activate,
       String suffix,
       List<WorkflowEffect> effects) {
-    if (interaction instanceof ActiveListenState listen) {
-      effects.add(
-          subscriptionEffect(
-              current,
-              command,
-              current.plan().requireStep(listen.taskPath()),
-              listen,
-              activate
-                  ? WorkflowEffectType.UPSERT_EVENT_SUBSCRIPTION
-                  : WorkflowEffectType.DELETE_EVENT_SUBSCRIPTION,
-              suffix));
-    } else if (interaction instanceof ActiveTimerState timer) {
-      effects.add(
-          timerEffect(
-              current,
-              command,
-              current.plan().requireStep(timer.taskPath()),
-              timer,
-              activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
-              suffix));
-    } else if (interaction instanceof ActiveRetryState retry) {
-      effects.add(
-          retryTimerEffect(
-              current,
-              command,
-              current.plan().requireStep(retry.taskPath()),
-              retry,
-              activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
-              suffix));
-    } else if (interaction instanceof ActiveOperationState operation) {
-      if (!operation.completionReady()) {
-        /*
-         * Pausing controls workflow advancement; it is not business
-         * cancellation.  Cancelling an in-flight one-shot operation
-         * here produces a terminal CANCELLED observation which is
-         * buffered while paused and then incorrectly consumed as the
-         * operation outcome on resume.  Leave the operation running
-         * instead.  Its terminal observation is durably buffered, and
-         * resume either consumes that result or redispatches the same
-         * stable operation identity for adapter recovery.
-         */
-        if (activate || !suffix.startsWith(":pause")) {
+    // The old if/instanceof chain silently did nothing for a null interaction (no pending
+    // interaction to act on); a bare switch on a reference type throws NPE on null instead of
+    // matching no case, so this guard is required to preserve that behavior, not optional.
+    if (interaction == null) return;
+    switch (interaction) {
+      case ActiveListenState listen ->
           effects.add(
-              operationEffect(
+              subscriptionEffect(
+                  current,
+                  command,
+                  current.plan().requireStep(listen.taskPath()),
+                  listen,
+                  activate
+                      ? WorkflowEffectType.UPSERT_EVENT_SUBSCRIPTION
+                      : WorkflowEffectType.DELETE_EVENT_SUBSCRIPTION,
+                  suffix));
+      case ActiveTimerState timer ->
+          effects.add(
+              timerEffect(
+                  current,
+                  command,
+                  current.plan().requireStep(timer.taskPath()),
+                  timer,
+                  activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
+                  suffix));
+      case ActiveRetryState retry ->
+          effects.add(
+              retryTimerEffect(
+                  current,
+                  command,
+                  current.plan().requireStep(retry.taskPath()),
+                  retry,
+                  activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
+                  suffix));
+      // A subworkflow is a whole other durable execution, not a one-shot
+      // external call - it genuinely can be paused and resumed, and a
+      // cancellation must not leave the child running orphaned. Unlike a
+      // plain operation, pause always propagates to the child too.
+      case ActiveOperationState operation
+          when OPERATION_KIND_RUN_WORKFLOW.equals(operation.operationKind()) -> {
+        if (!operation.completionReady()) {
+          ExecutionControlAction action =
+              activate
+                  ? ExecutionControlAction.RESUME
+                  : suffix.startsWith(":pause")
+                      ? ExecutionControlAction.PAUSE
+                      : ExecutionControlAction.CANCEL;
+          effects.add(
+              subworkflowControlEffect(
                   current,
                   command,
                   current.plan().requireStep(operation.taskPath()),
                   operation,
-                  activate
-                      ? WorkflowEffectType.DISPATCH_OPERATION
-                      : WorkflowEffectType.CANCEL_OPERATION,
+                  action,
                   suffix));
         }
       }
-    } else if (interaction instanceof ActiveAsyncApiSubscriptionState subscription) {
-      PlanStep step = current.plan().requireStep(subscription.taskPath());
-      if (!activate || !subscription.completionReady()) {
+      case ActiveOperationState operation -> {
+        if (!operation.completionReady()) {
+          // Pausing controls workflow advancement; it is not business
+          // cancellation.  Cancelling an in-flight one-shot operation
+          // here produces a terminal CANCELLED observation which is
+          // buffered while paused and then incorrectly consumed as the
+          // operation outcome on resume.  Leave the operation running
+          // instead.  Its terminal observation is durably buffered, and
+          // resume either consumes that result or redispatches the same
+          // stable operation identity for adapter recovery.
+          if (activate || !suffix.startsWith(":pause")) {
+            effects.add(
+                operationEffect(
+                    current,
+                    command,
+                    current.plan().requireStep(operation.taskPath()),
+                    operation,
+                    activate
+                        ? WorkflowEffectType.DISPATCH_OPERATION
+                        : WorkflowEffectType.CANCEL_OPERATION,
+                    suffix));
+          }
+        }
+      }
+      case ActiveAsyncApiSubscriptionState subscription -> {
+        PlanStep step = current.plan().requireStep(subscription.taskPath());
+        if (!activate || !subscription.completionReady()) {
+          effects.add(
+              asyncApiSubscriptionEffect(
+                  current,
+                  command,
+                  step,
+                  subscription,
+                  activate
+                      ? WorkflowEffectType.UPSERT_ASYNC_API_SUBSCRIPTION
+                      : WorkflowEffectType.DELETE_ASYNC_API_SUBSCRIPTION,
+                  suffix));
+        }
+        if (subscription.deadlineTimerId() != null
+            && (!activate || !subscription.completionReady())) {
+          effects.add(
+              asyncApiDeadlineEffect(
+                  current,
+                  command,
+                  step,
+                  subscription,
+                  activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
+                  suffix));
+        }
+      }
+      case ActiveCorrelatedWorkerState worker -> {
         effects.add(
-            asyncApiSubscriptionEffect(
+            correlatedWorkerSubscriptionEffect(
                 current,
                 command,
-                step,
-                subscription,
+                worker,
                 activate
                     ? WorkflowEffectType.UPSERT_ASYNC_API_SUBSCRIPTION
                     : WorkflowEffectType.DELETE_ASYNC_API_SUBSCRIPTION,
                 suffix));
-      }
-      if (subscription.deadlineTimerId() != null
-          && (!activate || !subscription.completionReady())) {
         effects.add(
-            asyncApiDeadlineEffect(
+            correlatedWorkerDeadlineEffect(
                 current,
                 command,
-                step,
-                subscription,
+                worker,
                 activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
                 suffix));
+        if (!activate && !suffix.startsWith(":pause") && worker.cancellationDescriptor() != null) {
+          effects.add(
+              correlatedWorkerOperationEffect(
+                  current, command, worker, worker.cancellationDescriptor(), suffix));
+        }
       }
-    } else if (interaction instanceof ActiveCorrelatedWorkerState worker) {
-      effects.add(
-          correlatedWorkerSubscriptionEffect(
-              current,
-              command,
-              worker,
-              activate
-                  ? WorkflowEffectType.UPSERT_ASYNC_API_SUBSCRIPTION
-                  : WorkflowEffectType.DELETE_ASYNC_API_SUBSCRIPTION,
-              suffix));
-      effects.add(
-          correlatedWorkerDeadlineEffect(
-              current,
-              command,
-              worker,
-              activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
-              suffix));
-      if (!activate && !suffix.startsWith(":pause") && worker.cancellationDescriptor() != null) {
-        effects.add(
-            correlatedWorkerOperationEffect(
-                current, command, worker, worker.cancellationDescriptor(), suffix));
+      case ActiveHumanTaskState humanTask -> {
+        PlanStep step = current.plan().requireStep(humanTask.taskPath());
+        // Pause preserves already-visible governed work. The workflow
+        // only dematerialises its local deadline and restores that same
+        // deadline on resume. Cancellation and failure close the task.
+        if (!activate && !suffix.startsWith(":pause") && !humanTask.completionReady()) {
+          effects.add(
+              humanTaskEffect(
+                  current, command, step, humanTask, WorkflowEffectType.CANCEL_HUMAN_TASK, suffix));
+        }
+        if (humanTask.dueTimerId() != null && !humanTask.completionReady()) {
+          effects.add(
+              humanTaskDeadlineEffect(
+                  current,
+                  command,
+                  step,
+                  humanTask,
+                  activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
+                  suffix));
+        }
       }
-    } else if (interaction instanceof ActiveHumanTaskState humanTask) {
-      PlanStep step = current.plan().requireStep(humanTask.taskPath());
-      /*
-       * Pause preserves already-visible governed work. The workflow
-       * only dematerialises its local deadline and restores that same
-       * deadline on resume. Cancellation and failure close the task.
-       */
-      if (!activate && !suffix.startsWith(":pause") && !humanTask.completionReady()) {
-        effects.add(
-            humanTaskEffect(
-                current, command, step, humanTask, WorkflowEffectType.CANCEL_HUMAN_TASK, suffix));
-      }
-      if (humanTask.dueTimerId() != null && !humanTask.completionReady()) {
-        effects.add(
-            humanTaskDeadlineEffect(
-                current,
-                command,
-                step,
-                humanTask,
-                activate ? WorkflowEffectType.SCHEDULE_TIMER : WorkflowEffectType.CANCEL_TIMER,
-                suffix));
-      }
+      // A purge's terminalPhase is required to already be terminal (see
+      // ActiveExecutionPurgeState's compact constructor) - it only ever attaches to an
+      // execution that has already completed/failed/cancelled, so pause/resume/cancel
+      // side-effects genuinely don't apply. Explicit no-op, not an accidental omission: a
+      // future 9th PendingInteraction variant now fails the build here instead of silently
+      // producing no effect.
+      case ActiveExecutionPurgeState ignored -> {}
     }
   }
 
@@ -7086,7 +7289,40 @@ public final class WorkflowExecutionEngine
         type,
         step.path(),
         operation.descriptor(),
-        type == WorkflowEffectType.DISPATCH_OPERATION ? current.startedBy() : command.actor(),
+        type == WorkflowEffectType.DISPATCH_OPERATION
+                || type == WorkflowEffectType.START_SUBWORKFLOW
+            ? current.startedBy()
+            : command.actor(),
+        command.requestedAt());
+  }
+
+  /**
+   * Propagates the parent's own pause, resume or cancellation onto the child execution a {@code
+   * run: workflow:} step is waiting on. The routing processor that turns this into a {@link
+   * com.forwardmeasure.openworkflow.workflow.runtime.api.ControlExecutionCommand} for the child
+   * execution reads {@code childExecutionKey} and {@code action} straight off this descriptor - see
+   * {@code OksSubworkflowControlProcessor}.
+   */
+  private WorkflowEffect subworkflowControlEffect(
+      ExecutionSnapshot current,
+      ExecutionCommand command,
+      PlanStep step,
+      ActiveOperationState operation,
+      ExecutionControlAction action,
+      String suffix) {
+    ObjectNode control = JsonNodeFactory.instance.objectNode();
+    control.put("operationId", operation.operationId());
+    control.put(
+        "childExecutionKey",
+        inline(operation.descriptor()).required("childExecutionKey").textValue());
+    control.put("action", action.name());
+    return new WorkflowEffect(
+        operation.operationId() + ":" + action.name().toLowerCase(java.util.Locale.ROOT) + suffix,
+        current.key(),
+        WorkflowEffectType.CONTROL_SUBWORKFLOW,
+        step.path(),
+        controlReference(control),
+        command.actor(),
         command.requestedAt());
   }
 

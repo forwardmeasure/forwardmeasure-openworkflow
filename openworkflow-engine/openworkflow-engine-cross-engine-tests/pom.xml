@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more
+  contributor license agreements. See the NOTICE file distributed with
+  this work for additional information regarding copyright ownership.
+  The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with
+  the License. You may obtain a copy of the License at
+
+      https://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.forwardmeasure.openworkflow</groupId>
+        <artifactId>openworkflow-engine</artifactId>
+        <version>${revision}</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>openworkflow-engine-cross-engine-tests</artifactId>
+    <name>ForwardMeasure OpenWorkflow :: Engine Cross-Engine Parity Tests</name>
+    <description>
+        Test-only module, deliberately depending on both real engine implementations
+        (openworkflow-pekko-runtime, openworkflow-kafka-streams-engine) so it can drive both from
+        the same test and assert they agree on the shared execution-state policy
+        (BlockingConstructs, openworkflow-engine-api) - see docs/engine-construct-gap-audit.md
+        gap #4. Neither engine module may depend back on this one.
+    </description>
+    <dependencies>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-engine-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-definition</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-pekko-runtime</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-kafka-streams-runtime-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-kafka-streams-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

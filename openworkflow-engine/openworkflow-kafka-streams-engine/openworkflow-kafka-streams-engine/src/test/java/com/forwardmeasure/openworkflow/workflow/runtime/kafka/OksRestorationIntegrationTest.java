@@ -2987,7 +2987,7 @@ class OksRestorationIntegrationTest {
           version: '1.0.0'
         do:
           - execute:
-              call: io.forwardmeasure.oks.correlated-worker
+              call: com.forwardmeasure.oks.correlated-worker
               with:
                 document:
                   endpoint:
@@ -3962,6 +3962,7 @@ class OksRestorationIntegrationTest {
      * effects            - transactional workflow outbox
      * subscriptionEffects- tenant-keyed subscription repartition topic
      * timerEffects       - timer-id-keyed scheduling repartition topic
+     * subworkflowEffects - child-execution-keyed subworkflow launch repartition topic
      * inboundEvents      - authenticated tenant-keyed CloudEvents
      * emittedEvents      - CloudEvents projected from committed effects
      * deadLetters        - isolated deterministic command rejections
@@ -3998,6 +3999,7 @@ class OksRestorationIntegrationTest {
                   new NewTopic(topics.effects(), 3, (short) 1),
                   new NewTopic(topics.subscriptionEffects(), 3, (short) 1),
                   new NewTopic(topics.timerEffects(), 3, (short) 1),
+                  new NewTopic(topics.subworkflowEffects(), 3, (short) 1),
                   new NewTopic(topics.inboundEvents(), 3, (short) 1),
                   new NewTopic(topics.emittedEvents(), 3, (short) 1),
                   new NewTopic(topics.deadLetters(), 3, (short) 1)))

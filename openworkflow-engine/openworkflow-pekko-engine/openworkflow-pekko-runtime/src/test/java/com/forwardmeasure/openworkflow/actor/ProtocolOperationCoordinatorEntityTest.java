@@ -186,6 +186,139 @@ final class ProtocolOperationCoordinatorEntityTest {
         null);
   }
 
+  @Test
+  void cancellingWorkflowLaunchesTheCorrelatedWorkerCancellationOperationButNotItsOtherOperations()
+      throws Exception {
+    var execution =
+        new ExecutionId(
+            com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+                "did:web:forwardmeasure.com:tenant:correlated-worker-cancel-dispatch"),
+            UUID.randomUUID());
+    var command =
+        correlatedWorkerOperation("worker-1", ProtocolOperationDescriptor.Mode.PUBLISH, null);
+    var events =
+        correlatedWorkerOperation(
+            "worker-1:events", ProtocolOperationDescriptor.Mode.SUBSCRIBE, AT.plusSeconds(1_800));
+    var cancellation =
+        correlatedWorkerOperation(
+            "worker-1:cancel", ProtocolOperationDescriptor.Mode.PUBLISH, null);
+    var frame =
+        TaskExecutionFrame.eventing(
+            "/do/0/execute",
+            JsonNodeFactory.instance.objectNode(),
+            JsonNodeFactory.instance.objectNode(),
+            EventExecutionFrame.correlatedWorker("worker-1", command, events, cancellation));
+    var cancelling =
+        new WorkflowState.Cancelling(
+            execution,
+            plan(),
+            JsonNodeFactory.instance.objectNode(),
+            0,
+            2,
+            Set.of(),
+            JsonNodeFactory.instance.objectNode(),
+            JsonNodeFactory.instance.objectNode(),
+            List.of(frame),
+            null);
+    var state = new AtomicReference<WorkflowState>(cancelling);
+    ProtocolOperationCoordinatorEntity.WorkflowEndpoint endpoint =
+        (routed, commandFactory, timeout) -> {
+          WorkflowCommand cmd = commandFactory.apply(actors.<WorkflowReply>createTestProbe().ref());
+          if (cmd instanceof WorkflowCommand.GetRuntimeState) {
+            return CompletableFuture.completedFuture(
+                new WorkflowReply.RuntimeState(WorkflowRuntimeState.from(state.get())));
+          }
+          return CompletableFuture.completedFuture(
+              new WorkflowReply.Accepted(
+                  UUID.randomUUID(), execution, state.get().revision(), state.get().status()));
+        };
+
+    // The cancellation operation is the whole point of CANCELLING - it must actually be launched
+    // through the same adapter path as every other operation, not merely have a local wait
+    // dropped.
+    var launchedDescriptors = new CopyOnWriteArrayList<ProtocolOperationDescriptor>();
+    var transports = new LinkedBlockingQueue<CompletableFuture<Done>>();
+    ProtocolTransport dispatchingTransport =
+        (routed, descriptor, sink) -> {
+          launchedDescriptors.add(descriptor);
+          var completion = new CompletableFuture<Done>();
+          transports.add(completion);
+          return completion;
+        };
+    var cancelRef =
+        actors.spawn(
+            ProtocolOperationCoordinatorEntity.create(
+                new ProtocolOperationCoordinatorSharding.Coordinates(
+                    execution, cancellation.operationId()),
+                endpoint,
+                dispatchingTransport));
+    var cancelReplies = actors.<ProtocolOperationCoordinatorReply>createTestProbe();
+    cancelRef.tell(
+        new ProtocolOperationCoordinatorCommand.Start(
+            execution, cancellation.operationId(), cancelReplies.ref()));
+    assertTrue(cancelReplies.receiveMessage().accepted());
+
+    CompletableFuture<Done> launched = transports.poll(3, TimeUnit.SECONDS);
+    assertTrue(launched != null, "the cancellation operation was actually dispatched");
+    assertEquals(List.of(cancellation), launchedDescriptors);
+
+    // Every other correlated-worker operation keeps being refused while CANCELLING - only its own
+    // cancellation operation is allowed to run during that phase.
+    var otherLaunches = new java.util.concurrent.atomic.AtomicInteger();
+    ProtocolTransport refusingTransport =
+        (routed, descriptor, sink) -> {
+          otherLaunches.incrementAndGet();
+          return new CompletableFuture<>();
+        };
+    var eventsRef =
+        actors.spawn(
+            ProtocolOperationCoordinatorEntity.create(
+                new ProtocolOperationCoordinatorSharding.Coordinates(
+                    execution, events.operationId()),
+                endpoint,
+                refusingTransport));
+    var eventsReplies = actors.<ProtocolOperationCoordinatorReply>createTestProbe();
+    eventsRef.tell(
+        new ProtocolOperationCoordinatorCommand.Start(
+            execution, events.operationId(), eventsReplies.ref()));
+    assertTrue(eventsReplies.receiveMessage().accepted());
+    Thread.sleep(400);
+    assertEquals(0, otherLaunches.get());
+  }
+
+  private static ProtocolOperationDescriptor correlatedWorkerOperation(
+      String operationId, ProtocolOperationDescriptor.Mode mode, Instant deadline) {
+    boolean subscribe = mode == ProtocolOperationDescriptor.Mode.SUBSCRIBE;
+    return new ProtocolOperationDescriptor(
+        operationId,
+        ProtocolOperationDescriptor.Kind.ASYNC_API,
+        mode,
+        new WorkflowResourceReference(
+            WorkflowResourceKind.ASYNC_API_DOCUMENT,
+            URI.create("https://contracts.example.test/workers.yaml"),
+            "b".repeat(64)),
+        "kafka",
+        URI.create("kafka://broker.example.test:9092"),
+        subscribe ? "receiveWorkerEvents" : "publishWorkerCommand",
+        JsonNodeFactory.instance.objectNode(),
+        subscribe
+            ? new AsyncApiSubscriptionPlan(
+                null,
+                new AsyncApiSubscriptionPlan.Consumption(
+                    AsyncApiSubscriptionPlan.Consumption.Mode.UNTIL,
+                    null,
+                    "${ .payload.status == \"SUCCEEDED\" }",
+                    null),
+                null,
+                null,
+                null)
+            : null,
+        null,
+        null,
+        null,
+        deadline);
+  }
+
   private static WorkflowState paused(
       ExecutionId execution, ProtocolOperationDescriptor operation, long revision) {
     var running = running(execution, operation, revision);

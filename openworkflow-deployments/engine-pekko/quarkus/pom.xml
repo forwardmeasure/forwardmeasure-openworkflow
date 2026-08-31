@@ -35,15 +35,54 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-cassandra</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-jaxrs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http</artifactId>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http-server</artifactId>
     </dependency>
+    <!-- Gives TenantScope/EntityManagerFactory (forwardmeasure-jpa-quarkus + quarkus-hibernate-orm),
+         ActiveOrganizationProvider (QuarkusActiveOrganizationProvider), and AuthorizationService
+         (openworkflow-authorization-authzen) - same shared module execution-management's own
+         Quarkus service depends on, not duplicated piecemeal here.
+
+         Excludes org.osgi:osgi.annotation: hibernate-jcache -> caffeine -> jcache pulls the old,
+         combined 8.1.0 jar, while Pekko (only present on this module's classpath, unlike
+         execution-management's own Quarkus service which doesn't have this exact collision) pulls
+         the newer, split org.osgi.annotation.bundle/versioning jars providing the identical
+         classes. Scoped to this dependency edge only, since other openworkflow-quarkus-binding
+         consumers don't have Pekko on their classpath and don't hit this. -->
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-quarkus-binding</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion><groupId>org.osgi</groupId><artifactId>osgi.annotation</artifactId></exclusion>
+      </exclusions>
+    </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-arc</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-jdbc-postgresql</artifactId>
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>

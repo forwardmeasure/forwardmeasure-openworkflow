@@ -44,19 +44,35 @@ public final class ProtocolOperationOutboxHandler extends Handler<EventEnvelope<
       operation = requested.operation();
     } else if (envelope.event() instanceof EngineEvent.ForkBranchProtocolCallRequested requested) {
       operation = requested.operation();
+    } else if (envelope.event() instanceof EngineEvent.CorrelatedWorkerRequested requested) {
+      // A correlated-worker call owns two immediately-dispatchable operations - its command
+      // PUBLISH and its events SUBSCRIBE - each independently recovered by its own coordinator
+      // instance. Its optional cancellation PUBLISH is started on demand, only once the workflow
+      // actually dispatches it (see the CorrelatedWorkerCancellationDispatched branch below).
+      ExecutionId executionId = HttpOperationOutboxHandler.executionId(envelope.persistenceId());
+      return start(executionId, requested.commandOperation().operationId())
+          .thenCompose(ignored -> start(executionId, requested.eventsOperation().operationId()));
+    } else if (envelope.event()
+        instanceof EngineEvent.CorrelatedWorkerCancellationDispatched dispatched) {
+      return start(
+          HttpOperationOutboxHandler.executionId(envelope.persistenceId()),
+          dispatched.cancellationOperation().operationId());
     } else {
       return CompletableFuture.completedFuture(Done.getInstance());
     }
     ExecutionId executionId = HttpOperationOutboxHandler.executionId(envelope.persistenceId());
+    return start(executionId, operation.operationId());
+  }
+
+  private CompletionStage<Done> start(ExecutionId executionId, String operationId) {
     return starter
-        .start(executionId, operation.operationId())
+        .start(executionId, operationId)
         .thenCompose(
             reply ->
                 reply.accepted()
                     ? CompletableFuture.completedFuture(Done.getInstance())
                     : CompletableFuture.failedFuture(
-                        new IllegalStateException(
-                            "Protocol coordinator rejected " + operation.operationId())));
+                        new IllegalStateException("Protocol coordinator rejected " + operationId)));
   }
 
   @FunctionalInterface

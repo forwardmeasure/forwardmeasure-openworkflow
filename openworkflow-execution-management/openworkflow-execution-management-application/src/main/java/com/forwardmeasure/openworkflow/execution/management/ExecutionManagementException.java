@@ -30,6 +30,7 @@ public final class ExecutionManagementException extends RuntimeException {
     NOT_PUBLISHED,
     FORBIDDEN,
     STALE_VERSION,
-    ENGINE_UNAVAILABLE
+    ENGINE_UNAVAILABLE,
+    UNSUPPORTED_CONSTRUCT
   }
 }

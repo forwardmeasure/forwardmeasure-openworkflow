@@ -23,7 +23,7 @@
         <groupId>com.forwardmeasure.openworkflow</groupId>
         <artifactId>forwardmeasure-openworkflow-parent</artifactId>
         <version>${revision}</version>
-        <relativePath>../pom.xml</relativePath>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
     <artifactId>openworkflow-migrations</artifactId>
     <name>ForwardMeasure OpenWorkflow :: Migrations</name>

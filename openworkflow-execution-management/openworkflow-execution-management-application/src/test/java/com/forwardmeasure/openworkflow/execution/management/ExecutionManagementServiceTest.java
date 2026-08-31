@@ -94,6 +94,73 @@ class ExecutionManagementServiceTest {
   }
 
   @Test
+  void rejectsAConstructTheSelectedEngineDoesNotImplement() {
+    var plan =
+        new OpenWorkflowCompiler()
+            .compile(
+                """
+                document:
+                  dsl: '1.0.3'
+                  namespace: wp4
+                  name: needs-human-task
+                  version: '1.0.0'
+                do:
+                  - approve:
+                      call: com.forwardmeasure.oks.human-task
+                      with:
+                        title: Review extracted evidence
+                        input: '${ . }'
+                        presentation:
+                          kind: RAW_JSON
+                        approvals:
+                          makerChecker: true
+                          distinctApprovers: true
+                          stages:
+                            - level: 1
+                              name: First Review
+                              requiredApprovals: 1
+                              candidateRoles: [evidence-reviewer]
+                        dueAfter: PT4H
+                """
+                    .getBytes(StandardCharsets.UTF_8));
+    var revisionId = uuid("20000000-0000-0000-0000-000000000002");
+    var publication = new PublishedWorkflow(DefinitionRevision.from(revisionId, plan), plan);
+    var pekko = new Provider(EngineId.PEKKO);
+    var service =
+        new ExecutionManagementService(
+            (context, requestedRevisionId, correlationId) -> publication,
+            (context, action, resourceId, correlationId) -> {},
+            new MemoryRepository(),
+            new ExecutionEngineProviders(java.util.List.of(pekko)),
+            request -> EngineId.PEKKO,
+            Clock.fixed(NOW, ZoneOffset.UTC),
+            () -> EXECUTION_UUID,
+            new ThreadBoundTenantScope(),
+            new ExecutionTransactionExecutor() {
+              @Override
+              public <T> T execute(Supplier<T> work) {
+                return work.get();
+              }
+            });
+    var request =
+        new ExecutionAdmissionRequest(
+            ACTOR,
+            revisionId,
+            uuid("40000000-0000-0000-0000-000000000005"),
+            "human-task-rejection",
+            "human-task-rejection-correlation",
+            JsonNodeFactory.instance.objectNode());
+
+    var failure =
+        assertThrows(
+            ExecutionManagementException.class,
+            () -> service.start(request).toCompletableFuture().join());
+
+    assertEquals(ExecutionManagementException.Kind.UNSUPPORTED_CONSTRUCT, failure.kind());
+    assertEquals(0, pekko.submissions);
+  }
+
+  @Test
   void hidesAnExecutionFromAnotherTenant() {
     var fixture = fixture(java.util.List.of(new Provider(EngineId.PEKKO)));
     CanonicalExecution execution =

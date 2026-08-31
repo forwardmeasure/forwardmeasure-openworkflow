@@ -14,6 +14,7 @@ public record OksTopics(
     String operationCheckpoints,
     String subscriptionEffects,
     String timerEffects,
+    String subworkflowEffects,
     String inboundEvents,
     String emittedEvents,
     String deadLetters) {
@@ -28,6 +29,7 @@ public record OksTopics(
     requireText(operationCheckpoints, "operationCheckpoints");
     requireText(subscriptionEffects, "subscriptionEffects");
     requireText(timerEffects, "timerEffects");
+    requireText(subworkflowEffects, "subworkflowEffects");
     requireText(inboundEvents, "inboundEvents");
     requireText(emittedEvents, "emittedEvents");
     requireText(deadLetters, "deadLetters");
@@ -42,11 +44,12 @@ public record OksTopics(
                 operationCheckpoints,
                 subscriptionEffects,
                 timerEffects,
+                subworkflowEffects,
                 inboundEvents,
                 emittedEvents,
                 deadLetters)
             .size()
-        != 13) {
+        != 14) {
       throw new IllegalArgumentException("All topic names must be distinct");
     }
   }
@@ -64,6 +67,7 @@ public record OksTopics(
         prefix + ".operation-checkpoints",
         prefix + ".subscription-effects",
         prefix + ".timer-effects",
+        prefix + ".subworkflow-effects",
         prefix + ".inbound-events",
         prefix + ".emitted-events",
         prefix + ".dead-letters");

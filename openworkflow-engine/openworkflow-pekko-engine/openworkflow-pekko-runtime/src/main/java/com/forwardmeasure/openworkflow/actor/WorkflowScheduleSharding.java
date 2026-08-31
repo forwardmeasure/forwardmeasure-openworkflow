@@ -11,6 +11,7 @@
 package com.forwardmeasure.openworkflow.actor;
 
 import java.util.Objects;
+import java.util.Optional;
 import org.apache.pekko.actor.typed.ActorRef;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Props;
@@ -32,15 +33,25 @@ public final class WorkflowScheduleSharding {
 
   public static WorkflowScheduleSharding initialize(
       ActorSystem<?> system, ActorRef<ScheduledExecutionRequest> dispatch) {
+    return initialize(system, dispatch, Optional.empty());
+  }
+
+  public static WorkflowScheduleSharding initialize(
+      ActorSystem<?> system,
+      ActorRef<ScheduledExecutionRequest> dispatch,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     Objects.requireNonNull(system, "system");
     Objects.requireNonNull(dispatch, "dispatch");
+    Objects.requireNonNull(postgresConnection, "postgresConnection");
     ClusterSharding sharding = ClusterSharding.get(system);
     sharding.init(
         Entity.of(
                 TYPE_KEY,
                 context ->
                     WorkflowScheduleEntity.create(
-                        ScheduleId.fromEntityId(context.getEntityId()), dispatch))
+                        ScheduleId.fromEntityId(context.getEntityId()),
+                        dispatch,
+                        postgresConnection))
             .withEntityProps(Props.empty().withMailboxFromConfig("openworkflow.entity-mailbox")));
     return new WorkflowScheduleSharding(sharding);
   }

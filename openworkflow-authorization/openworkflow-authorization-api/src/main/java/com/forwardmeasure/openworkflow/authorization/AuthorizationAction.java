@@ -36,6 +36,8 @@ public enum AuthorizationAction {
   EXECUTION_RESUME("execution:resume"),
   EXECUTION_CANCEL("execution:cancel"),
   OPERATION_EXECUTE("operation:execute"),
+  EVENT_ROUTE("event:route"),
+  EVENT_DELIVER("event:deliver"),
   AUDIT_READ("audit:read"),
   AUDIT_QUERY("audit:query");
 

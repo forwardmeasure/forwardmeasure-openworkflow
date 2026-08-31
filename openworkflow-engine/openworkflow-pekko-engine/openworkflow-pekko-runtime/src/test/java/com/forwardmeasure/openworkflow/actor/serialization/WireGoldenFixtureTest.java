@@ -501,6 +501,48 @@ class WireGoldenFixtureTest {
             null,
             null,
             null);
+    var correlatedWorkerEventsOperation =
+        new com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor(
+            "correlated-worker-fixture:events",
+            com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor.Kind.ASYNC_API,
+            com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor.Mode.SUBSCRIBE,
+            new com.forwardmeasure.openworkflow.definition.WorkflowResourceReference(
+                com.forwardmeasure.openworkflow.definition.WorkflowResourceKind.ASYNC_API_DOCUMENT,
+                java.net.URI.create("https://contracts.example.test/workers.yaml"),
+                "d".repeat(64)),
+            "http",
+            java.net.URI.create("https://events.example.test/workers"),
+            "receiveWorkerEvents",
+            data,
+            new com.forwardmeasure.openworkflow.definition.AsyncApiSubscriptionPlan(
+                null,
+                new com.forwardmeasure.openworkflow.definition.AsyncApiSubscriptionPlan.Consumption(
+                    com.forwardmeasure.openworkflow.definition.AsyncApiSubscriptionPlan.Consumption
+                        .Mode.UNTIL,
+                    null,
+                    "${ .payload.status == \"SUCCEEDED\" }",
+                    null),
+                null,
+                null,
+                null),
+            null,
+            null);
+    var correlatedWorkerCancellationOperation =
+        new com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor(
+            "correlated-worker-fixture:cancel",
+            com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor.Kind.ASYNC_API,
+            com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor.Mode.PUBLISH,
+            new com.forwardmeasure.openworkflow.definition.WorkflowResourceReference(
+                com.forwardmeasure.openworkflow.definition.WorkflowResourceKind.ASYNC_API_DOCUMENT,
+                java.net.URI.create("https://contracts.example.test/workers.yaml"),
+                "d".repeat(64)),
+            "http",
+            java.net.URI.create("https://events.example.test/workers/cancel"),
+            "cancelWorker",
+            data,
+            null,
+            null,
+            null);
     var scheduleCloudEvent =
         new com.forwardmeasure.openworkflow.engine.api.WorkflowCloudEvent(
             "1.0",
@@ -973,6 +1015,29 @@ class WireGoldenFixtureTest {
             output,
             5,
             false,
+            AT),
+        new EngineEvent.CorrelatedWorkerRequested(
+            COMMAND,
+            "/do/0/worker",
+            data,
+            data,
+            5,
+            "correlated-worker-fixture",
+            protocolOperation,
+            correlatedWorkerEventsOperation,
+            correlatedWorkerCancellationOperation,
+            AT),
+        new EngineEvent.CorrelatedWorkerCommandPublished(
+            COMMAND, "/do/0/worker", "correlated-worker-fixture", AT),
+        new EngineEvent.CorrelatedWorkerProgressObserved(
+            COMMAND, "/do/0/worker", "correlated-worker-fixture", "PROGRESS", output, AT),
+        new EngineEvent.CorrelatedWorkerCompleted(
+            COMMAND, "/do/0/worker", "correlated-worker-fixture", output, data, 5, AT),
+        new EngineEvent.CorrelatedWorkerCancellationDispatched(
+            COMMAND,
+            "/do/0/worker",
+            "correlated-worker-fixture",
+            correlatedWorkerCancellationOperation,
             AT),
         new EngineEvent.ListenStarted(COMMAND, "/do/0/listen", data, data, 4, "listen-fixture", AT),
         new EngineEvent.ListenEventAccepted(

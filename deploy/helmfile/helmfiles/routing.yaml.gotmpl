@@ -35,15 +35,23 @@ helmDefaults:
 # ClusterIssuers doing the identical GCP DNS-01 solve for one cluster,
 # confirmed via real values comparison this session.
 #
-# Standalone clusters (local/ci/kind/development, $cloud unset) still
-# default to gateway.enabled: true (their own self-contained Gateway),
-# addressed into istioSystemNamespace and annotated with
-# letsencryptClusterIssuerName - both of which this repo no longer installs
-# itself (see helmfiles/core-infrastructure.yaml.gotmpl). Only "development"
-# currently has ingressEnabled: true among the standalone profiles, so this
-# is a live gap, not yet resolved: that Gateway needs istio and a
-# letsencrypt-dns01 ClusterIssuer already present on whatever cluster
-# "development" targets, or it's inert.
+# Standalone clusters (local/ci/kind, $cloud unset) still default to
+# gateway.enabled: true (their own self-contained Gateway), addressed into
+# istioSystemNamespace and annotated with letsencryptClusterIssuerName -
+# both of which this repo no longer installs itself (see
+# helmfiles/core-infrastructure.yaml.gotmpl). None of the three currently
+# set ingressEnabled: true, so this fallback path is not exercised by any
+# registered environment today - confirmed via helmfile.yaml.gotmpl's
+# environments: block, not just this file's own defaults.
+#
+# "development" looks like a standalone/$cloud-unset profile by name, but
+# isn't: helmfile.yaml.gotmpl layers environments/gcp.yaml under
+# development.yaml.gotmpl, so cloudProvider is "gcp" there too, and it takes
+# the safe attach-to-platform-gateway path above, same as
+# gcp-openworkflow-prod and production-multi-engine (both layer gcp.yaml the
+# same way). Verified directly: `helmfile -e development template
+# --selector stage=routing` renders zero standalone Gateway objects, only
+# HTTPRoutes parented to platform-gateway.
 releases:
 {{ if .Values.ingressEnabled }}
   - name: openworkflow-gateway

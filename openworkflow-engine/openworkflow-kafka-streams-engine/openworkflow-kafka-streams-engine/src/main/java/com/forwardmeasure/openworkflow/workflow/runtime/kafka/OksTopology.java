@@ -62,6 +62,13 @@ public final class OksTopology {
   private static final String COMPLETION_SCHEDULE_PROCESSOR = "oks-completion-schedule-processor";
   private static final String COMPLETION_SCHEDULE_SINK = "oks-completion-schedule-sink";
   private static final String EFFECT_QUERY_PROCESSOR = "oks-effect-query-processor";
+  private static final String SUBWORKFLOW_LAUNCH_OUTPUT = "oks-subworkflow-launch-output";
+  private static final String SUBWORKFLOW_LAUNCH_SINK = "oks-subworkflow-launch-sink";
+  private static final String SUBWORKFLOW_LAUNCH_SOURCE = "oks-subworkflow-launch-source";
+  private static final String SUBWORKFLOW_LAUNCH_PROCESSOR = "oks-subworkflow-launch-processor";
+  private static final String SUBWORKFLOW_CONTROL_PROCESSOR = "oks-subworkflow-control-processor";
+  private static final String SUBWORKFLOW_COMPLETION_PROCESSOR =
+      "oks-subworkflow-completion-processor";
 
   private final ActorId runtimeActorId;
   private final String runtimeComponent;
@@ -219,6 +226,10 @@ public final class OksTopology {
         strings.serializer(),
         new JsonSerde<>(WorkflowEffect.class).serializer(),
         COMPLETION_SCHEDULE_PROCESSOR);
+    topology.addProcessor(
+        SUBWORKFLOW_COMPLETION_PROCESSOR,
+        () -> new OksSubworkflowCompletionProcessor(runtimeActorId, runtimeComponent),
+        HISTORY_QUERY_SOURCE);
     topology.addStateStore(
         Stores.keyValueStoreBuilder(
             Stores.persistentKeyValueStore(OksStores.HISTORY), strings, executionHistory),
@@ -239,6 +250,10 @@ public final class OksTopology {
         TIMER_EFFECT_OUTPUT, OksTimerEffectOutputProcessor::new, EMITTED_EVENT_SOURCE);
     topology.addProcessor(
         EFFECT_QUERY_PROCESSOR, OksEffectQueryProcessor::new, EMITTED_EVENT_SOURCE);
+    topology.addProcessor(
+        SUBWORKFLOW_LAUNCH_OUTPUT, OksSubworkflowLaunchOutputProcessor::new, EMITTED_EVENT_SOURCE);
+    topology.addProcessor(
+        SUBWORKFLOW_CONTROL_PROCESSOR, OksSubworkflowControlProcessor::new, EMITTED_EVENT_SOURCE);
     topology.addStateStore(
         Stores.keyValueStoreBuilder(
             Stores.persistentKeyValueStore(OksStores.EFFECTS), strings, workflowEffects),
@@ -249,6 +264,12 @@ public final class OksTopology {
         strings.serializer(),
         workflowEffects.serializer(),
         SUBSCRIPTION_EFFECT_OUTPUT);
+    topology.addSink(
+        SUBWORKFLOW_LAUNCH_SINK,
+        topics.subworkflowEffects(),
+        strings.serializer(),
+        workflowEffects.serializer(),
+        SUBWORKFLOW_LAUNCH_OUTPUT);
     topology.addSink(
         TIMER_EFFECT_SINK,
         topics.timerEffects(),
@@ -264,6 +285,15 @@ public final class OksTopology {
         SUBSCRIPTION_EFFECT_PROCESSOR,
         () -> new OksSubscriptionEffectProcessor(runtimeActorId, runtimeComponent),
         SUBSCRIPTION_EFFECT_SOURCE);
+    topology.addSource(
+        SUBWORKFLOW_LAUNCH_SOURCE,
+        strings.deserializer(),
+        workflowEffects.deserializer(),
+        topics.subworkflowEffects());
+    topology.addProcessor(
+        SUBWORKFLOW_LAUNCH_PROCESSOR,
+        OksSubworkflowLaunchProcessor::new,
+        SUBWORKFLOW_LAUNCH_SOURCE);
     var inboundEvents = new JsonSerde<>(InboundCloudEvent.class);
     topology.addSource(
         INBOUND_EVENT_SOURCE,
@@ -296,6 +326,13 @@ public final class OksTopology {
         INBOUND_EVENT_PROCESSOR);
     topology.addStateStore(
         Stores.keyValueStoreBuilder(
+            Stores.persistentKeyValueStore(OksStores.SUBWORKFLOW_WAITS),
+            strings,
+            new JsonSerde<>(SubworkflowWait.class)),
+        SUBWORKFLOW_LAUNCH_PROCESSOR,
+        SUBWORKFLOW_COMPLETION_PROCESSOR);
+    topology.addStateStore(
+        Stores.keyValueStoreBuilder(
             Stores.persistentKeyValueStore(OksStores.TIMERS), strings, workflowEffects),
         TIMER_EFFECT_PROCESSOR);
     topology.addStateStore(
@@ -326,7 +363,10 @@ public final class OksTopology {
         new JsonSerde<>(ExecutionCommand.class).serializer(),
         SUBSCRIPTION_EFFECT_PROCESSOR,
         INBOUND_EVENT_PROCESSOR,
-        EVENT_SCHEDULE_PROCESSOR);
+        EVENT_SCHEDULE_PROCESSOR,
+        SUBWORKFLOW_LAUNCH_PROCESSOR,
+        SUBWORKFLOW_COMPLETION_PROCESSOR,
+        SUBWORKFLOW_CONTROL_PROCESSOR);
     topology.addSink(
         FIRED_TIMER_COMMAND_SINK,
         topics.commands(),

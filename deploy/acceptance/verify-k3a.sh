@@ -10,11 +10,13 @@ set -euo pipefail
 namespace=forwardmeasure-openworkflow
 identity_namespace=${OPENWORKFLOW_IDENTITY_NAMESPACE:-keycloak}
 identity_service=${OPENWORKFLOW_IDENTITY_SERVICE:-keycloak}
-runtime=${OPENWORKFLOW_K3A_RUNTIME:-openworkflow-pekko-postgresql}
+runtime=${OPENWORKFLOW_K3A_RUNTIME:-openworkflow-engine-pekko-postgresql-quarkus}
 service=${OPENWORKFLOW_ACCEPTANCE_SERVICE:-$runtime}
 disruption_runtime=${OPENWORKFLOW_ACCEPTANCE_DISRUPTION_RUNTIME:-$runtime}
-runtime_selector=${OPENWORKFLOW_ACCEPTANCE_RUNTIME_SELECTOR:-app=$runtime}
-disruption_selector=${OPENWORKFLOW_ACCEPTANCE_DISRUPTION_SELECTOR:-app=$disruption_runtime}
+# app.kubernetes.io/name, not app - matches this cluster's actual pod labels for every
+# deployment except Studio (which still uses the older bare app=/framework= labels).
+runtime_selector=${OPENWORKFLOW_ACCEPTANCE_RUNTIME_SELECTOR:-app.kubernetes.io/name=$runtime}
+disruption_selector=${OPENWORKFLOW_ACCEPTANCE_DISRUPTION_SELECTOR:-app.kubernetes.io/name=$disruption_runtime}
 persistence=${OPENWORKFLOW_K3A_PERSISTENCE:-PostgreSQL}
 expected_engine=${OPENWORKFLOW_ACCEPTANCE_ENGINE:-pekko}
 checkpoint=${OPENWORKFLOW_ACCEPTANCE_CHECKPOINT:-K3A}

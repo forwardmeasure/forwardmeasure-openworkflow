@@ -36,11 +36,42 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-postgresql</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-cassandra</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-jaxrs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http</artifactId>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http-server</artifactId>
+    </dependency>
+    <!--
+      Same osgi.annotation collision as the Quarkus/Spring engine-pekko bindings: Pekko (only on
+      this module's classpath, not on execution-management's own Micronaut service) pulls the
+      newer, split org.osgi.annotation.bundle/versioning jars; hibernate-jcache -> caffeine ->
+      jcache (via openworkflow-micronaut-binding's Hibernate/JPA support) pulls the old, combined
+      osgi.annotation:8.1.0 jar providing identical classes.
+    -->
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-micronaut-binding</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion><groupId>org.osgi</groupId><artifactId>osgi.annotation</artifactId></exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>io.micronaut</groupId>
@@ -49,6 +80,15 @@
     <dependency>
       <groupId>io.micronaut.serde</groupId>
       <artifactId>micronaut-serde-jackson</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.micronaut.sql</groupId>
+      <artifactId>micronaut-jdbc-hikari</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>ch.qos.logback</groupId>

@@ -87,6 +87,30 @@ nothing gated which ones actually got deployed until now.
           - {name: OPENWORKFLOW_CLUSTER_DISCOVERY_SERVICE, value: {{ printf "openworkflow-engine-%s-%s" $engine $framework | quote }}}
           - {name: OPENWORKFLOW_CLUSTER_POD_IP, valueFrom: {fieldRef: {fieldPath: status.podIP}}}
           - {name: OPENWORKFLOW_CLUSTER_REQUIRED_CONTACT_POINTS, value: {{ dig "replicas" "engine" 1 $.Values | quote }}}
+          # The CloudEvent outbox and subworkflow-launch outbox both need read access to the
+          # execution-management query store to do their job - always the shared foundational
+          # Postgres, same as execution-services.yaml.gotmpl/definition-services.yaml.gotmpl,
+          # regardless of $isCassandra (the query store has no Cassandra backend; only the actor
+          # journal above varies by flavor).
+          - {name: OPENWORKFLOW_DATABASE_URL, value: {{ dig "database" "url" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_DATABASE_USERNAME, value: {{ dig "database" "username" "openworkflow" $.Values | quote }}}
+          - {name: OPENWORKFLOW_EVENTING_ASK_TIMEOUT, value: {{ dig "pekko" "eventingAskTimeout" "10s" $.Values | quote }}}
+          # Deliberately no plausible-looking default - this is the one webhook every
+          # publish:emit: CloudEvent in every tenant's workflows gets forwarded to
+          # (HttpCloudEventPublisher posts everything here, structured-content format). Guessing a
+          # URL here risks silently routing real CloudEvents to the wrong place, so it stays empty
+          # until cloudEvents.publishUrl is set explicitly per environment.
+          - {name: OPENWORKFLOW_CLOUD_EVENTS_PUBLISH_URL, value: {{ dig "cloudEvents" "publishUrl" "" $.Values | quote }}}
+          - {name: OPENWORKFLOW_CLOUD_EVENTS_TIMEOUT, value: {{ dig "cloudEvents" "timeout" "10s" $.Values | quote }}}
+          # The inbound CloudEvent ingress and subworkflow launch/observe paths both need a real
+          # AuthorizationService (event:route/event:deliver decisions, AuthzenAuthenticatedActorProvider) -
+          # same openworkflow.authorization.issuer/client-id/client-secret client-credentials identity
+          # execution-services.yaml.gotmpl already uses for its own OIDC resource-server config, reused
+          # here rather than provisioning a second Keycloak client. client-id/organization-client-id/
+          # request-timeout/decision-ttl/maximum-cache-entries/policy-version all have working baked-in
+          # defaults in this image's application.yaml (mirroring execution-management's), so only the
+          # two values with no safe default - the real issuer and the real client secret - need setting.
+          - {name: OPENWORKFLOW_KEYCLOAK_ISSUER, value: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" $.Values | quote }}}
           {{- end }}
         {{- if $isPekko }}
         secretEnv:
@@ -104,6 +128,13 @@ nothing gated which ones actually got deployed until now.
         {{- else }}
           - {name: OPENWORKFLOW_PERSISTENCE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
         {{- end }}
+          # The query-store connection (OPENWORKFLOW_DATABASE_URL/USERNAME above) is always the
+          # shared foundational Postgres, regardless of $isCassandra - same secret
+          # execution-services.yaml.gotmpl/definition-services.yaml.gotmpl already use.
+          - {name: OPENWORKFLOW_DATABASE_PASSWORD, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_DATABASE_PASSWORD}}}
+          # Same client secret execution-services.yaml.gotmpl already sources for its own OIDC
+          # config - see the OPENWORKFLOW_KEYCLOAK_ISSUER comment above.
+          - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
         {{- if not $isCassandra }}
         cloudSqlProxy:
           enabled: {{ dig "cloudSqlProxy" "enabled" false $.Values }}

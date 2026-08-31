@@ -22,6 +22,5 @@
   <name>ForwardMeasure OpenWorkflow :: Spring Bindings</name>
   <modules>
     <module>openworkflow-spring-binding</module>
-    <module>openworkflow-spring-service</module>
   </modules>
 </project>

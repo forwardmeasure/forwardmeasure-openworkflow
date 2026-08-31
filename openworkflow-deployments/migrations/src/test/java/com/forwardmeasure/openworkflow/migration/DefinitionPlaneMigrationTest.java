@@ -38,7 +38,7 @@ class DefinitionPlaneMigrationTest {
   void installsDefinitionPlaneIndependentlyIntoEveryTenantSchema(PostgreSqlTestContainer database)
       throws Exception {
     OpenWorkflowTenantMigrator migrator =
-        new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+        new OpenWorkflowTenantMigrator(database.dataSource(), "openworkflow_runtime");
     migrator.ensureRuntimeRole(database.password());
 
     migrator.provisionAndMigrate(TENANT_A);
@@ -62,8 +62,8 @@ class DefinitionPlaneMigrationTest {
             "workflow_review");
     assertEquals(expected, applicationTables(database, TenantSchema.forTenant(TENANT_A).value()));
     assertEquals(expected, applicationTables(database, TenantSchema.forTenant(TENANT_B).value()));
-    assertEquals(22, changeSetCount(database, TenantSchema.forTenant(TENANT_A).value()));
-    assertEquals(22, changeSetCount(database, TenantSchema.forTenant(TENANT_B).value()));
+    assertEquals(23, changeSetCount(database, TenantSchema.forTenant(TENANT_A).value()));
+    assertEquals(23, changeSetCount(database, TenantSchema.forTenant(TENANT_B).value()));
     // openworkflow-170 unconditionally aligns every definition-plane sequence to the next
     // 50-boundary, even on a fresh schema - matches incrementBy=50 on these sequences, which
     // matches allocationSize=50 on each entity's @SequenceGenerator.

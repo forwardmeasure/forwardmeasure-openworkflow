@@ -33,6 +33,7 @@ public final class ExecutionManagementExceptionMapper
           case FORBIDDEN -> 403;
           case STALE_VERSION -> 412;
           case ENGINE_UNAVAILABLE -> 503;
+          case UNSUPPORTED_CONSTRUCT -> 422;
         };
     Problem problem =
         new Problem()
@@ -50,6 +51,7 @@ public final class ExecutionManagementExceptionMapper
       case FORBIDDEN -> "Forbidden";
       case STALE_VERSION -> "Precondition Failed";
       case ENGINE_UNAVAILABLE -> "Service Unavailable";
+      case UNSUPPORTED_CONSTRUCT -> "Unprocessable Entity";
     };
   }
 }

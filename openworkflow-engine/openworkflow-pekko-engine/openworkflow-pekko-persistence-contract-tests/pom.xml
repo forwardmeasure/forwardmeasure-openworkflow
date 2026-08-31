@@ -24,7 +24,13 @@
     <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-persistence-core</artifactId><scope>test</scope></dependency>
     <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-persistence-postgresql</artifactId><scope>test</scope></dependency>
     <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-persistence-cassandra</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-postgresql</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-cassandra</artifactId><scope>test</scope></dependency>
     <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-migrations</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-jpa</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-jpa</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>jakarta.enterprise</groupId><artifactId>jakarta.enterprise.cdi-api</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>org.hibernate.orm</groupId><artifactId>hibernate-core</artifactId><scope>test</scope></dependency>
     <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-postgresql</artifactId><scope>test</scope></dependency>
     <dependency><groupId>org.testcontainers</groupId><artifactId>testcontainers-cassandra</artifactId><scope>test</scope></dependency>
     <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>

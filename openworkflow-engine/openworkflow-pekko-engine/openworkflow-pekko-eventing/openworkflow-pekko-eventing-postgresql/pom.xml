@@ -27,6 +27,7 @@
     <name>ForwardMeasure OpenWorkflow :: Pekko :: Eventing :: PostgreSQL</name>
     <dependencies>
         <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-pekko-eventing-core</artifactId></dependency>
+        <dependency><groupId>com.forwardmeasure.jpa</groupId><artifactId>forwardmeasure-jpa-tenancy</artifactId></dependency>
         <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-projection-jdbc_${scala.binary.version}</artifactId></dependency>
         <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-persistence-jdbc_${scala.binary.version}</artifactId></dependency>
         <dependency>

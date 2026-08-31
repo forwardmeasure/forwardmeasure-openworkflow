@@ -35,11 +35,68 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-pekko-eventing-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-pekko-eventing-cassandra</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-pekko-eventing-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-pekko-eventing-jaxrs</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>openworkflow-engine-http</artifactId>
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>openworkflow-engine-http-server</artifactId>
+        </dependency>
+        <!--
+          Excludes two duplicate-class collisions duplicate-finder-maven-plugin flags as fatal,
+          both only present here (not on execution-management's own Spring service, which lacks
+          Pekko/an embedded servlet container on its classpath at the same time as these):
+          - org.osgi:osgi.annotation: hibernate-jcache -> caffeine -> jcache pulls the old,
+            combined 8.1.0 jar; Pekko pulls the newer, split org.osgi.annotation.bundle/versioning
+            jars providing the identical classes.
+          - jakarta.el:jakarta.el-api: hibernate-validator -> org.glassfish.expressly:expressly
+            pulls the standalone EL API jar; Spring Boot's embedded Tomcat
+            (org.apache.tomcat.embed:tomcat-embed-el) already bundles a complete, compatible EL
+            implementation and API together - the standard Spring Boot fix for this exact,
+            well-known collision.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-spring-binding</artifactId>
+            <version>${project.version}</version>
+            <exclusions>
+                <exclusion><groupId>org.osgi</groupId><artifactId>osgi.annotation</artifactId></exclusion>
+                <exclusion><groupId>jakarta.el</groupId><artifactId>jakarta.el-api</artifactId></exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!--
+          A second, independent source of the jakarta.el-api/tomcat-embed-el collision - separate
+          from openworkflow-spring-binding's own edge (already excluded above). jakarta.enterprise
+          cdi-api pulls jakarta.el-api transitively for its own EL-based bean resolution; Spring
+          Boot's embedded Tomcat already provides a complete, compatible EL implementation.
+        -->
+        <dependency>
+            <groupId>jakarta.enterprise</groupId>
+            <artifactId>jakarta.enterprise.cdi-api</artifactId>
+            <scope>provided</scope>
+            <exclusions>
+                <exclusion><groupId>jakarta.el</groupId><artifactId>jakarta.el-api</artifactId></exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>

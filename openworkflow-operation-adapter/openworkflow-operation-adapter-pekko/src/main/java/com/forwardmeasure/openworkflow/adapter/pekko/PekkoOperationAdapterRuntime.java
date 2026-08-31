@@ -3,7 +3,9 @@ package com.forwardmeasure.openworkflow.adapter.pekko;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.forwardmeasure.openworkflow.actor.PekkoClusterRuntime;
+import com.forwardmeasure.openworkflow.actor.PostgresConnectionSettings;
 import com.forwardmeasure.openworkflow.actor.ProtocolOperationCoordinatorSharding;
+import com.forwardmeasure.openworkflow.actor.TenantProjectionSupervisor;
 import com.forwardmeasure.openworkflow.actor.WorkflowSharding;
 import com.forwardmeasure.openworkflow.adapter.kafka.KafkaProtocolOperationExecutors;
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
@@ -17,6 +19,7 @@ import com.forwardmeasure.openworkflow.persistence.postgresql.PostgresqlDataSour
 import com.typesafe.config.ConfigFactory;
 import com.zaxxer.hikari.HikariDataSource;
 import java.time.Duration;
+import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
 import org.apache.pekko.actor.typed.ActorSystem;
@@ -78,10 +81,23 @@ public final class PekkoOperationAdapterRuntime implements AutoCloseable {
               configuration.persistenceUsername(),
               configuration.persistencePassword(),
               8);
-      PostgresqlOperationOutboxes.startHttp(
-          actorSystem, dataSource, workflows, http, configuration.askTimeout());
-      PostgresqlOperationOutboxes.startProtocol(
-          actorSystem, dataSource, coordinators, configuration.askTimeout());
+      PostgresConnectionSettings connection =
+          new PostgresConnectionSettings(
+              configuration.persistenceEndpoint(),
+              configuration.persistenceUsername(),
+              configuration.persistencePassword());
+      TenantProjectionSupervisor.start(
+          actorSystem,
+          dataSource,
+          connection,
+          configuration.tenantRescanInterval(),
+          List.of(
+              (sys, ds, schema, conn) ->
+                  PostgresqlOperationOutboxes.startHttp(
+                      sys, ds, schema, conn, workflows, http, configuration.askTimeout()),
+              (sys, ds, schema, conn) ->
+                  PostgresqlOperationOutboxes.startProtocol(
+                      sys, ds, schema, conn, coordinators, configuration.askTimeout())));
     } else {
       dataSource = null;
       CassandraOperationOutboxes.startHttp(
@@ -114,10 +130,12 @@ public final class PekkoOperationAdapterRuntime implements AutoCloseable {
       long httpTimeoutMillis,
       String httpEgressAllowlist,
       String secretDirectory,
+      Duration tenantRescanInterval,
       KafkaProtocolOperationExecutors.Configuration protocolConfiguration) {
     public Configuration {
       Objects.requireNonNull(systemName);
       Objects.requireNonNull(askTimeout);
+      Objects.requireNonNull(tenantRescanInterval);
       Objects.requireNonNull(protocolConfiguration);
     }
 
@@ -147,6 +165,8 @@ public final class PekkoOperationAdapterRuntime implements AutoCloseable {
           number(value, "openworkflow.operations.http.timeout-ms", 30_000),
           allowlist,
           secrets,
+          Duration.ofMillis(
+              number(value, "openworkflow.adapters.tenant-rescan-interval-ms", 180_000)),
           new KafkaProtocolOperationExecutors.Configuration(
               protocolTimeout,
               allowlist,

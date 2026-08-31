@@ -30,7 +30,7 @@ public record CallPlan(
    * that standards-defined extension point keeps human work in an otherwise valid OpenWorkflow
    * document without changing or forking the upstream schema.
    */
-  public static final String HUMAN_TASK_FUNCTION = "io.forwardmeasure.oks.human-task";
+  public static final String HUMAN_TASK_FUNCTION = "com.forwardmeasure.oks.human-task";
 
   /**
    * Reserved custom-function name for one durable request/progress/result lifecycle implemented
@@ -40,7 +40,8 @@ public record CallPlan(
    * authoritative cancellation and recovery boundary instead of asking authors to coordinate an
    * independent send task and receive task.
    */
-  public static final String CORRELATED_WORKER_FUNCTION = "io.forwardmeasure.oks.correlated-worker";
+  public static final String CORRELATED_WORKER_FUNCTION =
+      "com.forwardmeasure.oks.correlated-worker";
 
   public CallPlan(
       Kind kind, String functionName, WorkflowResourceReference resource, JsonNode arguments) {

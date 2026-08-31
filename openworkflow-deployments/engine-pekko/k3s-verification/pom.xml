@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.forwardmeasure.openworkflow</groupId>
+    <artifactId>openworkflow-deployments</artifactId>
+    <version>${revision}</version>
+    <relativePath>../../pom.xml</relativePath>
+  </parent>
+
+  <artifactId>openworkflow-engine-pekko-k3s-verification</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Engine Pekko :: K3s Live Verification</name>
+  <description>
+    Deploys an already-built engine image into a real, disposable k3s cluster and drives it
+    over its real HTTP command API - proves the Phase 12 outbox/subworkflow/ingress wiring
+    actually works in a real Kubernetes deployment, not just in-process unit tests. Opt-in only
+    (excluded from the default build - see maven-surefire-plugin config below): needs Docker,
+    takes several minutes, and needs the target image already built via
+    `mvn -Pcontainer-image package -pl ../quarkus`.
+  </description>
+
+  <properties>
+    <!-- A plain command-line `-DexcludedGroups=` override, meant to opt into this module's own
+         opt-in test, applies reactor-wide when built with `-am` and breaks any upstream module
+         with no JUnit5 on its test classpath at all (surefire then demands a "specific engine
+         required"). Indirecting through a property scoped to this module's own name sidesteps
+         that: `-Dk3s.verification.excludedGroups=` overrides only here. -->
+    <k3s.verification.excludedGroups>k3s-verification</k3s.verification.excludedGroups>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-engine-http</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-definition</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-migrations</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.fasterxml.jackson.datatype</groupId>
+      <artifactId>jackson-datatype-jsr310</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-k3s</artifactId>
+      <version>2.0.5</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-simple</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <!-- Opt-in only: run explicitly with `-Dk3s.verification.excludedGroups=` (empty) to
+               override, e.g. `mvn test -Dk3s.verification.excludedGroups=
+               -Dtest=PekkoEngineQuarkusK3sVerificationTest`. -->
+          <excludedGroups>${k3s.verification.excludedGroups}</excludedGroups>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+</project>

@@ -84,6 +84,11 @@ public sealed interface EngineEvent
         EngineEvent.ProtocolCallCompleted,
         EngineEvent.ProtocolCallIterationStarted,
         EngineEvent.ProtocolCallIterationAdvanced,
+        EngineEvent.CorrelatedWorkerRequested,
+        EngineEvent.CorrelatedWorkerCommandPublished,
+        EngineEvent.CorrelatedWorkerProgressObserved,
+        EngineEvent.CorrelatedWorkerCompleted,
+        EngineEvent.CorrelatedWorkerCancellationDispatched,
         EngineEvent.ListenStarted,
         EngineEvent.ListenEventAccepted,
         EngineEvent.ListenUntilAdvanced,
@@ -1386,6 +1391,117 @@ public sealed interface EngineEvent
       data = Objects.requireNonNull(data, "data").deepCopy();
       context = Objects.requireNonNull(context, "context").deepCopy();
       Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  /**
+   * A {@code correlated-worker} call materialized its command/events/cancellation operations and
+   * entered its durable waiting frame. Mirrors {@code ProtocolCallRequested}'s shape, but a
+   * correlated-worker task owns up to three correlated operation identities instead of one.
+   */
+  record CorrelatedWorkerRequested(
+      UUID commandId,
+      String taskPath,
+      JsonNode rawInput,
+      JsonNode input,
+      int nextStep,
+      String lifecycleId,
+      ProtocolOperationDescriptor commandOperation,
+      ProtocolOperationDescriptor eventsOperation,
+      ProtocolOperationDescriptor cancellationOperation,
+      Instant occurredAt)
+      implements EngineEvent {
+    public CorrelatedWorkerRequested {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      rawInput = Objects.requireNonNull(rawInput, "rawInput").deepCopy();
+      input = Objects.requireNonNull(input, "input").deepCopy();
+      if (nextStep < 0) throw new IllegalArgumentException("nextStep must not be negative");
+      requireLifecycleId(lifecycleId);
+      Objects.requireNonNull(commandOperation, "commandOperation");
+      Objects.requireNonNull(eventsOperation, "eventsOperation");
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  /** Persist-confirmed acknowledgement that the correlated-worker command was published. */
+  record CorrelatedWorkerCommandPublished(
+      UUID commandId, String taskPath, String lifecycleId, Instant occurredAt)
+      implements EngineEvent {
+    public CorrelatedWorkerCommandPublished {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      requireLifecycleId(lifecycleId);
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  /** A non-terminal {@code ACCEPTED}/{@code PROGRESS} correlated-worker event was observed. */
+  record CorrelatedWorkerProgressObserved(
+      UUID commandId,
+      String taskPath,
+      String lifecycleId,
+      String status,
+      JsonNode payload,
+      Instant occurredAt)
+      implements EngineEvent {
+    public CorrelatedWorkerProgressObserved {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      requireLifecycleId(lifecycleId);
+      if (status == null || status.isBlank()) {
+        throw new IllegalArgumentException("status must not be blank");
+      }
+      payload = Objects.requireNonNull(payload, "payload").deepCopy();
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  /** The correlated-worker's events channel delivered a terminal {@code SUCCEEDED} outcome. */
+  record CorrelatedWorkerCompleted(
+      UUID commandId,
+      String taskPath,
+      String lifecycleId,
+      JsonNode output,
+      JsonNode context,
+      int nextStep,
+      Instant occurredAt)
+      implements EngineEvent {
+    public CorrelatedWorkerCompleted {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      requireLifecycleId(lifecycleId);
+      output = Objects.requireNonNull(output, "output").deepCopy();
+      context = Objects.requireNonNull(context, "context").deepCopy();
+      if (nextStep < 0) throw new IllegalArgumentException("nextStep must not be negative");
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  /**
+   * The workflow was cancelled while a correlated-worker call was pending and its authoritative
+   * cancellation operation was dispatched through the same adapter path as its command/events
+   * operations - not merely a local wait being dropped.
+   */
+  record CorrelatedWorkerCancellationDispatched(
+      UUID commandId,
+      String taskPath,
+      String lifecycleId,
+      ProtocolOperationDescriptor cancellationOperation,
+      Instant occurredAt)
+      implements EngineEvent {
+    public CorrelatedWorkerCancellationDispatched {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      requireLifecycleId(lifecycleId);
+      Objects.requireNonNull(cancellationOperation, "cancellationOperation");
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  private static void requireLifecycleId(String lifecycleId) {
+    if (lifecycleId == null || lifecycleId.isBlank()) {
+      throw new IllegalArgumentException("lifecycleId must not be blank");
     }
   }
 

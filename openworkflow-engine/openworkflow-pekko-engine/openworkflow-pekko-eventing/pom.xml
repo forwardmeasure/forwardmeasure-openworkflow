@@ -31,5 +31,6 @@
         <module>openworkflow-pekko-eventing-jaxrs</module>
         <module>openworkflow-pekko-eventing-postgresql</module>
         <module>openworkflow-pekko-eventing-cassandra</module>
+        <module>openworkflow-pekko-eventing-jpa</module>
     </modules>
 </project>

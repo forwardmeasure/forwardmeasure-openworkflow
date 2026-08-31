@@ -10,7 +10,10 @@
  */
 package com.forwardmeasure.openworkflow.operation.postgresql;
 
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
+import com.forwardmeasure.openworkflow.actor.PostgresConnectionSettings;
 import com.forwardmeasure.openworkflow.actor.ProtocolOperationCoordinatorSharding;
+import com.forwardmeasure.openworkflow.actor.TenantPersistencePlugins;
 import com.forwardmeasure.openworkflow.actor.WorkflowEntity;
 import com.forwardmeasure.openworkflow.actor.WorkflowSharding;
 import com.forwardmeasure.openworkflow.engine.api.EngineEvent;
@@ -23,7 +26,6 @@ import javax.sql.DataSource;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.cluster.sharding.typed.ShardedDaemonProcessSettings;
 import org.apache.pekko.cluster.sharding.typed.javadsl.ShardedDaemonProcess;
-import org.apache.pekko.persistence.jdbc.query.javadsl.JdbcReadJournal;
 import org.apache.pekko.persistence.query.Offset;
 import org.apache.pekko.projection.ProjectionBehavior;
 import org.apache.pekko.projection.ProjectionId;
@@ -33,40 +35,54 @@ import org.apache.pekko.projection.javadsl.Handler;
 import org.apache.pekko.projection.javadsl.SourceProvider;
 import org.apache.pekko.projection.jdbc.javadsl.JdbcProjection;
 
-/** Starts durable-offset PostgreSQL HTTP and protocol operation projections. */
+/**
+ * Starts durable-offset PostgreSQL HTTP and protocol operation projections - one instance per
+ * tenant, since the journal it reads and the offset store it writes both live inside that tenant's
+ * own Postgres schema (same shape as {@code PostgresqlCloudEventOutbox}).
+ */
 public final class PostgresqlOperationOutboxes {
   private PostgresqlOperationOutboxes() {}
 
   public static void startHttp(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       WorkflowSharding workflows,
       HttpOperationExecutor executor,
       Duration askTimeout) {
     start(
         system,
         dataSource,
-        "openworkflow-http-operations-postgresql",
-        "openworkflow-http-operations",
+        schema,
+        connection,
+        "openworkflow-http-operations-postgresql-" + schema.value(),
+        "openworkflow-http-operations-" + schema.value(),
         tag -> new HttpOperationOutboxHandler(workflows, executor, askTimeout, Clock.systemUTC()));
   }
 
   public static void startProtocol(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       ProtocolOperationCoordinatorSharding coordinators,
       Duration askTimeout) {
     start(
         system,
         dataSource,
-        "openworkflow-protocol-operations-postgresql",
-        "openworkflow-protocol-operations",
+        schema,
+        connection,
+        "openworkflow-protocol-operations-postgresql-" + schema.value(),
+        "openworkflow-protocol-operations-" + schema.value(),
         tag -> new ProtocolOperationOutboxHandler(coordinators, askTimeout));
   }
 
   private static void start(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       String processName,
       String projectionName,
       java.util.function.Function<String, Handler<EventEnvelope<EngineEvent>>> handlers) {
@@ -78,12 +94,16 @@ public final class PostgresqlOperationOutboxes {
             index -> {
               String tag = WorkflowEntity.projectionTags().get(index);
               SourceProvider<Offset, EventEnvelope<EngineEvent>> source =
-                  EventSourcedProvider.eventsByTag(system, JdbcReadJournal.Identifier(), tag);
+                  EventSourcedProvider.eventsByTag(
+                      system,
+                      TenantPersistencePlugins.readJournalPluginId(schema),
+                      TenantPersistencePlugins.readJournalPluginConfig(system, schema, connection),
+                      tag);
               return ProjectionBehavior.create(
                   JdbcProjection.atLeastOnceAsync(
                           ProjectionId.of(projectionName, tag),
                           source,
-                          () -> new DataSourceJdbcSession(dataSource),
+                          () -> new DataSourceJdbcSession(dataSource, schema),
                           () -> handlers.apply(tag),
                           system)
                       .withSaveOffset(1, Duration.ZERO));

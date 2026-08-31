@@ -15,6 +15,7 @@ public final class OksStores {
   public static final String INBOUND_EVENTS = "oks-inbound-events";
   public static final String SCHEDULE_EVENT_STATES = "oks-schedule-event-states";
   public static final String SCHEDULE_EVENT_RECEIPTS = "oks-schedule-event-receipts";
+  public static final String SUBWORKFLOW_WAITS = "oks-subworkflow-waits";
   public static final String TIMERS = "oks-timers";
   public static final String HISTORY = "oks-history-query";
   public static final String EFFECTS = "oks-effects-query";

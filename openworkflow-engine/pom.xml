@@ -34,5 +34,6 @@
     <module>openworkflow-engine-contract-tests</module>
     <module>openworkflow-pekko-engine</module>
     <module>openworkflow-kafka-streams-engine</module>
+    <module>openworkflow-engine-cross-engine-tests</module>
   </modules>
 </project>

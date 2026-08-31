@@ -42,7 +42,7 @@ class WorkflowDefinitionDraftMutabilityTest {
       PostgreSqlTestContainer database) throws Exception {
     TenantId tenantId = new TenantId(UUID.fromString("33333333-3333-3333-3333-333333333333"));
     OpenWorkflowTenantMigrator migrator =
-        new OpenWorkflowTenantMigrator(database.dataSource(), database.username());
+        new OpenWorkflowTenantMigrator(database.dataSource(), "openworkflow_runtime");
     migrator.ensureRuntimeRole(database.password());
     migrator.provisionAndMigrate(tenantId);
     String schema = TenantSchema.forTenant(tenantId).value();

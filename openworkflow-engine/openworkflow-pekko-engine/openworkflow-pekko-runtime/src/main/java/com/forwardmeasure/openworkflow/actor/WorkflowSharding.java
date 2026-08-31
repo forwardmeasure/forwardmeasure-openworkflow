@@ -12,6 +12,7 @@ package com.forwardmeasure.openworkflow.actor;
 
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import java.util.Objects;
+import java.util.Optional;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Props;
 import org.apache.pekko.cluster.sharding.typed.javadsl.ClusterSharding;
@@ -31,12 +32,23 @@ public final class WorkflowSharding {
   }
 
   public static WorkflowSharding initialize(ActorSystem<?> system) {
-    return initialize(system, "");
+    return initialize(system, "", Optional.empty());
   }
 
   /** Registers a cluster-wide proxy while restricting entity hosting to the requested role. */
   public static WorkflowSharding initialize(ActorSystem<?> system, String role) {
+    return initialize(system, role, Optional.empty());
+  }
+
+  /**
+   * @param postgresConnection empty for the Cassandra profile (or a test harness with no per-tenant
+   *     Postgres routing needed); present for the Postgres profile, so each entity resolves its own
+   *     tenant-scoped journal/snapshot plugin - see {@link WorkflowEntity}'s plugin overrides.
+   */
+  public static WorkflowSharding initialize(
+      ActorSystem<?> system, String role, Optional<PostgresConnectionSettings> postgresConnection) {
     Objects.requireNonNull(system, "system");
+    Objects.requireNonNull(postgresConnection, "postgresConnection");
     ClusterSharding sharding = ClusterSharding.get(system);
     Entity<
             WorkflowCommand,
@@ -45,7 +57,8 @@ public final class WorkflowSharding {
             Entity.of(
                     TYPE_KEY,
                     context ->
-                        WorkflowEntity.create(ExecutionId.fromEntityId(context.getEntityId())))
+                        WorkflowEntity.create(
+                            ExecutionId.fromEntityId(context.getEntityId()), postgresConnection))
                 .withEntityProps(
                     Props.empty().withMailboxFromConfig("openworkflow.entity-mailbox"));
     if (role != null && !role.isBlank()) entity = entity.withRole(role);

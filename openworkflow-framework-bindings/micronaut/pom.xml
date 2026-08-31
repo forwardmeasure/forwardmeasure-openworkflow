@@ -22,6 +22,5 @@
   <name>ForwardMeasure OpenWorkflow :: Micronaut Bindings</name>
   <modules>
     <module>openworkflow-micronaut-binding</module>
-    <module>openworkflow-micronaut-service</module>
   </modules>
 </project>

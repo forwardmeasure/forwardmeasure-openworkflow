@@ -12,7 +12,10 @@ package com.forwardmeasure.openworkflow.execution.management;
 
 import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.jpa.tenancy.TenantScope;
+import com.forwardmeasure.openworkflow.definition.PlanStep;
+import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
 import com.forwardmeasure.openworkflow.engine.api.CommandAcknowledgement;
+import com.forwardmeasure.openworkflow.engine.api.EngineCapabilities;
 import com.forwardmeasure.openworkflow.engine.api.EngineCommandException;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionCommand;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionCommandEnvelope;
@@ -116,6 +119,7 @@ public final class ExecutionManagementService {
                       request.context(), request.revisionId(), request.correlationId());
           ExecutionEngineProvider provider =
               providers.select(request.context(), publication.revision(), selector);
+          requireSupported(provider, publication.plan());
           Instant now = clock.instant();
           var executionId = new ExecutionId(request.context().tenantId(), executionIds.get());
           var candidate =
@@ -297,6 +301,33 @@ public final class ExecutionManagementService {
     }
     return java.util.concurrent.CompletableFuture.completedFuture(
         acknowledge(repository, execution, expectedVersion, acknowledgement));
+  }
+
+  private static void requireSupported(ExecutionEngineProvider provider, WorkflowPlan plan) {
+    EngineCapabilities.forEngine(provider.engineId())
+        .findUnsupportedStep(plan)
+        .ifPresent(
+            step -> {
+              throw new ExecutionManagementException(
+                  ExecutionManagementException.Kind.UNSUPPORTED_CONSTRUCT,
+                  "workflow step \""
+                      + step.path()
+                      + "\" uses "
+                      + describeConstruct(step)
+                      + ", which engine \""
+                      + provider.engineId().value()
+                      + "\" does not implement");
+            });
+  }
+
+  private static String describeConstruct(PlanStep step) {
+    if (step.callPlan() != null) {
+      return "call kind " + step.callPlan().kind();
+    }
+    if (step.runPlan() != null) {
+      return "run kind " + step.runPlan().kind();
+    }
+    return "an unsupported construct";
   }
 
   private static ExecutionAuthorizer.Action action(ExecutionCommand command) {

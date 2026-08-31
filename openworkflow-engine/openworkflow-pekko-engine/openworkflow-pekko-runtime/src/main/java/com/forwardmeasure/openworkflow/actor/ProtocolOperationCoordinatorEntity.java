@@ -146,10 +146,19 @@ public final class ProtocolOperationCoordinatorEntity
       return this;
     }
     WorkflowRuntimeState state = observed.state();
+    /*
+     * A correlated-worker's authoritative cancellation operation exists only to be dispatched
+     * while the workflow is cancelling - so, uniquely among durable operations, it is allowed to
+     * launch during CANCELLING instead of being stopped like every other pending operation. See
+     * WorkflowEntity#pendingCorrelatedWorkerCancellation for the matching dispatch decision.
+     */
+    boolean correlatedWorkerCancellationDispatch =
+        state.status() == ExecutionStatus.CANCELLING
+            && isCorrelatedWorkerCancellation(state.taskStack(), coordinates.operationId());
     if (state.status() == ExecutionStatus.PAUSED
         || state.status() == ExecutionStatus.PAUSING
         || state.status() == ExecutionStatus.CANCELLED
-        || state.status() == ExecutionStatus.CANCELLING
+        || (state.status() == ExecutionStatus.CANCELLING && !correlatedWorkerCancellationDispatch)
         || state.status() == ExecutionStatus.COMPLETED
         || state.status() == ExecutionStatus.FAILED) {
       stopTransport();
@@ -281,10 +290,9 @@ public final class ProtocolOperationCoordinatorEntity
       List<TaskExecutionFrame> stack, String operationId) {
     for (int index = stack.size() - 1; index >= 0; index--) {
       TaskExecutionFrame frame = stack.get(index);
-      if (frame.eventing()
-          && frame.event().kind() == EventExecutionFrame.Kind.PROTOCOL_CALL
-          && frame.event().operationId().equals(operationId)) {
-        return frame.event().protocolOperation();
+      if (frame.eventing()) {
+        ProtocolOperationDescriptor found = matchingOperation(frame.event(), operationId);
+        if (found != null) return found;
       }
       if (frame.forking()) {
         ProtocolOperationDescriptor nested = findOperation(frame.fork(), operationId);
@@ -292,6 +300,42 @@ public final class ProtocolOperationCoordinatorEntity
       }
     }
     return null;
+  }
+
+  /**
+   * A protocol-call frame owns exactly one operation; a correlated-worker frame owns up to three
+   * (command/events/cancellation) - each independently dispatched and recovered through its own
+   * coordinator instance keyed by its own operation ID.
+   */
+  private static ProtocolOperationDescriptor matchingOperation(
+      EventExecutionFrame event, String operationId) {
+    if (event.kind() == EventExecutionFrame.Kind.PROTOCOL_CALL
+        && event.operationId().equals(operationId)) {
+      return event.protocolOperation();
+    }
+    if (event.kind() == EventExecutionFrame.Kind.CORRELATED_WORKER) {
+      if (event.commandOperation().operationId().equals(operationId)) {
+        return event.commandOperation();
+      }
+      if (event.eventsOperation().operationId().equals(operationId)) {
+        return event.eventsOperation();
+      }
+      if (event.cancellationOperation() != null
+          && event.cancellationOperation().operationId().equals(operationId)) {
+        return event.cancellationOperation();
+      }
+    }
+    return null;
+  }
+
+  private static boolean isCorrelatedWorkerCancellation(
+      List<TaskExecutionFrame> stack, String operationId) {
+    if (stack.isEmpty()) return false;
+    TaskExecutionFrame frame = stack.get(stack.size() - 1);
+    return frame.eventing()
+        && frame.event().kind() == EventExecutionFrame.Kind.CORRELATED_WORKER
+        && frame.event().cancellationOperation() != null
+        && frame.event().cancellationOperation().operationId().equals(operationId);
   }
 
   private static ProtocolOperationDescriptor findOperation(

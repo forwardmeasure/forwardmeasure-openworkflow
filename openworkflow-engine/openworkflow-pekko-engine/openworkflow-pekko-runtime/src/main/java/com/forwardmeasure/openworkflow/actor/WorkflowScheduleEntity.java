@@ -11,10 +11,12 @@
 package com.forwardmeasure.openworkflow.actor;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.openworkflow.definition.SchedulePlan;
 import com.forwardmeasure.openworkflow.engine.api.EventConsumptionWindow;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import com.forwardmeasure.openworkflow.expression.RuntimeExpressionArguments;
+import com.typesafe.config.Config;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -22,9 +24,11 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.apache.pekko.actor.typed.ActorRef;
+import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
@@ -39,7 +43,9 @@ import org.apache.pekko.persistence.typed.javadsl.SignalHandler;
 /** Durable Pekko coordinator for temporal Open Workflow schedule triggers. */
 public final class WorkflowScheduleEntity
     extends EventSourcedBehaviorWithEnforcedReplies<ScheduleCommand, ScheduleEvent, ScheduleState> {
-  public static final int PROJECTION_TAG_COUNT = 32;
+  /** See {@link WorkflowEntity#PROJECTION_TAG_COUNT}'s identical reasoning for reducing 32 -> 8. */
+  public static final int PROJECTION_TAG_COUNT = 8;
+
   public static final String PROJECTION_TAG_PREFIX = "openworkflow-schedule-";
   private static final Duration MAX_TIMER_HORIZON = Duration.ofDays(30);
   private static final Duration DISPATCH_RETRY = Duration.ofSeconds(5);
@@ -47,25 +53,80 @@ public final class WorkflowScheduleEntity
   private final ScheduleId scheduleId;
   private final ActorRef<ScheduledExecutionRequest> dispatch;
   private final TimerScheduler<ScheduleCommand> timers;
+  private final ActorSystem<?> system;
+  private final Optional<PostgresConnectionSettings> postgresConnection;
   private final ScheduleTemporalPlanner planner = new ScheduleTemporalPlanner();
   private final CloudEventConsumptionEvaluator eventConsumption =
       new CloudEventConsumptionEvaluator();
 
   public static Behavior<ScheduleCommand> create(
       ScheduleId scheduleId, ActorRef<ScheduledExecutionRequest> dispatch) {
+    return create(scheduleId, dispatch, Optional.empty());
+  }
+
+  public static Behavior<ScheduleCommand> create(
+      ScheduleId scheduleId,
+      ActorRef<ScheduledExecutionRequest> dispatch,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     Objects.requireNonNull(scheduleId, "scheduleId");
     Objects.requireNonNull(dispatch, "dispatch");
-    return Behaviors.withTimers(timers -> new WorkflowScheduleEntity(scheduleId, dispatch, timers));
+    Objects.requireNonNull(postgresConnection, "postgresConnection");
+    return Behaviors.setup(
+        context ->
+            Behaviors.withTimers(
+                timers ->
+                    new WorkflowScheduleEntity(
+                        scheduleId, dispatch, timers, context.getSystem(), postgresConnection)));
   }
 
   private WorkflowScheduleEntity(
       ScheduleId scheduleId,
       ActorRef<ScheduledExecutionRequest> dispatch,
-      TimerScheduler<ScheduleCommand> timers) {
+      TimerScheduler<ScheduleCommand> timers,
+      ActorSystem<?> system,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     super(PersistenceId.ofUniqueId("workflow-schedule|" + scheduleId.entityId()));
     this.scheduleId = scheduleId;
     this.dispatch = dispatch;
     this.timers = timers;
+    this.system = Objects.requireNonNull(system, "system");
+    this.postgresConnection = Objects.requireNonNull(postgresConnection, "postgresConnection");
+  }
+
+  /** See {@link WorkflowEntity}'s identical overrides for why this per-tenant routing is needed. */
+  @Override
+  public String journalPluginId() {
+    return postgresConnection
+        .map(connection -> TenantPersistencePlugins.journalPluginId(tenantSchema()))
+        .orElseGet(super::journalPluginId);
+  }
+
+  @Override
+  public Optional<Config> journalPluginConfig() {
+    return postgresConnection.isEmpty()
+        ? super.journalPluginConfig()
+        : TenantPersistencePlugins.journalPluginConfig(
+            system, tenantSchema(), postgresConnection.get());
+  }
+
+  @Override
+  public String snapshotPluginId() {
+    return postgresConnection
+        .map(connection -> TenantPersistencePlugins.snapshotPluginId(tenantSchema()))
+        .orElseGet(super::snapshotPluginId);
+  }
+
+  @Override
+  public Optional<Config> snapshotPluginConfig() {
+    return postgresConnection.isEmpty()
+        ? super.snapshotPluginConfig()
+        : TenantPersistencePlugins.snapshotPluginConfig(
+            system, tenantSchema(), postgresConnection.get());
+  }
+
+  private TenantSchema tenantSchema() {
+    return TenantSchema.forTenant(
+        new com.forwardmeasure.jpa.tenancy.TenantId(scheduleId.tenantId().value()));
   }
 
   @Override

@@ -29,7 +29,11 @@ public record EventExecutionFrame(
     java.util.Set<Integer> matchedFilters,
     EventConsumptionWindow untilWindow,
     @JsonInclude(JsonInclude.Include.NON_EMPTY) List<JsonNode> protocolItems,
-    @JsonInclude(JsonInclude.Include.NON_NULL) ProtocolOperationDescriptor protocolOperation) {
+    @JsonInclude(JsonInclude.Include.NON_NULL) ProtocolOperationDescriptor protocolOperation,
+    @JsonInclude(JsonInclude.Include.NON_NULL) ProtocolOperationDescriptor commandOperation,
+    @JsonInclude(JsonInclude.Include.NON_NULL) ProtocolOperationDescriptor eventsOperation,
+    @JsonInclude(JsonInclude.Include.NON_NULL) ProtocolOperationDescriptor cancellationOperation,
+    boolean commandPublished) {
   public EventExecutionFrame(
       Kind kind,
       String operationId,
@@ -60,12 +64,40 @@ public record EventExecutionFrame(
         null);
   }
 
+  /** Backward-compatible canonical shape for every frame kind but {@code CORRELATED_WORKER}. */
+  public EventExecutionFrame(
+      Kind kind,
+      String operationId,
+      WorkflowCloudEvent emitted,
+      List<WorkflowCloudEvent> accepted,
+      Map<String, JsonNode> correlations,
+      java.util.Set<Integer> matchedFilters,
+      EventConsumptionWindow untilWindow,
+      List<JsonNode> protocolItems,
+      ProtocolOperationDescriptor protocolOperation) {
+    this(
+        kind,
+        operationId,
+        emitted,
+        accepted,
+        correlations,
+        matchedFilters,
+        untilWindow,
+        protocolItems,
+        protocolOperation,
+        null,
+        null,
+        null,
+        false);
+  }
+
   public enum Kind {
     EMIT,
     LISTEN,
     SUBWORKFLOW,
     HTTP_CALL,
-    PROTOCOL_CALL
+    PROTOCOL_CALL,
+    CORRELATED_WORKER
   }
 
   public EventExecutionFrame {
@@ -115,6 +147,18 @@ public record EventExecutionFrame(
       if (kind != Kind.PROTOCOL_CALL || protocolOperation != null) {
         throw new IllegalArgumentException("Only a protocol frame can retain a protocol operation");
       }
+    }
+    if ((kind == Kind.CORRELATED_WORKER) != (commandOperation != null || eventsOperation != null)) {
+      throw new IllegalArgumentException(
+          "Only a correlated-worker frame can retain command/events operations");
+    }
+    if (kind == Kind.CORRELATED_WORKER && (commandOperation == null || eventsOperation == null)) {
+      throw new IllegalArgumentException(
+          "A correlated-worker frame requires its command and events operations");
+    }
+    if (kind != Kind.CORRELATED_WORKER && (cancellationOperation != null || commandPublished)) {
+      throw new IllegalArgumentException(
+          "Only a correlated-worker frame can retain cancellation state");
     }
   }
 
@@ -187,6 +231,53 @@ public record EventExecutionFrame(
         null,
         List.of(),
         operation);
+  }
+
+  /**
+   * A {@code correlated-worker} call's durable waiting frame, carrying its command (PUBLISH),
+   * events (SUBSCRIBE), and optional cancellation (PUBLISH) operations - one lifecycle spanning up
+   * to three correlated external operations instead of the single operation every other protocol
+   * call owns.
+   */
+  public static EventExecutionFrame correlatedWorker(
+      String lifecycleId,
+      ProtocolOperationDescriptor commandOperation,
+      ProtocolOperationDescriptor eventsOperation,
+      ProtocolOperationDescriptor cancellationOperation) {
+    return new EventExecutionFrame(
+        Kind.CORRELATED_WORKER,
+        lifecycleId,
+        null,
+        List.of(),
+        Map.of(),
+        java.util.Set.of(),
+        null,
+        List.of(),
+        null,
+        Objects.requireNonNull(commandOperation, "commandOperation"),
+        Objects.requireNonNull(eventsOperation, "eventsOperation"),
+        cancellationOperation,
+        false);
+  }
+
+  public EventExecutionFrame withCommandPublished() {
+    if (kind != Kind.CORRELATED_WORKER) {
+      throw new IllegalStateException("Frame is not a correlated-worker call");
+    }
+    return new EventExecutionFrame(
+        kind,
+        operationId,
+        null,
+        accepted,
+        correlations,
+        matchedFilters,
+        untilWindow,
+        protocolItems,
+        protocolOperation,
+        commandOperation,
+        eventsOperation,
+        cancellationOperation,
+        true);
   }
 
   public EventExecutionFrame acceptProtocolItem(JsonNode item) {

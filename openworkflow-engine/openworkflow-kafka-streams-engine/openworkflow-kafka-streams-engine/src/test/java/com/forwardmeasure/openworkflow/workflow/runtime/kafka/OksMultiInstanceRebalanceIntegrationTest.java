@@ -201,6 +201,7 @@ final class OksMultiInstanceRebalanceIntegrationTest {
             topics.operationCheckpoints(),
             topics.subscriptionEffects(),
             topics.timerEffects(),
+            topics.subworkflowEffects(),
             topics.inboundEvents(),
             topics.emittedEvents(),
             topics.deadLetters());

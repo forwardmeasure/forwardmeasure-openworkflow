@@ -139,6 +139,7 @@
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-kafka-streams-runtime-api</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-kafka-streams-runtime-core</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-kafka-streams-engine</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-cross-engine-tests</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-application</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-management-jpa</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-models</artifactId><version>${project.version}</version></dependency>

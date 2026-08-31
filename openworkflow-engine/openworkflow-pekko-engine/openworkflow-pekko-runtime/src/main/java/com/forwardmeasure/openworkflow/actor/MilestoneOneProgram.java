@@ -43,6 +43,7 @@ final class MilestoneOneProgram {
           ExecuteHttpCall,
           ExecuteProtocolCall,
           ExitProtocolCall,
+          ExecuteCorrelatedWorkerCall,
           EnterFunction,
           ExitFunction,
           EnterFork,
@@ -87,6 +88,8 @@ final class MilestoneOneProgram {
   record ExecuteHttpCall(PlanStep step, int next) implements Instruction {}
 
   record ExecuteProtocolCall(PlanStep step, int next, int after) implements Instruction {}
+
+  record ExecuteCorrelatedWorkerCall(PlanStep step, int next) implements Instruction {}
 
   record EnterFunction(PlanStep step, int next, int exit) implements Instruction {}
 
@@ -300,12 +303,18 @@ final class MilestoneOneProgram {
             && step.callPlan().kind()
                 != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.A2A
             && step.callPlan().kind()
-                != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.MCP) {
+                != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.MCP
+            && step.callPlan().kind()
+                != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.CORRELATED_WORKER) {
           throw new IllegalArgumentException(
               "The current function increment supports only reusable function calls at "
                   + step.path());
         }
         if (step.callPlan().kind()
+            == com.forwardmeasure.openworkflow.definition.CallPlan.Kind.CORRELATED_WORKER) {
+          output.add(new MutableCorrelatedWorkerCall(step));
+          members.add(new Member(step, entry, entry));
+        } else if (step.callPlan().kind()
             == com.forwardmeasure.openworkflow.definition.CallPlan.Kind.FUNCTION) {
           int enter = output.size();
           var enterInstruction = new MutableEnterFunction(step);
@@ -705,6 +714,17 @@ final class MilestoneOneProgram {
     @Override
     Instruction resolve(int end) {
       return new ExecuteProtocolCall(step, resolvedNext(end), after < 0 ? end : after);
+    }
+  }
+
+  private static final class MutableCorrelatedWorkerCall extends MutableInstruction {
+    MutableCorrelatedWorkerCall(PlanStep step) {
+      super(step);
+    }
+
+    @Override
+    Instruction resolve(int end) {
+      return new ExecuteCorrelatedWorkerCall(step, resolvedNext(end));
     }
   }
 

@@ -366,6 +366,31 @@ class WorkflowExecutionEngineTest {
   }
 
   @Test
+  void cancellingAPurgingExecutionIsRejectedCleanlyLikeATerminalExecution() throws Exception {
+    // PURGING is deliberately not ExecutionPhase.terminal() (it only starts once the execution
+    // already reached a terminal phase, and that phase must be restorable if the purge itself
+    // fails - see ActiveExecutionPurgeState), so cancel()'s original terminal-phase guard didn't
+    // catch it. Before this fix, that meant cancel() fell all the way through to
+    // appendInteractionCancellationEvents and crashed with a confusing, unrelated
+    // "Compiled plan does not contain task $purge" error (ActiveExecutionPurgeState.TASK_PATH is
+    // a synthetic marker no real compiled plan ever has a step at) - discovered while verifying
+    // Phase 11's PendingInteraction switch conversion, not caused by it. Now rejected with the
+    // same clear message shape as a genuinely terminal phase.
+    Harness harness = completedHarness();
+    var requested = harness.apply(purgeCommand(PURGER), fingerprint(harness.aggregate.revision()));
+    assertEquals(ExecutionPhase.PURGING, requested.aggregate().state().phase());
+
+    var cancel =
+        new ControlExecutionCommand(
+            "cancel-during-purge", KEY, ExecutionControlAction.CANCEL, PURGER, NOW.plusSeconds(1));
+    IllegalArgumentException thrown =
+        assertThrows(
+            IllegalArgumentException.class,
+            () -> harness.apply(cancel, fingerprint(requested.aggregate().revision())));
+    assertEquals("Cannot cancel a purging execution", thrown.getMessage());
+  }
+
+  @Test
   void purgeFailsClosedWithoutDedicatedRoleOrEligibility() throws Exception {
     Harness unauthorized = completedHarness();
     assertThrows(
@@ -1359,7 +1384,7 @@ class WorkflowExecutionEngineTest {
           version: '1.0.0'
         do:
           - approve:
-              call: io.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.oks.human-task
               with:
                 title: Review extracted evidence
                 description: Confirm the extracted people
@@ -1481,7 +1506,7 @@ class WorkflowExecutionEngineTest {
           version: '1.0.0'
         do:
           - approve:
-              call: io.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.oks.human-task
               with:
                 title: Review extraction
                 approvals:
@@ -2335,7 +2360,7 @@ class WorkflowExecutionEngineTest {
                   command: printf
                   arguments: [ready]
           - review:
-              call: io.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.oks.human-task
               with:
                 title: Review extracted evidence
                 presentation:
@@ -4258,7 +4283,7 @@ class WorkflowExecutionEngineTest {
           version: '1.0.0'
         do:
           - approve:
-              call: io.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.oks.human-task
               with:
                 title: Review Evidence
                 input: '${ .caseMaterial }'
@@ -5032,7 +5057,7 @@ class WorkflowExecutionEngineTest {
       version: '1.0.0'
     do:
       - execute:
-          call: io.forwardmeasure.oks.correlated-worker
+          call: com.forwardmeasure.oks.correlated-worker
           with:
             document:
               endpoint:
@@ -5220,6 +5245,487 @@ class WorkflowExecutionEngineTest {
     return null;
   }
 
+  // ---------------------------------------------------------------------------------------
+  // Subworkflow (run: workflow:) support.
+  //
+  // WorkflowExecutionEngine never talks to a child execution directly - it only ever emits
+  // durable WorkflowEffects (START_SUBWORKFLOW / CONTROL_SUBWORKFLOW) and later consumes
+  // ExecutionCommands (StartExecutionCommand / ControlExecutionCommand / ObserveOperationCommand)
+  // that some topology routes back in. These tests stand in for that topology exactly the way
+  // OksSubworkflowLaunchProcessor / OksSubworkflowCompletionProcessor /
+  // OksSubworkflowControlProcessor
+  // do in production - reading the same descriptor fields those processors read - and drive a real,
+  // separate engine instance for the child so the round trip is genuine, not simulated.
+  // ---------------------------------------------------------------------------------------
+
+  private static final byte[] SUBWORKFLOW_CHILD_SOURCE =
+      """
+      document:
+        dsl: '1.0.3'
+        namespace: evidence
+        name: subworkflow-child
+        version: '2.0.0'
+      do:
+        - compute:
+            set:
+              childSaw: '${ .seed }'
+      """
+          .getBytes(StandardCharsets.UTF_8);
+
+  private static WorkflowDefinitionBundle subworkflowChildBundle() {
+    return bundle(SUBWORKFLOW_CHILD_SOURCE);
+  }
+
+  private static WorkflowDefinitionBundle subworkflowParentBundle(
+      byte[] parentSource, WorkflowDefinitionBundle child) {
+    var subflow =
+        new com.forwardmeasure.openworkflow.definition.ResolvedSubflow(
+            child.plan().coordinates(),
+            child.plan().sourceSha256(),
+            child.plan().definitionSha256());
+    WorkflowPlan plan =
+        new OpenWorkflowCompiler()
+            .compile(
+                parentSource,
+                List.of(),
+                (namespace, name, version) ->
+                    namespace.equals(child.plan().coordinates().namespace())
+                            && name.equals(child.plan().coordinates().name())
+                            && version.equals(child.plan().coordinates().version())
+                        ? java.util.Optional.of(subflow)
+                        : java.util.Optional.empty());
+    return new WorkflowDefinitionBundle(
+        new WorkflowDefinitionKey(TENANT, plan.coordinates()),
+        new String(parentSource, StandardCharsets.UTF_8),
+        plan,
+        OpenWorkflowCompiler.COMPILER_SHA256,
+        "admission-subworkflow-parent",
+        USER,
+        NOW);
+  }
+
+  private static WorkflowDefinitionResolver twoBundleResolver(
+      WorkflowDefinitionBundle first, WorkflowDefinitionBundle second) {
+    return reference -> {
+      if (first.reference().equals(reference)) return first;
+      if (second.reference().equals(reference)) return second;
+      return null;
+    };
+  }
+
+  /**
+   * Mirrors {@code OksSubworkflowLaunchProcessor}: builds the child's start command from the
+   * parent's {@code START_SUBWORKFLOW} effect descriptor, the way the real topology routing does.
+   */
+  private static StartExecutionCommand subworkflowChildStartCommand(WorkflowEffect launch) {
+    JsonNode descriptor = launch.payload().inlineValue();
+    ExecutionKey childKey =
+        ExecutionKey.parse(descriptor.required("childExecutionKey").textValue());
+    WorkflowDefinitionReference childDefinition =
+        new WorkflowDefinitionReference(
+            new WorkflowDefinitionKey(
+                childKey.tenantId(),
+                new com.forwardmeasure.openworkflow.definition.WorkflowCoordinates(
+                    descriptor.required("childNamespace").textValue(),
+                    descriptor.required("childName").textValue(),
+                    descriptor.required("childVersion").textValue(),
+                    descriptor.required("childDsl").textValue())),
+            descriptor.required("childSourceSha256").textValue(),
+            descriptor.required("childDefinitionSha256").textValue());
+    DataReference childInput = DataReferenceJson.decode(descriptor.required("childInput"));
+    return new StartExecutionCommand(
+        "subworkflow-start:" + descriptor.required("operationId").textValue(),
+        childKey,
+        childDefinition,
+        childInput,
+        launch.actor(),
+        launch.requestedAt());
+  }
+
+  /**
+   * Mirrors {@code OksSubworkflowCompletionProcessor}: builds the parent's resume command once the
+   * child it is waiting on reaches a terminal state.
+   */
+  private static ObserveOperationCommand subworkflowParentResumeCommand(
+      WorkflowEffect launch, OperationObservation observation, Instant occurredAt) {
+    JsonNode descriptor = launch.payload().inlineValue();
+    ExecutionKey parentKey =
+        ExecutionKey.parse(descriptor.required("parentExecutionKey").textValue());
+    return new ObserveOperationCommand(
+        "subworkflow-complete:" + descriptor.required("operationId").textValue(),
+        parentKey,
+        descriptor.required("operationId").textValue(),
+        observation,
+        RUNTIME,
+        occurredAt);
+  }
+
+  /**
+   * Mirrors {@code OksSubworkflowControlProcessor}: builds the child control command that
+   * propagates a parent's pause, resume or cancellation.
+   */
+  private static ControlExecutionCommand subworkflowChildControlCommand(WorkflowEffect control) {
+    JsonNode payload = control.payload().inlineValue();
+    ExecutionKey childKey = ExecutionKey.parse(payload.required("childExecutionKey").textValue());
+    ExecutionControlAction action =
+        ExecutionControlAction.valueOf(payload.required("action").textValue());
+    return new ControlExecutionCommand(
+        control.effectId(), childKey, action, control.actor(), control.requestedAt());
+  }
+
+  private static WorkflowEffect onlySubworkflowEffect(
+      List<WorkflowEffect> effects, WorkflowEffectType type, ExecutionControlAction action) {
+    return effects.stream()
+        .filter(effect -> effect.type() == type)
+        .filter(
+            effect ->
+                action == null
+                    || action
+                        .name()
+                        .equals(effect.payload().inlineValue().path("action").asText(null)))
+        .findFirst()
+        .orElseThrow(
+            () -> new AssertionError("No " + type + " (" + action + ") effect was emitted"));
+  }
+
+  private static DurableDecision<
+          ExecutionSnapshot, ExecutionCommand, ExecutionHistoryEvent, WorkflowEffect>
+      runToTerminal(
+          Harness harness,
+          DurableDecision<
+                  ExecutionSnapshot, ExecutionCommand, ExecutionHistoryEvent, WorkflowEffect>
+              decision) {
+    while (!decision.aggregate().state().phase().terminal()) {
+      decision =
+          harness.apply(
+              decision.followUpCommands().getFirst(), fingerprint(decision.aggregate().revision()));
+    }
+    return decision;
+  }
+
+  @Test
+  void subworkflowRunStartsChildAndResumesParentWithItsOutput() throws Exception {
+    WorkflowDefinitionBundle child = subworkflowChildBundle();
+    byte[] parentSource =
+        """
+        document:
+          dsl: '1.0.3'
+          namespace: evidence
+          name: subworkflow-parent
+          version: '1.0.0'
+        do:
+          - invoke:
+              run:
+                workflow:
+                  namespace: evidence
+                  name: subworkflow-child
+                  version: '2.0.0'
+                  input:
+                    seed: '${ .seed }'
+        """
+            .getBytes(StandardCharsets.UTF_8);
+    WorkflowDefinitionBundle parent = subworkflowParentBundle(parentSource, child);
+    ExecutionKey parentKey =
+        new ExecutionKey(TENANT, new WorkflowExecutionId("subworkflow-parent-completion"));
+    Harness parentHarness = new Harness(parentKey, twoBundleResolver(parent, child));
+
+    var started =
+        parentHarness.apply(
+            new StartExecutionCommand(
+                "start-subworkflow-parent",
+                parentKey,
+                parent.reference(),
+                DataReferences.inline(JSON.readTree("{\"seed\":\"abc-123\"}")),
+                USER,
+                NOW),
+            "1".repeat(64));
+    var dispatched =
+        parentHarness.apply(
+            started.followUpCommands().getFirst(), fingerprint(started.aggregate().revision()));
+
+    ActiveOperationState operation =
+        assertInstanceOf(
+            ActiveOperationState.class, dispatched.aggregate().state().pendingInteraction());
+    assertEquals("run-workflow", operation.operationKind());
+    WorkflowEffect launch = dispatched.outbox().getFirst();
+    assertEquals(WorkflowEffectType.START_SUBWORKFLOW, launch.type());
+    JsonNode descriptor = launch.payload().inlineValue();
+    assertEquals("subworkflow-child", descriptor.required("childName").textValue());
+    assertEquals(parentKey.canonical(), descriptor.required("parentExecutionKey").textValue());
+    assertTrue(descriptor.required("awaitParent").booleanValue());
+    assertEquals(
+        "abc-123",
+        DataReferenceJson.decode(descriptor.required("childInput"))
+            .inlineValue()
+            .required("seed")
+            .textValue());
+    assertTrue(
+        dispatched.events().stream()
+            .anyMatch(event -> event.type() == ExecutionEventType.OPERATION_DISPATCHED));
+
+    StartExecutionCommand childStart = subworkflowChildStartCommand(launch);
+    Harness childHarness = new Harness(childStart.key(), twoBundleResolver(parent, child));
+    var childFinal = runToTerminal(childHarness, childHarness.apply(childStart, "1".repeat(64)));
+    assertEquals(ExecutionPhase.COMPLETED, childFinal.aggregate().state().phase());
+    assertEquals(
+        "abc-123",
+        childFinal.aggregate().state().data().inlineValue().required("childSaw").textValue());
+
+    var resumed =
+        parentHarness.apply(
+            subworkflowParentResumeCommand(
+                launch,
+                new OperationObservation(
+                    OperationObservationStatus.SUCCEEDED,
+                    childFinal.aggregate().state().data(),
+                    null,
+                    null),
+                NOW.plusSeconds(5)),
+            fingerprint(dispatched.aggregate().revision()));
+    assertTrue(
+        resumed.events().stream()
+            .anyMatch(event -> event.type() == ExecutionEventType.OPERATION_COMPLETED));
+    var parentFinal = runToTerminal(parentHarness, resumed);
+    assertEquals(ExecutionPhase.COMPLETED, parentFinal.aggregate().state().phase());
+    assertEquals(
+        "abc-123",
+        parentFinal.aggregate().state().data().inlineValue().required("childSaw").textValue());
+  }
+
+  @Test
+  void pausingOrCancellingTheParentPropagatesToTheChildInsteadOfOrphaningIt() throws Exception {
+    WorkflowDefinitionBundle child = subworkflowChildBundle();
+    byte[] parentSource =
+        """
+        document:
+          dsl: '1.0.3'
+          namespace: evidence
+          name: subworkflow-parent-control
+          version: '1.0.0'
+        do:
+          - invoke:
+              run:
+                workflow:
+                  namespace: evidence
+                  name: subworkflow-child
+                  version: '2.0.0'
+                  input:
+                    seed: '${ .seed }'
+        """
+            .getBytes(StandardCharsets.UTF_8);
+    WorkflowDefinitionBundle parent = subworkflowParentBundle(parentSource, child);
+    ExecutionKey parentKey =
+        new ExecutionKey(TENANT, new WorkflowExecutionId("subworkflow-parent-control"));
+    Harness parentHarness = new Harness(parentKey, twoBundleResolver(parent, child));
+
+    var started =
+        parentHarness.apply(
+            new StartExecutionCommand(
+                "start-subworkflow-parent-control",
+                parentKey,
+                parent.reference(),
+                DataReferences.inline(JSON.readTree("{\"seed\":\"do-not-orphan-me\"}")),
+                USER,
+                NOW),
+            "1".repeat(64));
+    var dispatched =
+        parentHarness.apply(
+            started.followUpCommands().getFirst(), fingerprint(started.aggregate().revision()));
+    WorkflowEffect launch = dispatched.outbox().getFirst();
+    assertEquals(WorkflowEffectType.START_SUBWORKFLOW, launch.type());
+
+    StartExecutionCommand childStart = subworkflowChildStartCommand(launch);
+    Harness childHarness = new Harness(childStart.key(), twoBundleResolver(parent, child));
+    var childStarted = childHarness.apply(childStart, "1".repeat(64));
+    assertEquals(ExecutionPhase.RUNNING, childStarted.aggregate().state().phase());
+
+    // Pausing the parent must actually pause the child, not merely stop watching it.
+    var paused =
+        parentHarness.apply(
+            new ControlExecutionCommand(
+                "pause-subworkflow-parent",
+                parentKey,
+                ExecutionControlAction.PAUSE,
+                USER,
+                NOW.plusSeconds(1)),
+            fingerprint(dispatched.aggregate().revision()));
+    assertEquals(ExecutionPhase.PAUSED, paused.aggregate().state().phase());
+    WorkflowEffect pauseControl =
+        onlySubworkflowEffect(
+            paused.outbox(), WorkflowEffectType.CONTROL_SUBWORKFLOW, ExecutionControlAction.PAUSE);
+    var childPaused =
+        childHarness.apply(
+            subworkflowChildControlCommand(pauseControl),
+            fingerprint(childStarted.aggregate().revision()));
+    assertEquals(ExecutionPhase.PAUSED, childPaused.aggregate().state().phase());
+
+    // Resuming the parent must resume the child too, not redispatch (start) it again.
+    var resumedParent =
+        parentHarness.apply(
+            new ControlExecutionCommand(
+                "resume-subworkflow-parent",
+                parentKey,
+                ExecutionControlAction.RESUME,
+                USER,
+                NOW.plusSeconds(2)),
+            fingerprint(paused.aggregate().revision()));
+    assertEquals(ExecutionPhase.RUNNING, resumedParent.aggregate().state().phase());
+    assertTrue(
+        resumedParent.outbox().stream()
+            .noneMatch(effect -> effect.type() == WorkflowEffectType.START_SUBWORKFLOW),
+        "Resuming a waiting parent must not re-launch its child");
+    WorkflowEffect resumeControl =
+        onlySubworkflowEffect(
+            resumedParent.outbox(),
+            WorkflowEffectType.CONTROL_SUBWORKFLOW,
+            ExecutionControlAction.RESUME);
+    var childResumed =
+        childHarness.apply(
+            subworkflowChildControlCommand(resumeControl),
+            fingerprint(childPaused.aggregate().revision()));
+    assertEquals(ExecutionPhase.RUNNING, childResumed.aggregate().state().phase());
+
+    // Cancelling the parent must cancel the child - the whole point of propagation.
+    var cancelRequested =
+        parentHarness.apply(
+            new ControlExecutionCommand(
+                "cancel-subworkflow-parent",
+                parentKey,
+                ExecutionControlAction.CANCEL,
+                USER,
+                NOW.plusSeconds(3)),
+            fingerprint(resumedParent.aggregate().revision()));
+    assertEquals(ExecutionPhase.CANCEL_REQUESTED, cancelRequested.aggregate().state().phase());
+    WorkflowEffect cancelControl =
+        onlySubworkflowEffect(
+            cancelRequested.outbox(),
+            WorkflowEffectType.CONTROL_SUBWORKFLOW,
+            ExecutionControlAction.CANCEL);
+    var childCancelled =
+        childHarness.apply(
+            subworkflowChildControlCommand(cancelControl),
+            fingerprint(childResumed.aggregate().revision()));
+    assertEquals(ExecutionPhase.CANCELLED, childCancelled.aggregate().state().phase());
+
+    var cancelAcknowledged =
+        parentHarness.apply(
+            subworkflowParentResumeCommand(
+                launch,
+                new OperationObservation(
+                    OperationObservationStatus.CANCELLED,
+                    null,
+                    new WorkflowError(
+                        "https://forwardmeasure.com/oks/errors/subworkflow/cancelled",
+                        499,
+                        childStart.key().canonical(),
+                        "Subworkflow cancelled",
+                        "Child workflow execution "
+                            + childStart.key().canonical()
+                            + " was cancelled"),
+                    null),
+                NOW.plusSeconds(4)),
+            fingerprint(cancelRequested.aggregate().revision()));
+    var parentFinal = runToTerminal(parentHarness, cancelAcknowledged);
+    assertEquals(ExecutionPhase.CANCELLED, parentFinal.aggregate().state().phase());
+  }
+
+  @Test
+  void subworkflowInsideAForkBranchWaitsWhileTheOtherBranchProceeds() throws Exception {
+    WorkflowDefinitionBundle child = subworkflowChildBundle();
+    byte[] parentSource =
+        """
+        document:
+          dsl: '1.0.3'
+          namespace: evidence
+          name: subworkflow-fork-parent
+          version: '1.0.0'
+        do:
+          - parallel:
+              fork:
+                branches:
+                  - invoke:
+                      run:
+                        workflow:
+                          namespace: evidence
+                          name: subworkflow-child
+                          version: '2.0.0'
+                          input:
+                            seed: '${ .seed }'
+                  - immediate:
+                      set:
+                        immediateDone: true
+        """
+            .getBytes(StandardCharsets.UTF_8);
+    WorkflowDefinitionBundle parent = subworkflowParentBundle(parentSource, child);
+    ExecutionKey parentKey =
+        new ExecutionKey(TENANT, new WorkflowExecutionId("subworkflow-fork-parent"));
+    Harness parentHarness = new Harness(parentKey, twoBundleResolver(parent, child));
+
+    var decision =
+        parentHarness.apply(
+            new StartExecutionCommand(
+                "start-subworkflow-fork-parent",
+                parentKey,
+                parent.reference(),
+                DataReferences.inline(JSON.readTree("{\"seed\":\"fork-seed\"}")),
+                USER,
+                NOW),
+            "1".repeat(64));
+    List<WorkflowEffect> effects = new ArrayList<>(decision.outbox());
+    while (!decision.followUpCommands().isEmpty()) {
+      decision =
+          parentHarness.apply(
+              decision.followUpCommands().getFirst(), fingerprint(decision.aggregate().revision()));
+      effects.addAll(decision.outbox());
+    }
+
+    ActiveOperationState operation = findOperation(decision.aggregate().state().activeFork());
+    assertNotNull(operation, "The invoke branch must be waiting on its subworkflow");
+    assertEquals("run-workflow", operation.operationKind());
+    ForkBranchState immediateBranch =
+        decision.aggregate().state().activeFork().branches().stream()
+            .filter(branch -> branch.name().equals("immediate"))
+            .findFirst()
+            .orElseThrow();
+    assertEquals(
+        ForkBranchPhase.COMPLETED,
+        immediateBranch.phase(),
+        "The plain branch must not be blocked by its sibling's subworkflow");
+
+    WorkflowEffect launch =
+        effects.stream()
+            .filter(effect -> effect.type() == WorkflowEffectType.START_SUBWORKFLOW)
+            .findFirst()
+            .orElseThrow();
+    JsonNode descriptor = launch.payload().inlineValue();
+    assertEquals(
+        parentKey.canonical(),
+        descriptor.required("parentExecutionKey").textValue(),
+        "A fork-branch subworkflow must still record the OUTER execution as its parent");
+
+    StartExecutionCommand childStart = subworkflowChildStartCommand(launch);
+    Harness childHarness = new Harness(childStart.key(), twoBundleResolver(parent, child));
+    var childFinal = runToTerminal(childHarness, childHarness.apply(childStart, "1".repeat(64)));
+    assertEquals(ExecutionPhase.COMPLETED, childFinal.aggregate().state().phase());
+    assertEquals(
+        "fork-seed",
+        childFinal.aggregate().state().data().inlineValue().required("childSaw").textValue());
+
+    var resumed =
+        parentHarness.apply(
+            subworkflowParentResumeCommand(
+                launch,
+                new OperationObservation(
+                    OperationObservationStatus.SUCCEEDED,
+                    childFinal.aggregate().state().data(),
+                    null,
+                    null),
+                NOW.plusSeconds(5)),
+            fingerprint(decision.aggregate().revision()));
+    var parentFinal = runToTerminal(parentHarness, resumed);
+    assertEquals(ExecutionPhase.COMPLETED, parentFinal.aggregate().state().phase());
+  }
+
   private static Harness completedHarness() throws Exception {
     Harness harness = new Harness();
     var decision = harness.apply(startCommand(), "1".repeat(64));
@@ -5252,6 +5758,7 @@ class WorkflowExecutionEngineTest {
     private final DurableProcessingKernel<
             ExecutionSnapshot, ExecutionCommand, ExecutionHistoryEvent, WorkflowEffect>
         kernel;
+    private final ExecutionKey key;
     private DurableAggregate<ExecutionSnapshot> aggregate;
 
     Harness() {
@@ -5290,11 +5797,36 @@ class WorkflowExecutionEngineTest {
         Duration cancellationGracePeriod,
         boolean deferredComputationEnabled,
         WorkflowRuntimeDataAccess dataAccess) {
+      this(
+          KEY,
+          ignored -> bundle(source, resources),
+          cancellationGracePeriod,
+          deferredComputationEnabled,
+          dataAccess);
+    }
+
+    /**
+     * Drives one execution keyed at {@code key}, resolving any definition (its own, or - for a
+     * {@code run: workflow:} step - a pinned child's) through {@code definitions}. Used to run a
+     * parent and a child subworkflow execution side by side against one shared definition
+     * catalogue, the same way the real {@code OksTopology} routing does.
+     */
+    Harness(ExecutionKey key, WorkflowDefinitionResolver definitions) {
+      this(key, definitions, Duration.ofSeconds(30), true, WorkflowRuntimeDataAccess.inlineOnly());
+    }
+
+    Harness(
+        ExecutionKey key,
+        WorkflowDefinitionResolver definitions,
+        Duration cancellationGracePeriod,
+        boolean deferredComputationEnabled,
+        WorkflowRuntimeDataAccess dataAccess) {
+      this.key = key;
       kernel =
           new DurableProcessingKernel<>(
               new OpenWorkflowCommandMetadata(),
               new WorkflowExecutionEngine(
-                  ignored -> bundle(source, resources),
+                  definitions,
                   RUNTIME_ACTOR_ID,
                   "oks-test",
                   cancellationGracePeriod,
@@ -5304,7 +5836,7 @@ class WorkflowExecutionEngineTest {
 
     DurableDecision<ExecutionSnapshot, ExecutionCommand, ExecutionHistoryEvent, WorkflowEffect>
         apply(ExecutionCommand command, String fingerprint) {
-      var decision = kernel.decide(KEY.canonical(), aggregate, command, fingerprint, null);
+      var decision = kernel.decide(key.canonical(), aggregate, command, fingerprint, null);
       aggregate = decision.aggregate();
       return decision;
     }

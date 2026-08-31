@@ -13,6 +13,7 @@ package com.forwardmeasure.openworkflow.actor;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.openworkflow.definition.CatchPlan;
 import com.forwardmeasure.openworkflow.definition.DataSchemaValidationException;
 import com.forwardmeasure.openworkflow.definition.DataSchemaValidator;
@@ -42,6 +43,7 @@ import com.forwardmeasure.openworkflow.engine.api.WorkflowCloudEvent;
 import com.forwardmeasure.openworkflow.expression.ExpressionMode;
 import com.forwardmeasure.openworkflow.expression.JqRuntimeExpressionEvaluator;
 import com.forwardmeasure.openworkflow.expression.RuntimeExpressionArguments;
+import com.typesafe.config.Config;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
@@ -50,10 +52,12 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.pekko.actor.typed.ActorRef;
+import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.Behaviors;
 import org.apache.pekko.actor.typed.javadsl.TimerScheduler;
@@ -70,7 +74,20 @@ import org.apache.pekko.persistence.typed.javadsl.SignalHandler;
 public final class WorkflowEntity
     extends EventSourcedBehaviorWithEnforcedReplies<WorkflowCommand, EngineEvent, WorkflowState> {
 
-  public static final int PROJECTION_TAG_COUNT = 32;
+  /**
+   * Was 32, sized for one tenant's combined throughput under the pre-Phase-14 single-shared-journal
+   * design. Since Phase 14, every {@code ShardedDaemonProcess}-based projection (cloud-event
+   * outbox, subworkflow outbox, subscription-workflow, subscription-schedule, and
+   * operation-adapter's http/protocol operation outboxes - 6 daemon-process kinds total) runs one
+   * instance per tenant, so total daemon-process actor count - and, more importantly, concurrent
+   * {@code EventsByTag} polling queries against Postgres - scales as {@code 6 * tenant-count *
+   * PROJECTION_TAG_COUNT} per pod. Reduced to 8 (still real write-side parallelism per tenant per
+   * daemon-process kind; workflow event volume per tenant doesn't need 32-way fan-out) to cut that
+   * multiplier 4x. No existing tagged event_journal data depends on the old value - Phase 12/14
+   * have never been deployed, so this is a safe constant change, not a migration.
+   */
+  public static final int PROJECTION_TAG_COUNT = 8;
+
   public static final String PROJECTION_TAG_PREFIX = "openworkflow-execution-";
   private static final Duration MAX_TIMER_HORIZON = Duration.ofDays(30);
 
@@ -80,16 +97,31 @@ public final class WorkflowEntity
   private final ActorRef<WorkflowReply> continuationReplies;
   private final AtomicReference<ActorIdentity> executionActor;
   private final boolean automaticContinuation;
+  private final ActorSystem<?> system;
+  private final Optional<PostgresConnectionSettings> postgresConnection;
   private final JqRuntimeExpressionEvaluator expressions = new JqRuntimeExpressionEvaluator();
   private final CloudEventConsumptionEvaluator eventConsumption =
       new CloudEventConsumptionEvaluator();
 
   public static Behavior<WorkflowCommand> create(ExecutionId executionId) {
-    return create(executionId, true);
+    return create(executionId, true, Optional.empty());
+  }
+
+  public static Behavior<WorkflowCommand> create(
+      ExecutionId executionId, Optional<PostgresConnectionSettings> postgresConnection) {
+    return create(executionId, true, postgresConnection);
   }
 
   static Behavior<WorkflowCommand> create(ExecutionId executionId, boolean automaticContinuation) {
+    return create(executionId, automaticContinuation, Optional.empty());
+  }
+
+  static Behavior<WorkflowCommand> create(
+      ExecutionId executionId,
+      boolean automaticContinuation,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     Objects.requireNonNull(executionId, "executionId");
+    Objects.requireNonNull(postgresConnection, "postgresConnection");
     return Behaviors.setup(
         context -> {
           context.getLog().info("Activating workflow execution {}", executionId.entityId());
@@ -110,7 +142,9 @@ public final class WorkflowEntity
                       context.getSelf(),
                       replies,
                       executionActor,
-                      automaticContinuation));
+                      automaticContinuation,
+                      context.getSystem(),
+                      postgresConnection));
         });
   }
 
@@ -120,7 +154,9 @@ public final class WorkflowEntity
       ActorRef<WorkflowCommand> self,
       ActorRef<WorkflowReply> continuationReplies,
       AtomicReference<ActorIdentity> executionActor,
-      boolean automaticContinuation) {
+      boolean automaticContinuation,
+      ActorSystem<?> system,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     super(PersistenceId.ofUniqueId("workflow-execution|" + executionId.entityId()));
     this.executionId = executionId;
     this.timers = Objects.requireNonNull(timers, "timers");
@@ -128,6 +164,50 @@ public final class WorkflowEntity
     this.continuationReplies = Objects.requireNonNull(continuationReplies, "continuationReplies");
     this.executionActor = Objects.requireNonNull(executionActor, "executionActor");
     this.automaticContinuation = automaticContinuation;
+    this.system = Objects.requireNonNull(system, "system");
+    this.postgresConnection = Objects.requireNonNull(postgresConnection, "postgresConnection");
+  }
+
+  /**
+   * Each tenant's actor journal/snapshot store lives in that tenant's own Postgres schema - these 4
+   * overrides give this one execution its own tenant-scoped plugin id/config (see {@link
+   * TenantPersistencePlugins}), resolved lazily by Pekko's own plugin cache with no
+   * pre-registration or restart needed. Falls back to the actor system's default plugin (the
+   * Cassandra profile, or a test harness with no Postgres connection configured) when empty.
+   */
+  @Override
+  public String journalPluginId() {
+    return postgresConnection
+        .map(connection -> TenantPersistencePlugins.journalPluginId(tenantSchema()))
+        .orElseGet(super::journalPluginId);
+  }
+
+  @Override
+  public Optional<Config> journalPluginConfig() {
+    return postgresConnection.isEmpty()
+        ? super.journalPluginConfig()
+        : TenantPersistencePlugins.journalPluginConfig(
+            system, tenantSchema(), postgresConnection.get());
+  }
+
+  @Override
+  public String snapshotPluginId() {
+    return postgresConnection
+        .map(connection -> TenantPersistencePlugins.snapshotPluginId(tenantSchema()))
+        .orElseGet(super::snapshotPluginId);
+  }
+
+  @Override
+  public Optional<Config> snapshotPluginConfig() {
+    return postgresConnection.isEmpty()
+        ? super.snapshotPluginConfig()
+        : TenantPersistencePlugins.snapshotPluginConfig(
+            system, tenantSchema(), postgresConnection.get());
+  }
+
+  private TenantSchema tenantSchema() {
+    return TenantSchema.forTenant(
+        new com.forwardmeasure.jpa.tenancy.TenantId(executionId.tenantId().value()));
   }
 
   private static WorkflowCommand continuationCommand(
@@ -251,7 +331,9 @@ public final class WorkflowEntity
         .onCommand(WorkflowCommand.RunNext.class, this::rejectTransitioning)
         .onCommand(WorkflowCommand.Pause.class, this::rejectTransitioning)
         .onCommand(WorkflowCommand.Resume.class, this::rejectTransitioning)
-        .onCommand(WorkflowCommand.Cancel.class, this::rejectTransitioning);
+        .onCommand(WorkflowCommand.Cancel.class, this::rejectTransitioning)
+        .onCommand(
+            WorkflowCommand.ProtocolCallObserved.class, this::finalizeCorrelatedWorkerCancellation);
     builder
         .forStateType(WorkflowState.Cancelled.class)
         .onCommand(WorkflowCommand.Start.class, this::rejectAlreadyStarted)
@@ -457,6 +539,8 @@ public final class WorkflowEntity
         case MilestoneOneProgram.ExecuteHttpCall call -> executeHttpCall(state, command, call);
         case MilestoneOneProgram.ExecuteProtocolCall call ->
             executeProtocolCall(state, command, call);
+        case MilestoneOneProgram.ExecuteCorrelatedWorkerCall call ->
+            executeCorrelatedWorkerCall(state, command, call);
         case MilestoneOneProgram.EnterFunction function -> enterFunction(state, command, function);
         case MilestoneOneProgram.ExitFunction function -> exitFunction(state, command, function);
         case MilestoneOneProgram.ExitListen exit -> exitListen(state, command, exit);
@@ -2906,6 +2990,90 @@ public final class WorkflowEntity
         .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
   }
 
+  private ReplyEffect<EngineEvent, WorkflowState> executeCorrelatedWorkerCall(
+      WorkflowState.Running state,
+      WorkflowCommand.RunNext command,
+      MilestoneOneProgram.ExecuteCorrelatedWorkerCall instruction) {
+    PlanStep step = instruction.step();
+    JsonNode rawInput = state.data();
+    boolean execute = condition(state, step, rawInput);
+    JsonNode input = execute ? taskInput(state, step, rawInput) : rawInput;
+    if (!execute) {
+      TaskResult skipped = completeTask(state, step, rawInput, input, rawInput);
+      return Effect()
+          .persist(taskEvents(state, command, step, rawInput, input, instruction.next(), skipped))
+          .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
+    }
+    String lifecycleId =
+        UUID.nameUUIDFromBytes(
+                (state.executionId().entityId()
+                        + "|correlated-worker|"
+                        + step.path()
+                        + "|"
+                        + state.revision())
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            .toString();
+    RuntimeExpressionArguments expressionArguments = arguments(state, step, rawInput, input, null);
+    JsonNode evaluated = evaluateCorrelatedWorkerArguments(state, step, input, expressionArguments);
+    ProtocolOperationMaterializer.CorrelatedWorkerOperations operations =
+        ProtocolOperationMaterializer.materializeCorrelatedWorker(
+            state.plan(),
+            step,
+            evaluated,
+            lifecycleId,
+            authenticationContext(expressionArguments),
+            protocolDeadline(state, step, rawInput, input, command.requestedAt()));
+    ProtocolOperationDescriptor commandOperation =
+        operations.command().requestedBy(command.actor());
+    ProtocolOperationDescriptor eventsOperation = operations.events().requestedBy(command.actor());
+    ProtocolOperationDescriptor cancellationOperation =
+        operations.cancellation() == null
+            ? null
+            : operations.cancellation().requestedBy(command.actor());
+    var events = new java.util.ArrayList<EngineEvent>();
+    events.add(
+        new EngineEvent.CorrelatedWorkerRequested(
+            command.commandId(),
+            step.path(),
+            rawInput,
+            input,
+            instruction.next(),
+            lifecycleId,
+            commandOperation,
+            eventsOperation,
+            cancellationOperation,
+            command.requestedAt()));
+    appendTaskDeadline(state, command, step, rawInput, input, events);
+    return Effect()
+        .persist(events)
+        .thenRun(this::scheduleDeadlines)
+        .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
+  }
+
+  /**
+   * Evaluates a correlated-worker call's arguments exactly like an ordinary protocol call, except
+   * the {@code events/subscription} block is left untouched. Its {@code consume.until}/{@code
+   * while}/{@code filter} strings are jq expressions meant to run later, per incoming message,
+   * against that message's payload - not task-input-driven templates to resolve now. Mirrors the
+   * same exclusion the Kafka-Streams engine applies for the identical reason.
+   */
+  private JsonNode evaluateCorrelatedWorkerArguments(
+      WorkflowState.Running state,
+      PlanStep step,
+      JsonNode input,
+      RuntimeExpressionArguments arguments) {
+    ObjectNode template = ((ObjectNode) step.callPlan().arguments()).deepCopy();
+    template.set("events", blankedSubscription(template.required("events")));
+    return expressions.evaluateTemplate(
+        template, input, arguments, state.plan().expressions().mode());
+  }
+
+  private static JsonNode blankedSubscription(JsonNode events) {
+    ObjectNode copy = ((ObjectNode) events).deepCopy();
+    copy.set("subscription", JsonNodeFactory.instance.objectNode());
+    return copy;
+  }
+
   private ReplyEffect<EngineEvent, WorkflowState> startForkProtocolCall(
       WorkflowState.Running state,
       WorkflowCommand.RunNext command,
@@ -3431,6 +3599,9 @@ public final class WorkflowEntity
       return rejectProtocolCallNotPending(state, command);
     }
     TaskExecutionFrame frame = state.taskStack().getLast();
+    if (frame.eventing() && frame.event().kind() == EventExecutionFrame.Kind.CORRELATED_WORKER) {
+      return observeCorrelatedWorkerCall(waiting, command, frame);
+    }
     if (!frame.eventing()
         || frame.event().kind() != EventExecutionFrame.Kind.PROTOCOL_CALL
         || !frame.event().operationId().equals(command.operationId())) {
@@ -3507,6 +3678,253 @@ public final class WorkflowEntity
     return command.replyTo() == null
         ? effect.thenNoReply()
         : effect.thenReply(command.replyTo(), persisted -> accepted(commandId, persisted));
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> observeCorrelatedWorkerCall(
+      WorkflowState.Waiting state,
+      WorkflowCommand.ProtocolCallObserved command,
+      TaskExecutionFrame frame) {
+    EventExecutionFrame worker = frame.event();
+    if (worker.commandOperation().operationId().equals(command.operationId())) {
+      return observeCorrelatedWorkerCommand(state, command, frame);
+    }
+    if (worker.eventsOperation().operationId().equals(command.operationId())) {
+      return observeCorrelatedWorkerEvent(state, command, frame);
+    }
+    return rejectProtocolCallNotPending(state, command);
+  }
+
+  /** Persist-confirmed acknowledgement of the correlated-worker command PUBLISH. */
+  private ReplyEffect<EngineEvent, WorkflowState> observeCorrelatedWorkerCommand(
+      WorkflowState.Waiting state,
+      WorkflowCommand.ProtocolCallObserved command,
+      TaskExecutionFrame frame) {
+    if (command.failed()) {
+      return failProtocolCall(state, command, frame.taskPath());
+    }
+    UUID commandId = protocolObservationCommandId(command);
+    if (!command.terminal() || frame.event().commandPublished()) {
+      return command.replyTo() == null
+          ? Effect().noReply()
+          : Effect().reply(command.replyTo(), accepted(commandId, state));
+    }
+    var event =
+        new EngineEvent.CorrelatedWorkerCommandPublished(
+            commandId, frame.taskPath(), frame.event().operationId(), command.observedAt());
+    var effect = Effect().persist(List.of(event));
+    return command.replyTo() == null
+        ? effect.thenNoReply()
+        : effect.thenReply(command.replyTo(), persisted -> accepted(commandId, persisted));
+  }
+
+  /** Routes one message delivered over the correlated-worker's events SUBSCRIBE operation. */
+  private ReplyEffect<EngineEvent, WorkflowState> observeCorrelatedWorkerEvent(
+      WorkflowState.Waiting state,
+      WorkflowCommand.ProtocolCallObserved command,
+      TaskExecutionFrame frame) {
+    if (command.failed()) {
+      return failProtocolCall(state, command, frame.taskPath());
+    }
+    UUID commandId = protocolObservationCommandId(command);
+    String lifecycleId = frame.event().operationId();
+    JsonNode message = command.item();
+    if (message == null) {
+      if (command.terminal()) {
+        // The recoverable coordinator observed its own subscription deadline with no terminal
+        // correlated-worker event ever having arrived.
+        return routeCorrelatedWorkerError(
+            state,
+            correlatedWorkerTimeoutError(lifecycleId),
+            frame.taskPath(),
+            commandId,
+            command.observedAt(),
+            command.replyTo());
+      }
+      return command.replyTo() == null
+          ? Effect().noReply()
+          : Effect().reply(command.replyTo(), accepted(commandId, state));
+    }
+    JsonNode payload = message.path("payload");
+    if (!lifecycleId.equals(payload.path("operationId").asText())) {
+      // A message belonging to a different correlated-worker lifecycle on a shared channel.
+      return command.replyTo() == null
+          ? Effect().noReply()
+          : Effect().reply(command.replyTo(), accepted(commandId, state));
+    }
+    String status = payload.path("status").asText("").toUpperCase(java.util.Locale.ROOT);
+    boolean terminal = Set.of("SUCCEEDED", "FAILED", "CANCELLED").contains(status);
+    if (!terminal && !Set.of("ACCEPTED", "PROGRESS").contains(status)) {
+      return routeCorrelatedWorkerError(
+          state,
+          correlatedWorkerUnsupportedStatusError(lifecycleId, status),
+          frame.taskPath(),
+          commandId,
+          command.observedAt(),
+          command.replyTo());
+    }
+    if (!terminal) {
+      var event =
+          new EngineEvent.CorrelatedWorkerProgressObserved(
+              commandId, frame.taskPath(), lifecycleId, status, payload, command.observedAt());
+      var effect = Effect().persist(List.of(event));
+      return command.replyTo() == null
+          ? effect.thenNoReply()
+          : effect.thenReply(command.replyTo(), persisted -> accepted(commandId, persisted));
+    }
+    if ("SUCCEEDED".equals(status)) {
+      return completeCorrelatedWorker(state, command, frame, commandId, payload);
+    }
+    return routeCorrelatedWorkerError(
+        state,
+        correlatedWorkerError(lifecycleId, payload, status),
+        frame.taskPath(),
+        commandId,
+        command.observedAt(),
+        command.replyTo());
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> completeCorrelatedWorker(
+      WorkflowState.Waiting state,
+      WorkflowCommand.ProtocolCallObserved command,
+      TaskExecutionFrame frame,
+      UUID commandId,
+      JsonNode payload) {
+    MilestoneOneProgram program = MilestoneOneProgram.compile(activePlan(state));
+    if (!(program.instruction(activeNextStep(state))
+        instanceof MilestoneOneProgram.ExecuteCorrelatedWorkerCall instruction)) {
+      throw new IllegalStateException("Durable correlated-worker cursor is not its call");
+    }
+    WorkflowState.Running running = running(state);
+    JsonNode rawOutput =
+        payload.has("output") ? payload.get("output") : JsonNodeFactory.instance.objectNode();
+    TaskResult result =
+        completeTask(running, instruction.step(), frame.rawInput(), frame.input(), rawOutput);
+    var events = new java.util.ArrayList<EngineEvent>();
+    events.add(
+        new EngineEvent.CorrelatedWorkerCompleted(
+            commandId,
+            frame.taskPath(),
+            frame.event().operationId(),
+            result.output(),
+            result.context(),
+            instruction.next(),
+            command.observedAt()));
+    if (instruction.next() == program.size()) {
+      events.add(
+          new EngineEvent.Completed(
+              commandId,
+              workflowOutput(running, result.output(), result.context()),
+              command.observedAt()));
+    }
+    var effect = Effect().persist(events).thenRun(this::continueIfRunning);
+    return command.replyTo() == null
+        ? effect.thenNoReply()
+        : effect.thenReply(command.replyTo(), persisted -> accepted(commandId, persisted));
+  }
+
+  /**
+   * Reuses the same catch/retry routing every other durable operation failure goes through ({@code
+   * failProtocolCall}'s shape), but for an error carried in an ordinary (non-{@code failed})
+   * correlated-worker observation instead of an adapter-level failure.
+   */
+  private ReplyEffect<EngineEvent, WorkflowState> routeCorrelatedWorkerError(
+      WorkflowState.Waiting state,
+      JsonNode error,
+      String taskPath,
+      UUID commandId,
+      Instant observedAt,
+      ActorRef<WorkflowReply> replyTo) {
+    WorkflowState.Running runningState = running(state);
+    var events = new java.util.ArrayList<EngineEvent>();
+    events.add(new EngineEvent.ErrorRaised(commandId, taskPath, error, observedAt));
+    ErrorTarget target = matchingCatch(runningState, error);
+    if (target == null) {
+      events.add(
+          new EngineEvent.Failed(
+              commandId, error.path("detail").asText("Correlated worker call failed"), observedAt));
+    } else {
+      RetryDecision retry = retryDecision(runningState, target, error, observedAt);
+      if (retry == null)
+        events.add(
+            new EngineEvent.ErrorCaught(
+                commandId,
+                target.frame().taskPath(),
+                error,
+                target.instruction().catchEntry(),
+                observedAt));
+      else
+        events.add(
+            new EngineEvent.RetryScheduled(
+                commandId,
+                target.frame().taskPath(),
+                error,
+                target.frame().attempt() + 1,
+                target.instruction().next(),
+                retry.deadline(),
+                target.frame().retryStartedAt(),
+                observedAt));
+    }
+    var effect =
+        Effect().persist(events).thenRun(this::scheduleDeadlines).thenRun(this::continueIfRunning);
+    return replyTo == null
+        ? effect.thenNoReply()
+        : effect.thenReply(replyTo, persisted -> accepted(commandId, persisted));
+  }
+
+  private static JsonNode correlatedWorkerError(
+      String lifecycleId, JsonNode payload, String status) {
+    boolean cancelled = "CANCELLED".equals(status);
+    JsonNode declared = payload.path("error");
+    ObjectNode error =
+        declared.isObject()
+            ? (ObjectNode) declared.deepCopy()
+            : JsonNodeFactory.instance.objectNode();
+    error.putIfAbsent(
+        "type",
+        JsonNodeFactory.instance.textNode(
+            cancelled
+                ? "https://open-workflow-specification.org/spec/1.0.0/errors/cancellation"
+                : "https://open-workflow-specification.org/spec/1.0.0/errors/communication"));
+    error.putIfAbsent("status", JsonNodeFactory.instance.numberNode(cancelled ? 499 : 500));
+    error.putIfAbsent(
+        "title",
+        JsonNodeFactory.instance.textNode(
+            cancelled
+                ? "Correlated worker was cancelled"
+                : "Correlated worker reported a failure"));
+    error.putIfAbsent(
+        "detail",
+        JsonNodeFactory.instance.textNode(
+            cancelled
+                ? "Correlated worker was cancelled"
+                : "Correlated worker reported a failure"));
+    error.putIfAbsent(
+        "instance",
+        JsonNodeFactory.instance.textNode("urn:openworkflow:correlated-worker:" + lifecycleId));
+    return error;
+  }
+
+  private static JsonNode correlatedWorkerTimeoutError(String lifecycleId) {
+    ObjectNode error = JsonNodeFactory.instance.objectNode();
+    error.put(
+        "type", "https://open-workflow-specification.org/spec/1.0.0/errors/communication-timeout");
+    error.put("status", 504);
+    error.put("title", "Correlated worker events subscription deadline expired");
+    error.put(
+        "detail", "No terminal correlated-worker event arrived before the subscription deadline");
+    error.put("instance", "urn:openworkflow:correlated-worker:" + lifecycleId);
+    return error;
+  }
+
+  private static JsonNode correlatedWorkerUnsupportedStatusError(
+      String lifecycleId, String status) {
+    ObjectNode error = JsonNodeFactory.instance.objectNode();
+    error.put("type", "https://open-workflow-specification.org/spec/1.0.0/errors/communication");
+    error.put("status", 502);
+    error.put("title", "Correlated worker message has an unsupported status");
+    error.put("detail", "Unsupported correlated worker status: " + status);
+    error.put("instance", "urn:openworkflow:correlated-worker:" + lifecycleId);
+    return error;
   }
 
   private ReplyEffect<EngineEvent, WorkflowState> observeForkProtocolCall(
@@ -3859,6 +4277,39 @@ public final class WorkflowEntity
                 state.status(),
                 "protocol_call_not_pending",
                 "The AsyncAPI/gRPC operation is not pending"));
+  }
+
+  /**
+   * The workflow is waiting for its correlated-worker cancellation to be confirmed - either the
+   * dispatched cancellation operation's own PUBLISH acknowledgement, or the worker's events channel
+   * independently delivering its terminal outcome first. Either finalizes the same way: the
+   * workflow finishes cancelling.
+   */
+  private ReplyEffect<EngineEvent, WorkflowState> finalizeCorrelatedWorkerCancellation(
+      WorkflowState.Cancelling state, WorkflowCommand.ProtocolCallObserved command) {
+    if (!state.executionId().equals(command.executionId()) || state.taskStack().isEmpty()) {
+      return rejectProtocolCallNotPending(state, command);
+    }
+    TaskExecutionFrame frame = state.taskStack().getLast();
+    if (!frame.eventing() || frame.event().kind() != EventExecutionFrame.Kind.CORRELATED_WORKER) {
+      return rejectProtocolCallNotPending(state, command);
+    }
+    EventExecutionFrame worker = frame.event();
+    boolean cancellationAcknowledged =
+        worker.cancellationOperation() != null
+            && worker.cancellationOperation().operationId().equals(command.operationId());
+    boolean workerReportedItsOwnOutcome =
+        command.terminal() && worker.eventsOperation().operationId().equals(command.operationId());
+    if (!cancellationAcknowledged && !workerReportedItsOwnOutcome) {
+      return rejectProtocolCallNotPending(state, command);
+    }
+    UUID commandId = protocolObservationCommandId(command);
+    var event =
+        new EngineEvent.Cancelled(commandId, List.of(frame.taskPath()), command.observedAt());
+    var effect = Effect().persist(List.of(event));
+    return command.replyTo() == null
+        ? effect.thenNoReply()
+        : effect.thenReply(command.replyTo(), persisted -> accepted(commandId, persisted));
   }
 
   private ReplyEffect<EngineEvent, WorkflowState> rejectPausedProtocolObservation(
@@ -6470,6 +6921,22 @@ public final class WorkflowEntity
           "wrong_execution",
           "Command was routed to another tenant-qualified execution");
     }
+    ProtocolOperationDescriptor pendingCancellation = pendingCorrelatedWorkerCancellation(state);
+    if (pendingCancellation != null) {
+      TaskExecutionFrame frame = state.taskStack().getLast();
+      return Effect()
+          .persist(
+              List.of(
+                  new EngineEvent.CancellationRequested(
+                      command.commandId(), command.actor(), command.requestedAt()),
+                  new EngineEvent.CorrelatedWorkerCancellationDispatched(
+                      command.commandId(),
+                      frame.taskPath(),
+                      frame.event().operationId(),
+                      pendingCancellation,
+                      command.requestedAt())))
+          .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
+    }
     return Effect()
         .persist(
             List.of(
@@ -6478,6 +6945,24 @@ public final class WorkflowEntity
                 new EngineEvent.Cancelled(
                     command.commandId(), activeTaskPaths(state), command.requestedAt())))
         .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
+  }
+
+  /**
+   * The correlated-worker cancellation operation to dispatch when {@code command} cancels a
+   * workflow whose pending root task is a correlated-worker call with one configured; {@code null}
+   * when there is none, in which case cancellation finalizes immediately exactly as it always has.
+   * A correlated-worker call nested inside a {@code fork} is outside this milestone's scope (see
+   * {@code MilestoneOneProgram}'s fork-slice whitelist, which rejects it at plan-compile time), so
+   * only the root task stack's own pending interaction is considered here.
+   */
+  private static ProtocolOperationDescriptor pendingCorrelatedWorkerCancellation(
+      WorkflowState state) {
+    if (state.taskStack().isEmpty()) return null;
+    TaskExecutionFrame frame = state.taskStack().getLast();
+    if (!frame.eventing() || frame.event().kind() != EventExecutionFrame.Kind.CORRELATED_WORKER) {
+      return null;
+    }
+    return frame.event().cancellationOperation();
   }
 
   private ReplyEffect<EngineEvent, WorkflowState> cancelledCancel(
@@ -6717,6 +7202,7 @@ public final class WorkflowEntity
         .onEvent(EngineEvent.EmitRequested.class, this::onEmitRequested)
         .onEvent(EngineEvent.HttpCallRequested.class, this::onHttpCallRequested)
         .onEvent(EngineEvent.ProtocolCallRequested.class, this::onProtocolCallRequested)
+        .onEvent(EngineEvent.CorrelatedWorkerRequested.class, this::onCorrelatedWorkerRequested)
         .onEvent(EngineEvent.ListenStarted.class, this::onListenStarted)
         .onEvent(EngineEvent.ListenIterationAdvanced.class, this::onListenIterationAdvanced)
         .onEvent(
@@ -6765,6 +7251,13 @@ public final class WorkflowEntity
         .onEvent(EngineEvent.ProtocolCallItemAccepted.class, this::onProtocolCallItemAccepted)
         .onEvent(EngineEvent.ProtocolCallCompleted.class, this::onProtocolCallCompleted)
         .onEvent(
+            EngineEvent.CorrelatedWorkerCommandPublished.class,
+            this::onCorrelatedWorkerCommandPublished)
+        .onEvent(
+            EngineEvent.CorrelatedWorkerProgressObserved.class,
+            this::onCorrelatedWorkerProgressObserved)
+        .onEvent(EngineEvent.CorrelatedWorkerCompleted.class, this::onCorrelatedWorkerCompleted)
+        .onEvent(
             EngineEvent.ProtocolCallIterationStarted.class, this::onProtocolCallIterationStarted)
         .onEvent(EngineEvent.SubworkflowCompleted.class, this::onSubworkflowCompleted)
         .onEvent(EngineEvent.ListenEventAccepted.class, this::onListenEventAccepted)
@@ -6788,7 +7281,10 @@ public final class WorkflowEntity
         .onEvent(EngineEvent.CancellationRequested.class, this::onCancellationRequested);
     builder
         .forStateType(WorkflowState.Cancelling.class)
-        .onEvent(EngineEvent.Cancelled.class, this::onCancelled);
+        .onEvent(EngineEvent.Cancelled.class, this::onCancelled)
+        .onEvent(
+            EngineEvent.CorrelatedWorkerCancellationDispatched.class,
+            this::onCorrelatedWorkerCancellationDispatched);
 
     return builder.build();
   }
@@ -7144,6 +7640,128 @@ public final class WorkflowEntity
         state.rawWorkflowInput(),
         stack,
         state.workflowDeadline());
+  }
+
+  private WorkflowState onCorrelatedWorkerRequested(
+      WorkflowState.Running state, EngineEvent.CorrelatedWorkerRequested event) {
+    var stack = new java.util.ArrayList<>(state.taskStack());
+    stack.add(
+        TaskExecutionFrame.eventing(
+            event.taskPath(),
+            event.rawInput(),
+            event.input(),
+            EventExecutionFrame.correlatedWorker(
+                event.lifecycleId(),
+                event.commandOperation(),
+                event.eventsOperation(),
+                event.cancellationOperation())));
+    return new WorkflowState.Waiting(
+        state.executionId(),
+        state.plan(),
+        event.input(),
+        state.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        "correlated-worker:" + event.lifecycleId(),
+        null,
+        state.context(),
+        state.rawWorkflowInput(),
+        stack,
+        state.workflowDeadline());
+  }
+
+  private WorkflowState onCorrelatedWorkerCommandPublished(
+      WorkflowState.Waiting state, EngineEvent.CorrelatedWorkerCommandPublished event) {
+    var stack = new java.util.ArrayList<>(state.taskStack());
+    TaskExecutionFrame frame = correlatedWorkerFrame(stack, event.taskPath(), event.lifecycleId());
+    stack.set(
+        stack.size() - 1,
+        TaskExecutionFrame.eventing(
+            frame.taskPath(),
+            frame.rawInput(),
+            frame.input(),
+            frame.event().withCommandPublished()));
+    return new WorkflowState.Waiting(
+        state.executionId(),
+        state.plan(),
+        state.data(),
+        state.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        state.reason(),
+        state.deadline(),
+        state.context(),
+        state.rawWorkflowInput(),
+        stack,
+        state.workflowDeadline());
+  }
+
+  private WorkflowState onCorrelatedWorkerProgressObserved(
+      WorkflowState.Waiting state, EngineEvent.CorrelatedWorkerProgressObserved event) {
+    correlatedWorkerFrame(
+        new java.util.ArrayList<>(state.taskStack()), event.taskPath(), event.lifecycleId());
+    return new WorkflowState.Waiting(
+        state.executionId(),
+        state.plan(),
+        state.data(),
+        state.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        state.reason(),
+        state.deadline(),
+        state.context(),
+        state.rawWorkflowInput(),
+        state.taskStack(),
+        state.workflowDeadline());
+  }
+
+  private WorkflowState onCorrelatedWorkerCompleted(
+      WorkflowState.Waiting state, EngineEvent.CorrelatedWorkerCompleted event) {
+    var stack = new java.util.ArrayList<>(state.taskStack());
+    correlatedWorkerFrame(stack, event.taskPath(), event.lifecycleId());
+    stack.removeLast();
+    return new WorkflowState.Running(
+        state.executionId(),
+        state.plan(),
+        event.output(),
+        event.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        event.context(),
+        state.rawWorkflowInput(),
+        stack,
+        state.workflowDeadline());
+  }
+
+  private WorkflowState onCorrelatedWorkerCancellationDispatched(
+      WorkflowState.Cancelling state, EngineEvent.CorrelatedWorkerCancellationDispatched event) {
+    return new WorkflowState.Cancelling(
+        state.executionId(),
+        state.plan(),
+        state.data(),
+        state.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        state.context(),
+        state.rawWorkflowInput(),
+        state.taskStack(),
+        state.workflowDeadline());
+  }
+
+  private static TaskExecutionFrame correlatedWorkerFrame(
+      List<TaskExecutionFrame> stack, String taskPath, String lifecycleId) {
+    if (stack.isEmpty()) {
+      throw new IllegalStateException("Persisted correlated-worker event has no active task frame");
+    }
+    TaskExecutionFrame frame = stack.get(stack.size() - 1);
+    if (!frame.eventing()
+        || frame.event().kind() != EventExecutionFrame.Kind.CORRELATED_WORKER
+        || !frame.taskPath().equals(taskPath)
+        || !frame.event().operationId().equals(lifecycleId)) {
+      throw new IllegalStateException(
+          "Persisted correlated-worker event does not match its task frame");
+    }
+    return frame;
   }
 
   private WorkflowState onProtocolCallIterationStarted(

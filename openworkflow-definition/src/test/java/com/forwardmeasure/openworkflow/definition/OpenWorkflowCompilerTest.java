@@ -138,7 +138,7 @@ class OpenWorkflowCompilerTest {
                   version: '1.0.0'
                 do:
                   - approve:
-                      call: io.forwardmeasure.oks.human-task
+                      call: com.forwardmeasure.oks.human-task
                       with:
                         title: Review extracted evidence
                         input: '${ . }'
@@ -209,7 +209,7 @@ class OpenWorkflowCompilerTest {
                   version: '1.0.0'
                 do:
                   - execute:
-                      call: io.forwardmeasure.oks.correlated-worker
+                      call: com.forwardmeasure.oks.correlated-worker
                       with:
                         document:
                           endpoint:
@@ -251,7 +251,7 @@ class OpenWorkflowCompilerTest {
               version: '1.0.0'
             do:
               - execute:
-                  call: io.forwardmeasure.oks.correlated-worker
+                  call: com.forwardmeasure.oks.correlated-worker
                   with:
                     document:
                       endpoint:

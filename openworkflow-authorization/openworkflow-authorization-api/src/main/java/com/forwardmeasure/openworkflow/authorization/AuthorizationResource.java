@@ -52,6 +52,16 @@ public record AuthorizationResource(String type, String id, Map<String, Object> 
         "openworkflow-audit", "audit", Map.of("query_id", requireText(id, "id")));
   }
 
+  /** The CloudEvent ingress endpoint as a whole, not one execution or schedule in particular. */
+  public static AuthorizationResource eventTarget() {
+    return new AuthorizationResource("openworkflow-event-target", "event-targets", Map.of());
+  }
+
+  public static AuthorizationResource schedule(String id) {
+    return new AuthorizationResource(
+        "openworkflow-schedule", "schedules", Map.of("schedule_id", requireText(id, "id")));
+  }
+
   private static String requireText(String value, String name) {
     if (value == null || value.isBlank()) {
       throw new IllegalArgumentException(name + " must not be blank");

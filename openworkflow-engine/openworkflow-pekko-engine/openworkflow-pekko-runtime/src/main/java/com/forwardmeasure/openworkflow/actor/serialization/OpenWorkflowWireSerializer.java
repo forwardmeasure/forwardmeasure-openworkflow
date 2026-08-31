@@ -186,6 +186,21 @@ public final class OpenWorkflowWireSerializer extends SerializerWithStringManife
           Map.entry(
               EngineEvent.ProtocolCallIterationAdvanced.class,
               "ow.event.protocol-call-iteration-advanced.v1"),
+          Map.entry(
+              EngineEvent.CorrelatedWorkerRequested.class,
+              "ow.event.correlated-worker-requested.v1"),
+          Map.entry(
+              EngineEvent.CorrelatedWorkerCommandPublished.class,
+              "ow.event.correlated-worker-command-published.v1"),
+          Map.entry(
+              EngineEvent.CorrelatedWorkerProgressObserved.class,
+              "ow.event.correlated-worker-progress-observed.v1"),
+          Map.entry(
+              EngineEvent.CorrelatedWorkerCompleted.class,
+              "ow.event.correlated-worker-completed.v1"),
+          Map.entry(
+              EngineEvent.CorrelatedWorkerCancellationDispatched.class,
+              "ow.event.correlated-worker-cancellation-dispatched.v1"),
           Map.entry(EngineEvent.ListenStarted.class, "ow.event.listen-started.v2"),
           Map.entry(EngineEvent.ListenEventAccepted.class, "ow.event.listen-event-accepted.v1"),
           Map.entry(EngineEvent.ListenUntilAdvanced.class, "ow.event.listen-until-advanced.v1"),

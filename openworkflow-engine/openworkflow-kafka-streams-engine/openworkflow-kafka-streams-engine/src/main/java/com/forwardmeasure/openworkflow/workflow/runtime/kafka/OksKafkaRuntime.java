@@ -6,6 +6,8 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.kafka;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.forwardmeasure.openworkflow.definition.CallPlan;
+import com.forwardmeasure.openworkflow.engine.api.BlockingConstructs;
 import com.forwardmeasure.openworkflow.engine.api.EngineId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEvent;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEventSink;
@@ -166,7 +168,13 @@ public final class OksKafkaRuntime implements AutoCloseable {
         data);
   }
 
-  static Mapping mapping(ExecutionEventType type) {
+  /**
+   * The canonical {@link ExecutionEvent.EventType}/{@link ExecutionLifecycleState} this engine
+   * reports for a given history event type. Public (not just package-visible) specifically so
+   * cross-engine parity tests outside this module can drive it directly - see
+   * openworkflow-engine-cross-engine-tests.
+   */
+  public static Mapping mapping(ExecutionEventType type) {
     return switch (type) {
       case EXECUTION_STARTED ->
           new Mapping(ExecutionEvent.EventType.STARTED, ExecutionLifecycleState.RUNNING);
@@ -191,26 +199,35 @@ public final class OksKafkaRuntime implements AutoCloseable {
       case EVENT_EMITTED,
           EVENT_RECEIVED,
           ASYNC_API_MESSAGE_RECEIVED,
-          CORRELATED_WORKER_PROGRESS,
           OPERATION_PROGRESS,
           OPERATION_RESULT_BUFFERED,
           OPERATION_FAILURE_BUFFERED,
           HUMAN_TASK_OUTCOME_BUFFERED ->
           new Mapping(ExecutionEvent.EventType.EFFECT_COMPLETED, ExecutionLifecycleState.RUNNING);
+      // A correlated-worker call is a real wait, not active computation - same semantic WAITING
+      // already carries correctly for timer/retry waits (see TIMER_SCHEDULED/RETRY_SCHEDULED
+      // above). Without this, an execution blocked on an external worker for hours reports
+      // RUNNING the whole time, indistinguishable from genuine computation through the public
+      // contract - see docs/engine-construct-gap-audit.md gap #4. Routed through the same
+      // BlockingConstructs.isBlocking(CORRELATED_WORKER) check openworkflow-pekko-engine consults,
+      // instead of a second independently-authored WAITING literal - see gap #4's Phase 4 note.
+      // HUMAN_TASK_* deliberately left unchanged: that construct is still unreachable in
+      // production (see gap #2), so its mapping is dead code either way.
+      case CORRELATED_WORKER_PROGRESS ->
+          new Mapping(ExecutionEvent.EventType.EFFECT_COMPLETED, correlatedWorkerLifecycleState());
       case SUBSCRIPTION_CREATED,
           ASYNC_API_SUBSCRIPTION_CREATED,
-          CORRELATED_WORKER_STARTED,
-          CORRELATED_WORKER_COMMAND_PUBLISHED,
           OPERATION_DISPATCHED,
           HUMAN_TASK_CREATED,
           FORK_BRANCH_STARTED,
           ITERATION_STARTED ->
           new Mapping(ExecutionEvent.EventType.EFFECT_REQUESTED, ExecutionLifecycleState.RUNNING);
+      case CORRELATED_WORKER_STARTED, CORRELATED_WORKER_COMMAND_PUBLISHED ->
+          new Mapping(ExecutionEvent.EventType.EFFECT_REQUESTED, correlatedWorkerLifecycleState());
       case SUBSCRIPTION_COMPLETED,
           SUBSCRIPTION_CANCELLED,
           ASYNC_API_SUBSCRIPTION_COMPLETED,
           ASYNC_API_SUBSCRIPTION_CANCELLED,
-          CORRELATED_WORKER_ACCEPTED,
           CORRELATED_WORKER_COMPLETED,
           CORRELATED_WORKER_CANCELLATION_REQUESTED,
           CORRELATED_WORKER_CANCELLED,
@@ -227,6 +244,8 @@ public final class OksKafkaRuntime implements AutoCloseable {
           FORK_BRANCH_ABANDONED,
           ITERATION_COMPLETED ->
           new Mapping(ExecutionEvent.EventType.EFFECT_COMPLETED, ExecutionLifecycleState.RUNNING);
+      case CORRELATED_WORKER_ACCEPTED ->
+          new Mapping(ExecutionEvent.EventType.EFFECT_COMPLETED, correlatedWorkerLifecycleState());
       case ASYNC_API_MESSAGE_FILTERED ->
           new Mapping(ExecutionEvent.EventType.EFFECT_COMPLETED, ExecutionLifecycleState.WAITING);
       case CORRELATED_WORKER_FAILED, CORRELATED_WORKER_OUTCOME_UNKNOWN, OPERATION_OUTCOME_UNKNOWN ->
@@ -253,6 +272,12 @@ public final class OksKafkaRuntime implements AutoCloseable {
     };
   }
 
+  private static ExecutionLifecycleState correlatedWorkerLifecycleState() {
+    return BlockingConstructs.isBlocking(CallPlan.Kind.CORRELATED_WORKER)
+        ? ExecutionLifecycleState.WAITING
+        : ExecutionLifecycleState.RUNNING;
+  }
+
   private static void createTopics(String bootstrapServers, OksTopics topics) {
     Properties properties = new Properties();
     properties.put("bootstrap.servers", bootstrapServers);
@@ -269,6 +294,7 @@ public final class OksKafkaRuntime implements AutoCloseable {
                   topics.operationCheckpoints(),
                   topics.subscriptionEffects(),
                   topics.timerEffects(),
+                  topics.subworkflowEffects(),
                   topics.inboundEvents(),
                   topics.emittedEvents(),
                   topics.deadLetters())
@@ -306,7 +332,7 @@ public final class OksKafkaRuntime implements AutoCloseable {
     streams.close(Duration.ofSeconds(10));
   }
 
-  record Mapping(ExecutionEvent.EventType type, ExecutionLifecycleState state) {}
+  public record Mapping(ExecutionEvent.EventType type, ExecutionLifecycleState state) {}
 }
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more contributor license

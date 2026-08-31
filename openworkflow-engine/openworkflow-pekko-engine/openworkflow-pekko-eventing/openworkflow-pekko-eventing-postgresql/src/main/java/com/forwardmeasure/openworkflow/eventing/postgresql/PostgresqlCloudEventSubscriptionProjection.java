@@ -10,7 +10,10 @@
  */
 package com.forwardmeasure.openworkflow.eventing.postgresql;
 
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
+import com.forwardmeasure.openworkflow.actor.PostgresConnectionSettings;
 import com.forwardmeasure.openworkflow.actor.ScheduleEvent;
+import com.forwardmeasure.openworkflow.actor.TenantPersistencePlugins;
 import com.forwardmeasure.openworkflow.actor.WorkflowEntity;
 import com.forwardmeasure.openworkflow.actor.WorkflowScheduleEntity;
 import com.forwardmeasure.openworkflow.engine.api.EngineEvent;
@@ -18,10 +21,10 @@ import com.forwardmeasure.openworkflow.eventing.CloudEventSubscriptionRepository
 import com.forwardmeasure.openworkflow.eventing.ScheduleSubscriptionProjectionHandler;
 import com.forwardmeasure.openworkflow.eventing.WorkflowSubscriptionProjectionHandler;
 import java.time.Duration;
+import java.util.Objects;
 import javax.sql.DataSource;
 import org.apache.pekko.actor.typed.ActorSystem;
 import org.apache.pekko.cluster.sharding.typed.javadsl.ShardedDaemonProcess;
-import org.apache.pekko.persistence.jdbc.query.javadsl.JdbcReadJournal;
 import org.apache.pekko.persistence.query.Offset;
 import org.apache.pekko.projection.Projection;
 import org.apache.pekko.projection.ProjectionBehavior;
@@ -31,35 +34,47 @@ import org.apache.pekko.projection.eventsourced.javadsl.EventSourcedProvider;
 import org.apache.pekko.projection.javadsl.SourceProvider;
 import org.apache.pekko.projection.jdbc.javadsl.JdbcProjection;
 
-/** PostgreSQL-offset projections that maintain workflow and schedule event targets. */
+/**
+ * PostgreSQL-offset projections that maintain workflow and schedule event targets - one pair of
+ * instances per tenant, see PostgresqlCloudEventOutbox.
+ */
 public final class PostgresqlCloudEventSubscriptionProjection {
   private PostgresqlCloudEventSubscriptionProjection() {}
 
   public static void start(
-      ActorSystem<?> system, DataSource dataSource, CloudEventSubscriptionRepository repository) {
+      ActorSystem<?> system,
+      DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
+      CloudEventSubscriptionRepository repository) {
+    Objects.requireNonNull(schema, "schema");
     ShardedDaemonProcess.get(system)
         .init(
             ProjectionBehavior.Command.class,
-            "openworkflow-event-subscriptions-workflow-postgresql",
+            "openworkflow-event-subscriptions-workflow-postgresql-" + schema.value(),
             WorkflowEntity.PROJECTION_TAG_COUNT,
             index ->
                 ProjectionBehavior.create(
                     workflow(
                         system,
                         dataSource,
+                        schema,
+                        connection,
                         repository,
                         WorkflowEntity.projectionTags().get(index))),
             ProjectionBehavior.stopMessage());
     ShardedDaemonProcess.get(system)
         .init(
             ProjectionBehavior.Command.class,
-            "openworkflow-event-subscriptions-schedule-postgresql",
+            "openworkflow-event-subscriptions-schedule-postgresql-" + schema.value(),
             WorkflowScheduleEntity.PROJECTION_TAG_COUNT,
             index ->
                 ProjectionBehavior.create(
                     schedule(
                         system,
                         dataSource,
+                        schema,
+                        connection,
                         repository,
                         WorkflowScheduleEntity.projectionTags().get(index))),
             ProjectionBehavior.stopMessage());
@@ -68,14 +83,20 @@ public final class PostgresqlCloudEventSubscriptionProjection {
   private static Projection<EventEnvelope<EngineEvent>> workflow(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       CloudEventSubscriptionRepository repository,
       String tag) {
     SourceProvider<Offset, EventEnvelope<EngineEvent>> source =
-        EventSourcedProvider.eventsByTag(system, JdbcReadJournal.Identifier(), tag);
+        EventSourcedProvider.eventsByTag(
+            system,
+            TenantPersistencePlugins.readJournalPluginId(schema),
+            TenantPersistencePlugins.readJournalPluginConfig(system, schema, connection),
+            tag);
     return JdbcProjection.atLeastOnceAsync(
-            ProjectionId.of("openworkflow-event-subscriptions-workflow", tag),
+            ProjectionId.of("openworkflow-event-subscriptions-workflow-" + schema.value(), tag),
             source,
-            () -> new DataSourceJdbcSession(dataSource),
+            () -> new DataSourceJdbcSession(dataSource, schema),
             () -> new WorkflowSubscriptionProjectionHandler(repository),
             system)
         .withSaveOffset(1, Duration.ZERO);
@@ -84,14 +105,20 @@ public final class PostgresqlCloudEventSubscriptionProjection {
   private static Projection<EventEnvelope<ScheduleEvent>> schedule(
       ActorSystem<?> system,
       DataSource dataSource,
+      TenantSchema schema,
+      PostgresConnectionSettings connection,
       CloudEventSubscriptionRepository repository,
       String tag) {
     SourceProvider<Offset, EventEnvelope<ScheduleEvent>> source =
-        EventSourcedProvider.eventsByTag(system, JdbcReadJournal.Identifier(), tag);
+        EventSourcedProvider.eventsByTag(
+            system,
+            TenantPersistencePlugins.readJournalPluginId(schema),
+            TenantPersistencePlugins.readJournalPluginConfig(system, schema, connection),
+            tag);
     return JdbcProjection.atLeastOnceAsync(
-            ProjectionId.of("openworkflow-event-subscriptions-schedule", tag),
+            ProjectionId.of("openworkflow-event-subscriptions-schedule-" + schema.value(), tag),
             source,
-            () -> new DataSourceJdbcSession(dataSource),
+            () -> new DataSourceJdbcSession(dataSource, schema),
             () -> new ScheduleSubscriptionProjectionHandler(repository),
             system)
         .withSaveOffset(1, Duration.ZERO);

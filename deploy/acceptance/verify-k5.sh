@@ -15,25 +15,34 @@ cleanup() {
 trap cleanup EXIT
 
 if [[ ${OPENWORKFLOW_K5_CHILD:-false} != true ]]; then
+  # A platform deploys exactly the framework selected by workflowPlatformFramework, not all
+  # three simultaneously (deploy/helmfile/helmfiles/studios.yaml.gotmpl) - so this checks the
+  # one Kafka-Streams-side framework gateway actually live, parameterized like verify-k2.sh,
+  # instead of hardcoding a loop over all three that would fail outright on the two not
+  # deployed (their openworkflow-definition-management-$framework service simply doesn't exist).
+  framework=${1:?usage: verify-k5.sh quarkus|spring|micronaut}
+  # Every engine release is framework-suffixed (execution-engines.yaml.gotmpl:
+  # openworkflow-engine-<engine>-<framework>), Pekko included - the Pekko loop below needs
+  # $framework threaded through even though it iterates over $profile, not $framework. Every
+  # non-Studio deployment uses app.kubernetes.io/name= labels, not the older bare app= labels.
   for profile in postgresql cassandra; do
     OPENWORKFLOW_K5_CHILD=true \
-    OPENWORKFLOW_K5_RUNTIME="openworkflow-pekko-$profile" \
-    OPENWORKFLOW_K5_SERVICE="openworkflow-pekko-$profile" \
-    OPENWORKFLOW_K5_SELECTOR="app=openworkflow-pekko-$profile" \
+    OPENWORKFLOW_K5_RUNTIME="openworkflow-engine-pekko-$profile-$framework" \
+    OPENWORKFLOW_K5_SERVICE="openworkflow-engine-pekko-$profile-$framework" \
+    OPENWORKFLOW_K5_SELECTOR="app.kubernetes.io/name=openworkflow-engine-pekko-$profile-$framework" \
     OPENWORKFLOW_K5_ENGINE=pekko \
     OPENWORKFLOW_K5_PROFILE="$profile" \
       "$script_dir/verify-k5.sh"
   done
-  for framework in quarkus spring micronaut; do
-    OPENWORKFLOW_K5_CHILD=true \
-    OPENWORKFLOW_K5_RUNTIME=openworkflow-kafka \
-    OPENWORKFLOW_K5_SERVICE="openworkflow-definition-$framework" \
-    OPENWORKFLOW_K5_SELECTOR=app=openworkflow-kafka \
-    OPENWORKFLOW_K5_ENGINE=kafka-streams \
-    OPENWORKFLOW_K5_PROFILE="$framework" \
-      "$script_dir/verify-k5.sh"
-  done
-  printf 'K5 verified: durable pause/relocation/resume and in-flight cancellation across both engines, both Pekko stores, and all framework gateways.\n'
+  OPENWORKFLOW_K5_CHILD=true \
+  OPENWORKFLOW_K5_RUNTIME=openworkflow-engine-kafka-streams-$framework \
+  OPENWORKFLOW_K5_SERVICE="openworkflow-definition-management-$framework" \
+  OPENWORKFLOW_K5_SELECTOR="app.kubernetes.io/name=openworkflow-engine-kafka-streams-$framework" \
+  OPENWORKFLOW_K5_ENGINE=kafka-streams \
+  OPENWORKFLOW_K5_PROFILE="$framework" \
+    "$script_dir/verify-k5.sh"
+  printf 'K5 verified: durable pause/relocation/resume and in-flight cancellation across both engines, both Pekko stores, and the %s framework gateway.\n' \
+    "$framework"
   exit 0
 fi
 

@@ -10,6 +10,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEvent;
+import com.forwardmeasure.openworkflow.engine.api.ExecutionLifecycleState;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionEventType;
 import org.junit.jupiter.api.Test;
 
@@ -25,6 +26,32 @@ class OksKafkaRuntimeMappingTest {
     assertEquals(
         ExecutionEvent.EventType.EFFECT_COMPLETED,
         OksKafkaRuntime.mapping(ExecutionEventType.OPERATION_COMPLETED).type());
+  }
+
+  @Test
+  void mapsCorrelatedWorkerPendingStatesToWaitingNotRunning() {
+    // Same semantic WAITING already carries for timer/retry waits - without this, an execution
+    // genuinely blocked on an external correlated worker reports RUNNING the whole time,
+    // indistinguishable from active computation. See docs/engine-construct-gap-audit.md gap #4.
+    assertEquals(
+        ExecutionLifecycleState.WAITING,
+        OksKafkaRuntime.mapping(ExecutionEventType.CORRELATED_WORKER_STARTED).state());
+    assertEquals(
+        ExecutionLifecycleState.WAITING,
+        OksKafkaRuntime.mapping(ExecutionEventType.CORRELATED_WORKER_COMMAND_PUBLISHED).state());
+    assertEquals(
+        ExecutionLifecycleState.WAITING,
+        OksKafkaRuntime.mapping(ExecutionEventType.CORRELATED_WORKER_PROGRESS).state());
+    assertEquals(
+        ExecutionLifecycleState.WAITING,
+        OksKafkaRuntime.mapping(ExecutionEventType.CORRELATED_WORKER_ACCEPTED).state());
+    // Terminal/error states correctly transition OUT of waiting, not stay in it.
+    assertEquals(
+        ExecutionLifecycleState.RUNNING,
+        OksKafkaRuntime.mapping(ExecutionEventType.CORRELATED_WORKER_COMPLETED).state());
+    assertEquals(
+        ExecutionLifecycleState.RUNNING,
+        OksKafkaRuntime.mapping(ExecutionEventType.CORRELATED_WORKER_FAILED).state());
   }
 
   @Test

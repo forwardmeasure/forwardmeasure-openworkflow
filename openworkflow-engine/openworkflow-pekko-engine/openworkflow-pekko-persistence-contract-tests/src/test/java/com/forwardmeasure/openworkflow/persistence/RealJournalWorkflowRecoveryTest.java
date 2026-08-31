@@ -63,7 +63,11 @@ class RealJournalWorkflowRecoveryTest {
       var dataSource =
           new DriverDataSource(
               postgres.getJdbcUrl(), postgres.getUsername(), postgres.getPassword());
-      var migrator = new OpenWorkflowTenantMigrator(dataSource, postgres.getUsername());
+      // OpenWorkflowTenantMigrator always connects as the administrator credential and
+      // provisions a SEPARATE runtime role - never the same identity it connects as (see its own
+      // class Javadoc). Testcontainers' admin user is "test"; reusing that name here would have
+      // the migrator GRANT test TO test, which Postgres rejects as circular self-membership.
+      var migrator = new OpenWorkflowTenantMigrator(dataSource, "openworkflow_runtime");
       migrator.ensureRuntimeRole(postgres.getPassword());
       migrator.provisionAndMigrate(new TenantId(ENGINE_TENANT.value()));
       Config config =

@@ -10,6 +10,7 @@
  */
 package com.forwardmeasure.openworkflow.eventing.postgresql;
 
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Objects;
@@ -17,12 +18,19 @@ import javax.sql.DataSource;
 import org.apache.pekko.japi.function.Function;
 import org.apache.pekko.projection.jdbc.JdbcSession;
 
+/**
+ * The offset-store/management tables ({@code pekko_projection_offset_store}, etc.) live inside each
+ * tenant's own Postgres schema, same as the actor journal - {@code schema} routes this session's
+ * connection there, mirroring {@code SpringSchemaConnectionProvider}'s {@code
+ * Connection#setSchema(...)} pattern from {@code forwardmeasure-jpa-spring}.
+ */
 final class DataSourceJdbcSession implements JdbcSession {
   private final Connection connection;
 
-  DataSourceJdbcSession(DataSource dataSource) {
+  DataSourceJdbcSession(DataSource dataSource, TenantSchema schema) {
     try {
       connection = Objects.requireNonNull(dataSource, "dataSource").getConnection();
+      connection.setSchema(Objects.requireNonNull(schema, "schema").value());
       connection.setAutoCommit(false);
     } catch (SQLException failure) {
       throw new IllegalStateException("Could not open eventing projection session", failure);

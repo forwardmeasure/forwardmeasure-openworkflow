@@ -12,6 +12,7 @@ package com.forwardmeasure.openworkflow.actor;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
@@ -3221,6 +3222,200 @@ class WorkflowEntityTest {
   }
 
   @Test
+  void nestedForkListenTwoLevelsDeepAwaitsFromTheInnerLane() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:probe-nested-listen");
+    WorkflowPlan plan =
+        new OpenWorkflowCompiler()
+            .compile(
+                """
+                document:
+                  dsl: '1.0.3'
+                  namespace: forwardmeasure
+                  name: probe-nested-listen
+                  version: '1.0.0'
+                do:
+                  - root:
+                      fork:
+                        branches:
+                          - nested:
+                              fork:
+                                branches:
+                                  - await:
+                                      listen:
+                                        to:
+                                          one:
+                                            with:
+                                              type: com.example.probe
+                                  - sibling:
+                                      set:
+                                        sibling: true
+                          - other:
+                              set:
+                                other: true
+                """
+                    .getBytes(StandardCharsets.UTF_8));
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+
+    EngineEvent.ForkBranchListenStarted started = null;
+    for (int attempt = 1; attempt <= 10 && started == null; attempt++) {
+      var advanced = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(attempt));
+      started =
+          advanced.events().stream()
+              .filter(EngineEvent.ForkBranchListenStarted.class::isInstance)
+              .map(EngineEvent.ForkBranchListenStarted.class::cast)
+              .findFirst()
+              .orElse(null);
+    }
+    assertTrue(started != null, "expected a ForkBranchListenStarted from the nested lane");
+    assertEquals(2, started.branchPath().size());
+  }
+
+  @Test
+  void nestedForkSubworkflowTwoLevelsDeepLaunchesFromTheInnerLane() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:probe-nested-subworkflow");
+    var child =
+        new com.forwardmeasure.openworkflow.definition.ResolvedSubflow(
+            new com.forwardmeasure.openworkflow.definition.WorkflowCoordinates(
+                "forwardmeasure", "probe-child", "1.0.0", "1.0.3"),
+            "a".repeat(64),
+            "b".repeat(64));
+    WorkflowPlan plan =
+        new OpenWorkflowCompiler()
+            .compile(
+                """
+                document:
+                  dsl: '1.0.3'
+                  namespace: forwardmeasure
+                  name: probe-nested-subworkflow
+                  version: '1.0.0'
+                do:
+                  - root:
+                      fork:
+                        branches:
+                          - nested:
+                              fork:
+                                branches:
+                                  - launch:
+                                      run:
+                                        workflow:
+                                          namespace: forwardmeasure
+                                          name: probe-child
+                                          version: '1.0.0'
+                                  - sibling:
+                                      set:
+                                        sibling: true
+                          - other:
+                              set:
+                                other: true
+                """
+                    .getBytes(StandardCharsets.UTF_8),
+                java.util.List.of(),
+                (namespace, name, version) -> java.util.Optional.of(child));
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+
+    EngineEvent.ForkBranchSubworkflowRequested launched = null;
+    for (int attempt = 1; attempt <= 10 && launched == null; attempt++) {
+      var advanced = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(attempt));
+      launched =
+          advanced.events().stream()
+              .filter(EngineEvent.ForkBranchSubworkflowRequested.class::isInstance)
+              .map(EngineEvent.ForkBranchSubworkflowRequested.class::cast)
+              .findFirst()
+              .orElse(null);
+    }
+    assertTrue(launched != null, "expected a ForkBranchSubworkflowRequested from the nested lane");
+    assertEquals(2, launched.branchPath().size());
+  }
+
+  @Test
+  void nestedForkEmitTwoLevelsDeepPublishesFromTheInnerLane() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:probe-nested-emit");
+    WorkflowPlan plan =
+        new OpenWorkflowCompiler()
+            .compile(
+                """
+                document:
+                  dsl: '1.0.3'
+                  namespace: forwardmeasure
+                  name: probe-nested-emit
+                  version: '1.0.0'
+                do:
+                  - root:
+                      fork:
+                        branches:
+                          - nested:
+                              fork:
+                                branches:
+                                  - announce:
+                                      emit:
+                                        event:
+                                          with:
+                                            source: https://example.test
+                                            type: com.example.probe
+                                  - sibling:
+                                      set:
+                                        sibling: true
+                          - other:
+                              set:
+                                other: true
+                """
+                    .getBytes(StandardCharsets.UTF_8));
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+
+    EngineEvent.ForkBranchEmitRequested request = null;
+    for (int attempt = 1; attempt <= 10 && request == null; attempt++) {
+      var advanced = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(attempt));
+      request =
+          advanced.events().stream()
+              .filter(EngineEvent.ForkBranchEmitRequested.class::isInstance)
+              .map(EngineEvent.ForkBranchEmitRequested.class::cast)
+              .findFirst()
+              .orElse(null);
+    }
+    assertTrue(request != null, "expected a ForkBranchEmitRequested from the nested lane");
+    assertEquals(2, request.branchPath().size());
+  }
+
+  @Test
   void emitPersistsCloudEventIntentBeforeIdempotentAcknowledgement() {
     var tenant =
         com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
@@ -6110,6 +6305,383 @@ class WorkflowEntityTest {
     assertEquals(
         ExecutionStatus.CANCELLED, late.replyOfType(WorkflowReply.Accepted.class).status());
     assertInstanceOf(WorkflowState.Cancelled.class, cancelledKit.restart().state());
+  }
+
+  @Test
+  void correlatedWorkerCallDispatchesCommandTracksProgressAndCompletesWithTheWorkersOutput() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:correlated-worker");
+    byte[] source = correlatedWorkerSource();
+    var resources = correlatedWorkerResources(source);
+    WorkflowPlan plan = new OpenWorkflowCompiler().compile(source, resources);
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+
+    var requestEvent =
+        runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(1)).events().getFirst();
+    assertInstanceOf(EngineEvent.CorrelatedWorkerRequested.class, requestEvent);
+    var requested = (EngineEvent.CorrelatedWorkerRequested) requestEvent;
+    String lifecycleId = requested.lifecycleId();
+    assertEquals(lifecycleId, requested.commandOperation().operationId());
+    assertEquals(lifecycleId + ":events", requested.eventsOperation().operationId());
+    assertEquals(lifecycleId + ":cancel", requested.cancellationOperation().operationId());
+    assertEquals("kafka", requested.commandOperation().protocol());
+    assertEquals(
+        com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor.Mode.PUBLISH,
+        requested.commandOperation().mode());
+    assertEquals(
+        com.forwardmeasure.openworkflow.engine.api.ProtocolOperationDescriptor.Mode.SUBSCRIBE,
+        requested.eventsOperation().mode());
+    assertEquals(
+        REQUESTED_AT.plusSeconds(1).plus(Duration.ofMinutes(30)),
+        requested.eventsOperation().subscriptionDeadline());
+    assertEquals(
+        lifecycleId,
+        requested.commandOperation().request().path("payload").path("operationId").asText());
+    assertInstanceOf(WorkflowState.Waiting.class, kit.getState());
+    assertEquals(kit.getState(), kit.restart().state());
+
+    // The command PUBLISH is acknowledged; the task keeps waiting on the events subscription.
+    var acked =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.commandOperation().operationId(),
+                    JsonNodeFactory.instance.objectNode().put("accepted", true),
+                    false,
+                    true,
+                    REQUESTED_AT.plusSeconds(2),
+                    replyTo));
+    assertInstanceOf(EngineEvent.CorrelatedWorkerCommandPublished.class, acked.events().getFirst());
+    assertInstanceOf(WorkflowState.Waiting.class, acked.state());
+    assertEquals(acked.state(), kit.restart().state());
+
+    // A PROGRESS event arrives on the events subscription.
+    var progressPayload =
+        JsonNodeFactory.instance
+            .objectNode()
+            .put("operationId", lifecycleId)
+            .put("status", "PROGRESS");
+    progressPayload.putObject("metadata").put("percent", 40);
+    var progressMessage = JsonNodeFactory.instance.objectNode();
+    progressMessage.set("payload", progressPayload);
+    var progressed =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.eventsOperation().operationId(),
+                    progressMessage,
+                    false,
+                    false,
+                    REQUESTED_AT.plusSeconds(3),
+                    replyTo));
+    var progressEvent =
+        assertInstanceOf(
+            EngineEvent.CorrelatedWorkerProgressObserved.class, progressed.events().getFirst());
+    assertEquals("PROGRESS", progressEvent.status());
+    assertInstanceOf(WorkflowState.Waiting.class, progressed.state());
+    assertEquals(progressed.state(), kit.restart().state());
+
+    // A message for a different lifecycle sharing the channel is silently ignored.
+    var strayPayload =
+        JsonNodeFactory.instance
+            .objectNode()
+            .put("operationId", "someone-elses-worker")
+            .put("status", "SUCCEEDED");
+    var strayMessage = JsonNodeFactory.instance.objectNode();
+    strayMessage.set("payload", strayPayload);
+    var stray =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.eventsOperation().operationId(),
+                    strayMessage,
+                    false,
+                    false,
+                    REQUESTED_AT.plusSeconds(4),
+                    replyTo));
+    assertTrue(stray.hasNoEvents());
+
+    // SUCCEEDED completes the task with the worker's output.
+    var succeededPayload =
+        JsonNodeFactory.instance
+            .objectNode()
+            .put("operationId", lifecycleId)
+            .put("status", "SUCCEEDED");
+    succeededPayload.putObject("output").put("result", 42);
+    var succeededMessage = JsonNodeFactory.instance.objectNode();
+    succeededMessage.set("payload", succeededPayload);
+    var completed =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.eventsOperation().operationId(),
+                    succeededMessage,
+                    false,
+                    false,
+                    REQUESTED_AT.plusSeconds(5),
+                    replyTo));
+    assertTrue(
+        completed.events().stream()
+            .anyMatch(EngineEvent.CorrelatedWorkerCompleted.class::isInstance));
+    assertTrue(completed.events().stream().anyMatch(EngineEvent.Completed.class::isInstance));
+    var completedState = assertInstanceOf(WorkflowState.Completed.class, completed.state());
+    assertEquals(42, completedState.data().required("result").asInt());
+    assertEquals(completedState, kit.restart().state());
+  }
+
+  @Test
+  void cancellingAPendingCorrelatedWorkerCallWaitsForItsCancellationOperationToBeAcknowledged() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:correlated-worker-cancel");
+    byte[] source = correlatedWorkerSource();
+    var resources = correlatedWorkerResources(source);
+    WorkflowPlan plan = new OpenWorkflowCompiler().compile(source, resources);
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+    var requested =
+        (EngineEvent.CorrelatedWorkerRequested)
+            runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(1)).events().getFirst();
+
+    var cancelled =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.Cancel(
+                    UUID.randomUUID(),
+                    executionId,
+                    actor(tenant, "alice"),
+                    REQUESTED_AT.plusSeconds(2),
+                    replyTo));
+    assertTrue(
+        cancelled.events().stream()
+            .anyMatch(EngineEvent.CorrelatedWorkerCancellationDispatched.class::isInstance));
+    var dispatchedEvent =
+        cancelled.events().stream()
+            .filter(EngineEvent.CorrelatedWorkerCancellationDispatched.class::isInstance)
+            .map(EngineEvent.CorrelatedWorkerCancellationDispatched.class::cast)
+            .findFirst()
+            .orElseThrow();
+    assertEquals(requested.cancellationOperation(), dispatchedEvent.cancellationOperation());
+    // Cancellation does not finalize until the cancel operation is actually acknowledged - the
+    // whole point being that it is genuinely dispatched, not just a local wait being dropped.
+    assertEquals(
+        ExecutionStatus.CANCELLING, cancelled.replyOfType(WorkflowReply.Accepted.class).status());
+    var cancellingState = assertInstanceOf(WorkflowState.Cancelling.class, cancelled.state());
+    assertEquals(cancellingState, kit.restart().state());
+
+    // A late command-publish ack while cancelling is harmless and finalizes nothing.
+    var lateCommandAck =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.commandOperation().operationId(),
+                    JsonNodeFactory.instance.objectNode(),
+                    false,
+                    true,
+                    REQUESTED_AT.plusSeconds(3),
+                    replyTo));
+    assertTrue(lateCommandAck.hasNoEvents());
+    assertInstanceOf(WorkflowState.Cancelling.class, lateCommandAck.state());
+
+    // The cancellation operation's own PUBLISH acknowledgement finalizes the cancellation.
+    var finalized =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.cancellationOperation().operationId(),
+                    JsonNodeFactory.instance.objectNode().put("accepted", true),
+                    false,
+                    true,
+                    REQUESTED_AT.plusSeconds(4),
+                    replyTo));
+    assertTrue(finalized.events().stream().anyMatch(EngineEvent.Cancelled.class::isInstance));
+    assertEquals(
+        ExecutionStatus.CANCELLED, finalized.replyOfType(WorkflowReply.Accepted.class).status());
+    assertInstanceOf(WorkflowState.Cancelled.class, kit.restart().state());
+  }
+
+  @Test
+  void correlatedWorkerFailedStatusRoutesThroughTheSameErrorMachineryAsOtherOperationFailures() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:correlated-worker-failed");
+    byte[] source = correlatedWorkerSource();
+    var resources = correlatedWorkerResources(source);
+    WorkflowPlan plan = new OpenWorkflowCompiler().compile(source, resources);
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+    var requested =
+        (EngineEvent.CorrelatedWorkerRequested)
+            runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(1)).events().getFirst();
+
+    var failedPayload =
+        JsonNodeFactory.instance
+            .objectNode()
+            .put("operationId", requested.lifecycleId())
+            .put("status", "FAILED");
+    failedPayload.putObject("error").put("detail", "the external worker crashed");
+    var failedMessage = JsonNodeFactory.instance.objectNode();
+    failedMessage.set("payload", failedPayload);
+    var failed =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.ProtocolCallObserved(
+                    executionId,
+                    requested.eventsOperation().operationId(),
+                    failedMessage,
+                    false,
+                    false,
+                    REQUESTED_AT.plusSeconds(2),
+                    replyTo));
+    assertTrue(failed.events().stream().anyMatch(EngineEvent.ErrorRaised.class::isInstance));
+    var failedState = assertInstanceOf(WorkflowState.Failed.class, failed.state());
+    assertEquals("the external worker crashed", failedState.message());
+    assertEquals(failedState, kit.restart().state());
+  }
+
+  @Test
+  void correlatedWorkerNestedInsideAForkIsRejectedAtPlanCompileTime() {
+    byte[] source =
+        """
+        document:
+          dsl: '1.0.3'
+          namespace: workers
+          name: correlated-worker-in-fork
+          version: '1.0.0'
+        do:
+          - parallel:
+              fork:
+                compete: false
+                branches:
+                  - execute:
+                      call: com.forwardmeasure.oks.correlated-worker
+                      with:
+                        document:
+                          endpoint: https://contracts.example.test/workers.yaml
+                        command:
+                          channel: workers.commands
+                          message:
+                            payload:
+                              kind: launch
+                        events:
+                          channel: workers.events
+                          subscription:
+                            consume:
+                              until: '${ .payload.status == "SUCCEEDED" }'
+                              for: PT30M
+        """
+            .getBytes(StandardCharsets.UTF_8);
+    var resources = correlatedWorkerResources(source);
+    WorkflowPlan plan = new OpenWorkflowCompiler().compile(source, resources);
+    assertThrows(IllegalArgumentException.class, () -> MilestoneOneProgram.compile(plan));
+  }
+
+  private static byte[] correlatedWorkerSource() {
+    return """
+    document:
+      dsl: '1.0.3'
+      namespace: workers
+      name: correlated-worker-runtime
+      version: '1.0.0'
+    do:
+      - execute:
+          call: com.forwardmeasure.oks.correlated-worker
+          with:
+            document:
+              endpoint: https://contracts.example.test/workers.yaml
+            command:
+              channel: workers.commands
+              message:
+                payload:
+                  kind: launch
+            events:
+              channel: workers.events
+              subscription:
+                consume:
+                  until: '${ .payload.status == "SUCCEEDED" }'
+                  for: PT30M
+            cancellation:
+              channel: workers.cancellations
+              message:
+                payload:
+                  kind: cancel
+    """
+        .getBytes(StandardCharsets.UTF_8);
+  }
+
+  private static List<com.forwardmeasure.openworkflow.definition.ResolvedWorkflowResource>
+      correlatedWorkerResources(byte[] source) {
+    return new com.forwardmeasure.openworkflow.definition.WorkflowResourceResolver()
+        .resolve(
+            source,
+            request ->
+                com.forwardmeasure.openworkflow.definition.ResolvedWorkflowResource.of(
+                    request.uri(),
+                    "application/yaml",
+                    """
+                    asyncapi: 2.6.0
+                    info:
+                      title: Workers
+                      version: 1.0.0
+                    servers:
+                      test:
+                        url: kafka.test:9092
+                        protocol: kafka
+                    channels:
+                      workers.commands:
+                        servers: [test]
+                        publish:
+                          message:
+                            name: WorkerCommand
+                      workers.events:
+                        servers: [test]
+                        subscribe:
+                          message:
+                            name: WorkerEvent
+                      workers.cancellations:
+                        servers: [test]
+                        publish:
+                          message:
+                            name: WorkerCancellation
+                    """));
   }
 
   @Test

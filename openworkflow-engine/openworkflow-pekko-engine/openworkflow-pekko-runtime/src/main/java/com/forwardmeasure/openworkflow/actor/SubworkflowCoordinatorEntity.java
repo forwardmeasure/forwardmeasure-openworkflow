@@ -10,11 +10,14 @@
  */
 package com.forwardmeasure.openworkflow.actor;
 
+import com.forwardmeasure.jpa.tenancy.TenantSchema;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionStatus;
+import com.typesafe.config.Config;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.apache.pekko.actor.typed.Behavior;
 import org.apache.pekko.actor.typed.javadsl.ActorContext;
@@ -40,12 +43,21 @@ public final class SubworkflowCoordinatorEntity
   private final WorkflowEndpoint workflows;
   private final ActorContext<SubworkflowCoordinatorCommand> context;
   private final TimerScheduler<SubworkflowCoordinatorCommand> timers;
+  private final Optional<PostgresConnectionSettings> postgresConnection;
 
   public static Behavior<SubworkflowCoordinatorCommand> create(
       com.forwardmeasure.openworkflow.engine.api.ExecutionId childExecutionId,
       WorkflowSharding workflows) {
+    return create(childExecutionId, workflows, Optional.empty());
+  }
+
+  public static Behavior<SubworkflowCoordinatorCommand> create(
+      com.forwardmeasure.openworkflow.engine.api.ExecutionId childExecutionId,
+      WorkflowSharding workflows,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     Objects.requireNonNull(childExecutionId, "childExecutionId");
     Objects.requireNonNull(workflows, "workflows");
+    Objects.requireNonNull(postgresConnection, "postgresConnection");
     return Behaviors.setup(
         context ->
             Behaviors.withTimers(
@@ -57,7 +69,8 @@ public final class SubworkflowCoordinatorEntity
                                 .entityRef(executionId)
                                 .<WorkflowReply>ask(command::apply, timeout),
                         context,
-                        timers)));
+                        timers,
+                        postgresConnection)));
   }
 
   static Behavior<SubworkflowCoordinatorCommand> create(
@@ -68,19 +81,57 @@ public final class SubworkflowCoordinatorEntity
             Behaviors.withTimers(
                 timers ->
                     new SubworkflowCoordinatorEntity(
-                        childExecutionId, workflows, context, timers)));
+                        childExecutionId, workflows, context, timers, Optional.empty())));
   }
 
   private SubworkflowCoordinatorEntity(
       com.forwardmeasure.openworkflow.engine.api.ExecutionId childExecutionId,
       WorkflowEndpoint workflows,
       ActorContext<SubworkflowCoordinatorCommand> context,
-      TimerScheduler<SubworkflowCoordinatorCommand> timers) {
+      TimerScheduler<SubworkflowCoordinatorCommand> timers,
+      Optional<PostgresConnectionSettings> postgresConnection) {
     super(PersistenceId.ofUniqueId("workflow-subflow|" + childExecutionId.entityId()));
     this.childExecutionId = childExecutionId;
     this.workflows = workflows;
     this.context = context;
     this.timers = timers;
+    this.postgresConnection = Objects.requireNonNull(postgresConnection, "postgresConnection");
+  }
+
+  /** See {@link WorkflowEntity}'s identical overrides for why this per-tenant routing is needed. */
+  @Override
+  public String journalPluginId() {
+    return postgresConnection
+        .map(connection -> TenantPersistencePlugins.journalPluginId(tenantSchema()))
+        .orElseGet(super::journalPluginId);
+  }
+
+  @Override
+  public Optional<Config> journalPluginConfig() {
+    return postgresConnection.isEmpty()
+        ? super.journalPluginConfig()
+        : TenantPersistencePlugins.journalPluginConfig(
+            context.getSystem(), tenantSchema(), postgresConnection.get());
+  }
+
+  @Override
+  public String snapshotPluginId() {
+    return postgresConnection
+        .map(connection -> TenantPersistencePlugins.snapshotPluginId(tenantSchema()))
+        .orElseGet(super::snapshotPluginId);
+  }
+
+  @Override
+  public Optional<Config> snapshotPluginConfig() {
+    return postgresConnection.isEmpty()
+        ? super.snapshotPluginConfig()
+        : TenantPersistencePlugins.snapshotPluginConfig(
+            context.getSystem(), tenantSchema(), postgresConnection.get());
+  }
+
+  private TenantSchema tenantSchema() {
+    return TenantSchema.forTenant(
+        new com.forwardmeasure.jpa.tenancy.TenantId(childExecutionId.tenantId().value()));
   }
 
   @Override

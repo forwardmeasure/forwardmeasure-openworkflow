@@ -44,6 +44,124 @@ public final class ProtocolOperationMaterializer {
     return materialize(plan, step, arguments, operationId, authenticationContext, null);
   }
 
+  /**
+   * Decomposes one {@code com.forwardmeasure.oks.correlated-worker} call into its command
+   * (PUBLISH), events (SUBSCRIBE), and optional cancellation (PUBLISH) operations - each an
+   * ordinary {@link ProtocolOperationDescriptor} that every AsyncAPI transport executor already
+   * runs unchanged. {@code lifecycleId} is the durable identity the workflow uses to correlate the
+   * three operations with each other and, injected into each outbound message payload's {@code
+   * operationId}, with the external worker's own lifecycle. Each descriptor's own {@code
+   * operationId} is suffixed ({@code :events}/{@code :cancel}) so the three can be dispatched and
+   * recovered as independent durable operations.
+   */
+  public static CorrelatedWorkerOperations materializeCorrelatedWorker(
+      WorkflowPlan plan,
+      PlanStep step,
+      JsonNode arguments,
+      String lifecycleId,
+      AuthenticationExpressionContext authenticationContext,
+      java.time.Instant subscriptionDeadline) {
+    CallPlan call = step.callPlan();
+    if (call == null || call.kind() != CallPlan.Kind.CORRELATED_WORKER) {
+      throw new IllegalArgumentException("Not a correlated-worker call at " + step.path());
+    }
+    JsonNode document = parse(resource(plan, call));
+    ProtocolOperationDescriptor command =
+        correlatedWorkerOperation(
+            call,
+            document,
+            arguments.required("command"),
+            lifecycleId,
+            lifecycleId,
+            authenticationContext,
+            false,
+            null);
+    ProtocolOperationDescriptor events =
+        correlatedWorkerOperation(
+            call,
+            document,
+            arguments.required("events"),
+            lifecycleId + ":events",
+            lifecycleId,
+            authenticationContext,
+            true,
+            subscriptionDeadline);
+    ProtocolOperationDescriptor cancellation =
+        arguments.hasNonNull("cancellation")
+            ? correlatedWorkerOperation(
+                call,
+                document,
+                arguments.required("cancellation"),
+                lifecycleId + ":cancel",
+                lifecycleId,
+                authenticationContext,
+                false,
+                null)
+            : null;
+    return new CorrelatedWorkerOperations(command, events, cancellation);
+  }
+
+  /** The command/events/cancellation operations decomposed from one correlated-worker call. */
+  public record CorrelatedWorkerOperations(
+      ProtocolOperationDescriptor command,
+      ProtocolOperationDescriptor events,
+      ProtocolOperationDescriptor cancellation) {}
+
+  private static ProtocolOperationDescriptor correlatedWorkerOperation(
+      CallPlan call,
+      JsonNode document,
+      JsonNode block,
+      String operationId,
+      String correlationId,
+      AuthenticationExpressionContext authenticationContext,
+      boolean subscribe,
+      java.time.Instant subscriptionDeadline) {
+    String channel = block.required("channel").asText();
+    String action = subscribe ? "subscribe" : "publish";
+    JsonNode channelNode = document.path("channels").path(channel);
+    JsonNode operation = channelNode.path(action);
+    if (operation.isMissingNode()) {
+      throw new IllegalArgumentException(
+          "Pinned AsyncAPI channel has no " + action + " operation: " + channel);
+    }
+    String wanted = operation.path("operationId").asText(channel + "/" + action);
+    LocatedServer server = asyncServer(document, operation);
+    URI endpoint = asyncEndpoint(server.endpoint(), channelNode.path("address").asText(channel));
+    JsonNode request =
+        subscribe ? block.path("subscription") : correlatedWorkerMessage(block, correlationId);
+    return new ProtocolOperationDescriptor(
+        operationId,
+        ProtocolOperationDescriptor.Kind.ASYNC_API,
+        subscribe
+            ? ProtocolOperationDescriptor.Mode.SUBSCRIBE
+            : ProtocolOperationDescriptor.Mode.PUBLISH,
+        call.resource(),
+        server.protocol(),
+        endpoint,
+        wanted,
+        request,
+        subscribe ? call.asyncApiSubscription() : null,
+        call.authentication(),
+        runtimeAuthentication(call, authenticationContext),
+        null,
+        subscribe ? subscriptionDeadline : null);
+  }
+
+  private static ObjectNode correlatedWorkerMessage(JsonNode block, String correlationId) {
+    JsonNode messageNode = block.path("message");
+    if (!messageNode.isObject()) {
+      throw new IllegalArgumentException(
+          "correlated-worker command/cancellation requires a message");
+    }
+    ObjectNode message = (ObjectNode) messageNode.deepCopy();
+    ObjectNode payload =
+        message.has("payload") && message.get("payload").isObject()
+            ? (ObjectNode) message.get("payload")
+            : message.putObject("payload");
+    payload.put("operationId", correlationId);
+    return message;
+  }
+
   public static ProtocolOperationDescriptor materialize(
       WorkflowPlan plan,
       PlanStep step,

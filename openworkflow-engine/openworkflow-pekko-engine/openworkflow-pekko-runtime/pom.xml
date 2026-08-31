@@ -33,6 +33,23 @@
         <dependency><groupId>com.cronutils</groupId><artifactId>cron-utils</artifactId></dependency>
         <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-engine-api</artifactId></dependency>
         <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-expression-jq</artifactId></dependency>
+        <dependency><groupId>com.forwardmeasure.jpa</groupId><artifactId>forwardmeasure-jpa-tenancy</artifactId></dependency>
+        <!--
+          Excludes real commons-logging, pulled in transitively via liquibase-cassandra ->
+          cassandra-jdbc-wrapper -> opencsv -> commons-beanutils. Quarkus deployables already carry
+          org.jboss.logging:commons-logging-jboss-logging, a drop-in shim providing the identical
+          org.apache.commons.logging.* classes - the two collide as duplicate-and-different classes
+          under duplicate-finder-maven-plugin. Scoped to this dependency edge only, not
+          openworkflow-migrations' own pom, since its standalone deployable still needs a real
+          commons-logging implementation present.
+        -->
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-migrations</artifactId>
+            <exclusions>
+                <exclusion><groupId>commons-logging</groupId><artifactId>commons-logging</artifactId></exclusion>
+            </exclusions>
+        </dependency>
         <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-actor-typed_${scala.binary.version}</artifactId></dependency>
         <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-cluster-typed_${scala.binary.version}</artifactId></dependency>
         <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-cluster-sharding-typed_${scala.binary.version}</artifactId></dependency>
