@@ -976,7 +976,17 @@ export function emptyTask(kind: TaskType, name: string): Task {
     return { kind: "raise", name, error: { type: "", status: 400 } };
   }
   if (kind === "wait") return { kind: "wait", name, wait: "" };
-  if (kind === "emit") return { kind: "emit", name, with: {} };
+  if (kind === "emit") {
+    // A blank "with: {}" gave no hint at all of the CloudEvents attribute
+    // shape this task actually needs - populated with the spec's own
+    // required/common attributes as placeholder values to edit, not an
+    // empty object to reverse-engineer from documentation.
+    return {
+      kind: "emit",
+      name,
+      with: { source: "https://example.com/source", type: "com.example.event", data: {} },
+    };
+  }
   if (kind === "for") {
     return { kind: "for", name, itemVariable: "item", collection: "", children: [] };
   }
@@ -987,7 +997,16 @@ export function emptyTask(kind: TaskType, name: string): Task {
     return { kind: "try", name, children: [], catchClause: { children: [] } };
   }
   if (kind === "listen") {
-    return { kind: "listen", name, children: [] };
+    // Same reasoning as "emit" above - an empty task gave no clue this
+    // kind even HAS a "to" consumption filter to fill in. "one" (wait for
+    // a single matching event) is the simplest of the three CNCF variants
+    // (one/all/any), so it's the least surprising starting point.
+    return {
+      kind: "listen",
+      name,
+      consumption: { one: { with: { type: "com.example.event" } } },
+      children: [],
+    };
   }
   if (kind === "run") {
     return { kind: "run", name, variant: "container", configuration: {} };
