@@ -27,7 +27,7 @@ import { canPause, diagnostic, SAMPLE } from "./workflow";
 // theme.ts, never on component state.
 const muiTheme = createStudioMuiTheme();
 
-type View = "author" | "executions";
+type View = "author" | "revisions" | "executions";
 type EditorView = "source" | "canvas" | "settings";
 type GovernanceAction = "submit" | "approve" | "reject" | "publish";
 type ExecutionControlAction = "pause" | "resume" | "cancel";
@@ -436,6 +436,12 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
             Author
           </button>
           <button
+            className={view === "revisions" ? "active" : ""}
+            onClick={() => setView("revisions")}
+          >
+            Revisions
+          </button>
+          <button
             className={view === "executions" ? "active" : ""}
             onClick={() => {
               setView("executions");
@@ -445,7 +451,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
             Executions
           </button>
           <button className="quiet" onClick={logout}>
-            Sign out
+            Sign Out
           </button>
         </nav>
       </header>
@@ -513,28 +519,28 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 {(permissions["definition:create"] ||
                   permissions["definition:update"]) && (
                   <button disabled={busy} onClick={() => void saveDraft()}>
-                    Save draft
+                    Save Draft
                   </button>
                 )}
               </div>
             </div>
             <div className="metadata">
               <label>
-                Workflow name
+                Workflow Name
                 <input
                   value={definitionKey}
                   onChange={(event) => setDefinitionKey(event.target.value)}
                 />
               </label>
               <label>
-                Display name
+                Display Name
                 <input
                   value={displayName}
                   onChange={(event) => setDisplayName(event.target.value)}
                 />
               </label>
               <label>
-                Definition version
+                Definition Version
                 <input
                   value={definitionVersion}
                   onChange={(event) => setDefinitionVersion(event.target.value)}
@@ -564,12 +570,12 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
             )}
             {revisionsForCurrentWorkflow.length > 0 && (
               <details open={Boolean(previousSource && previousSource !== source)}>
-                <summary>Revision diff</summary>
+                <summary>Revision Diff</summary>
                 <FormControl size="small" sx={{ mb: 1, minWidth: 260 }}>
-                  <InputLabel id="compare-against-label">Compare against</InputLabel>
+                  <InputLabel id="compare-against-label">Compare Against</InputLabel>
                   <Select
                     labelId="compare-against-label"
-                    label="Compare against"
+                    label="Compare Against"
                     value={
                       compareDefinitionId ??
                       currentDefinition?.id ??
@@ -602,15 +608,10 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
               </details>
             )}
           </section>
-          <aside className="panel diagram" aria-labelledby="governed-revisions-title">
-            {/* Used to also carry a collapsed "Execution flow" list here (a
-                numbered readout of task names) under a "Derived view"
-                label - genuinely redundant with the Source tab, which
-                already shows the exact same tasks with everything else
-                besides. This aside's real, non-redundant job is browsing
-                and acting on every OTHER governed revision - the only UI
-                for opening, submitting, and publishing a saved definition -
-                so it's labeled for what it actually does. */}
+        </main>
+      ) : view === "revisions" ? (
+        <main className="revisions-view">
+          <section className="panel" aria-labelledby="governed-revisions-title">
             <h2 id="governed-revisions-title">Governed Revisions</h2>
             {definitions.length === 0 ? (
               <p className="muted">No definitions in this tenant.</p>
@@ -639,9 +640,10 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                         setDisplayName(
                           workflow?.title ?? definition.namespace ?? definition.workflowId,
                         );
+                        setView("author");
                       }}
                     >
-                      Open source
+                      Open Source
                     </button>
                     <div className="actions">
                       {(definition.status === "draft" ||
@@ -683,7 +685,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                       permissions["execution:start"] && (
                         <>
                           <label>
-                            Execution input
+                            Execution Input
                             <textarea
                               rows={3}
                               value={input}
@@ -694,7 +696,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                             disabled={busy}
                             onClick={() => void start(definition)}
                           >
-                            Start workflow
+                            Start Workflow
                           </button>
                         </>
                       )}
@@ -702,7 +704,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                 );
               })
             )}
-          </aside>
+          </section>
         </main>
       ) : (
         <main className="execution-grid">

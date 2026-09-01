@@ -140,17 +140,19 @@ nav button.active {
   white-space: pre-wrap;
 }
 .author-grid,
+.revisions-view,
 .execution-grid {
   display: grid;
   gap: 1rem;
 }
-/* The Derived view aside used to take a flexible 0.8fr share (~30% of the
-   editor's width on a normal monitor, confirmed live) just to keep
-   "Governed revisions" readable - a fixed, much narrower cap instead, so
-   the canvas/source editor (the thing actually being worked on) keeps the
-   vast majority of the width regardless of viewport size. */
+/* Governed Revisions (browse/open/submit/publish/start) used to live in a
+   second column here, permanently reserving ~30% of this view's width
+   just to stay readable (confirmed live) even though it has nothing to
+   do with the thing actually being edited. It's its own top-level
+   "Revisions" tab now (.revisions-view below) - the editor keeps the
+   full width unconditionally. */
 .author-grid {
-  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
+  grid-template-columns: minmax(0, 1fr);
 }
 .execution-grid {
   grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.6fr);
