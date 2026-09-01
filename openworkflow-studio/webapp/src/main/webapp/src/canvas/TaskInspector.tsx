@@ -38,18 +38,18 @@ function paramsOf(task: Task): Record<string, unknown> {
 }
 
 const KIND_LABEL: Record<Task["kind"], string> = {
-  set: "Set task",
-  call: "Call task",
-  switch: "Switch task",
-  raise: "Raise task",
-  wait: "Wait task",
-  emit: "Emit task",
-  do: "Do task",
-  for: "For task",
-  fork: "Fork task",
-  try: "Try task",
-  listen: "Listen task",
-  run: "Run task",
+  set: "Set Task",
+  call: "Call Task",
+  switch: "Switch Task",
+  raise: "Raise Task",
+  wait: "Wait Task",
+  emit: "Emit Task",
+  do: "Do Task",
+  for: "For Task",
+  fork: "Fork Task",
+  try: "Try Task",
+  listen: "Listen Task",
+  run: "Run Task",
 };
 
 // The cross-cutting properties every task kind shares (see CommonTaskProps
@@ -753,7 +753,7 @@ export function TaskInspector({
         {KIND_LABEL[task.kind]}
       </Typography>
       <TextField
-        label="Task name"
+        label="Task Name"
         size="small"
         value={name}
         onChange={(event) => setName(event.target.value)}
@@ -763,7 +763,7 @@ export function TaskInspector({
       />
       {task.kind === "call" && (
         <TextField
-          label="Call target"
+          label="Call Target"
           size="small"
           placeholder="http, openapi, or a function name"
           value={callTarget}
@@ -793,7 +793,7 @@ export function TaskInspector({
       {task.kind === "raise" && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
           <TextField
-            label="Error: named entry from use.errors"
+            label="Error: Named Entry from use.errors"
             size="small"
             placeholder="leave blank for an inline error below"
             value={raiseError.refName}
@@ -812,7 +812,7 @@ export function TaskInspector({
               }}
             >
               <TextField
-                label="Error type"
+                label="Error Type"
                 size="small"
                 placeholder="https://example.com/errors/not-found"
                 value={raiseError.type}
@@ -828,21 +828,21 @@ export function TaskInspector({
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Title (optional)"
+                label="Title (Optional)"
                 size="small"
                 value={raiseError.title}
                 onChange={(event) => setRaiseErrorField("title", event.target.value)}
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Instance (optional)"
+                label="Instance (Optional)"
                 size="small"
                 value={raiseError.instance}
                 onChange={(event) => setRaiseErrorField("instance", event.target.value)}
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Detail (optional)"
+                label="Detail (Optional)"
                 size="small"
                 multiline
                 minRows={2}
@@ -870,7 +870,7 @@ export function TaskInspector({
             Double-click this task on canvas to edit its loop body.
           </Typography>
           <TextField
-            label="Item variable"
+            label="Item Variable"
             size="small"
             placeholder="item"
             value={forItemVariable}
@@ -878,7 +878,7 @@ export function TaskInspector({
             onBlur={() => commit({})}
           />
           <TextField
-            label="Collection (expression)"
+            label="Collection (Expression)"
             size="small"
             placeholder="${ .items }"
             value={forCollection}
@@ -886,7 +886,7 @@ export function TaskInspector({
             onBlur={() => commit({})}
           />
           <TextField
-            label="Index variable (optional)"
+            label="Index Variable (Optional)"
             size="small"
             placeholder="index"
             value={forIndexVariable}
@@ -894,7 +894,7 @@ export function TaskInspector({
             onBlur={() => commit({})}
           />
           <TextField
-            label="While condition (optional)"
+            label="While Condition (Optional)"
             size="small"
             placeholder="${ .continue }"
             value={forWhile}
@@ -931,7 +931,7 @@ export function TaskInspector({
             Double-click this task on canvas to edit its try block.
           </Typography>
           <TextField
-            label="Catch: errors filter (JSON, optional)"
+            label="Catch: Errors Filter (JSON, Optional)"
             multiline
             minRows={2}
             size="small"
@@ -950,21 +950,21 @@ export function TaskInspector({
             onBlur={() => commit({})}
           />
           <TextField
-            label="Catch: when (optional)"
+            label="Catch: when (Optional)"
             size="small"
             value={catchState.when}
             onChange={(event) => setCatchField("when", event.target.value)}
             onBlur={() => commit({})}
           />
           <TextField
-            label="Catch: except when (optional)"
+            label="Catch: except when (Optional)"
             size="small"
             value={catchState.exceptWhen}
             onChange={(event) => setCatchField("exceptWhen", event.target.value)}
             onBlur={() => commit({})}
           />
           <TextField
-            label="Catch: then (optional)"
+            label="Catch: then (Optional)"
             size="small"
             placeholder="another task's name, or exit"
             value={catchState.then}
@@ -975,7 +975,7 @@ export function TaskInspector({
             Retry policy (optional)
           </Typography>
           <TextField
-            label="Retry: named policy from use.retries"
+            label="Retry: Named Policy from use.retries"
             size="small"
             placeholder="leave blank for an inline policy below"
             value={catchState.retry.refName}
@@ -994,7 +994,7 @@ export function TaskInspector({
               }}
             >
               <TextField
-                label="Retry: delay"
+                label="Retry: Delay"
                 size="small"
                 placeholder='PT1S, or {"seconds": 3}'
                 value={catchState.retry.delay}
@@ -1019,7 +1019,7 @@ export function TaskInspector({
                 </Select>
               </FormControl>
               <TextField
-                label="Retry: attempt count"
+                label="Retry: Attempt Count"
                 size="small"
                 type="number"
                 value={catchState.retry.attemptCount}
@@ -1027,7 +1027,7 @@ export function TaskInspector({
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Retry: attempt duration"
+                label="Retry: Attempt Duration"
                 size="small"
                 value={catchState.retry.attemptDuration}
                 onChange={(event) =>
@@ -1036,7 +1036,7 @@ export function TaskInspector({
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Retry: total duration"
+                label="Retry: Total Duration"
                 size="small"
                 value={catchState.retry.totalDuration}
                 onChange={(event) =>
@@ -1045,14 +1045,14 @@ export function TaskInspector({
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Retry: jitter from"
+                label="Retry: Jitter From"
                 size="small"
                 value={catchState.retry.jitterFrom}
                 onChange={(event) => setRetryField("jitterFrom", event.target.value)}
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Retry: jitter to"
+                label="Retry: Jitter To"
                 size="small"
                 value={catchState.retry.jitterTo}
                 onChange={(event) => setRetryField("jitterTo", event.target.value)}
@@ -1075,7 +1075,7 @@ export function TaskInspector({
             </Box>
           )}
           <TextField
-            label="Catch: recovery tasks (JSON, catch.do)"
+            label="Catch: Recovery Tasks (JSON, catch.do)"
             multiline
             minRows={4}
             size="small"
@@ -1094,7 +1094,7 @@ export function TaskInspector({
             double-click this task on canvas to edit that loop's tasks.
           </Typography>
           <TextField
-            label="Consumption filter (JSON: one/all/any)"
+            label="Consumption Filter (JSON: one/all/any)"
             multiline
             minRows={4}
             size="small"
@@ -1109,7 +1109,7 @@ export function TaskInspector({
             <InputLabel id="listen-read-label">Read as</InputLabel>
             <Select
               labelId="listen-read-label"
-              label="Read as"
+              label="Read As"
               value={listenState.readAs}
               onChange={(event) => {
                 const readAs = event.target.value as ListenState["readAs"];
@@ -1123,7 +1123,7 @@ export function TaskInspector({
             </Select>
           </FormControl>
           <TextField
-            label="Loop: item variable (optional)"
+            label="Loop: Item Variable (Optional)"
             size="small"
             placeholder="event"
             value={listenState.itemVariable}
@@ -1131,7 +1131,7 @@ export function TaskInspector({
             onBlur={() => commit({})}
           />
           <TextField
-            label="Loop: index variable (optional)"
+            label="Loop: Index Variable (Optional)"
             size="small"
             placeholder="index"
             value={listenState.indexVariable}
@@ -1163,28 +1163,28 @@ export function TaskInspector({
           {runState.variant === "workflow" ? (
             <>
               <TextField
-                label="Workflow: namespace"
+                label="Workflow: Namespace"
                 size="small"
                 value={runState.workflowNamespace}
                 onChange={(event) => setRunField("workflowNamespace", event.target.value)}
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Workflow: name"
+                label="Workflow: Name"
                 size="small"
                 value={runState.workflowName}
                 onChange={(event) => setRunField("workflowName", event.target.value)}
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Workflow: version"
+                label="Workflow: Version"
                 size="small"
                 value={runState.workflowVersion}
                 onChange={(event) => setRunField("workflowVersion", event.target.value)}
                 onBlur={() => commit({})}
               />
               <TextField
-                label="Workflow: input (JSON, optional)"
+                label="Workflow: Input (JSON, Optional)"
                 multiline
                 minRows={3}
                 size="small"
@@ -1265,7 +1265,7 @@ export function TaskInspector({
             >
               <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                 <TextField
-                  label="Case name"
+                  label="Case Name"
                   size="small"
                   fullWidth
                   value={switchCase.name}
@@ -1321,7 +1321,7 @@ export function TaskInspector({
             </Box>
           ))}
           <Button size="small" onClick={addCase}>
-            Add case
+            Add Case
           </Button>
         </Box>
       )}
@@ -1337,7 +1337,7 @@ export function TaskInspector({
           sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}
         >
           <TextField
-            label="Only run if (condition)"
+            label="Only Run if (Condition)"
             size="small"
             placeholder="${ .age >= 18 }"
             helperText="A true/false expression. If it evaluates false when the workflow reaches this task, the task is skipped entirely - the workflow just moves on to whatever's next, as if this task weren't here."
@@ -1357,7 +1357,7 @@ export function TaskInspector({
             onBlur={commitAdvanced}
           />
           <TextField
-            label="Then go to"
+            label="Then Go To"
             size="small"
             placeholder="a task name, or continue / exit / end"
             helperText="Normally the workflow runs whatever this task is connected to next on the canvas. Set this to jump somewhere else instead - another task's name, end/exit to stop the workflow right here, or continue to go back to following the connection."
@@ -1425,10 +1425,10 @@ export function TaskInspector({
       </Accordion>
       <Box sx={{ display: "flex", gap: 1 }}>
         <Button size="small" onClick={onDuplicate}>
-          Duplicate task
+          Duplicate Task
         </Button>
         <Button color="error" size="small" onClick={onDelete}>
-          Delete task
+          Delete Task
         </Button>
       </Box>
     </Box>

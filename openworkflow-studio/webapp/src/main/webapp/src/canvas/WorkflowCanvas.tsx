@@ -1031,7 +1031,7 @@ export function WorkflowCanvas({
               )}
             </IconButton>
           </Tooltip>
-          <Tooltip title="Auto layout">
+          <Tooltip title="Auto Layout">
             <IconButton
               size="small"
               onClick={autoLayout}

@@ -67,7 +67,7 @@ const OPEN_SECTIONS: { heading: string; fields: (keyof SettingsState)[] }[] = [
     fields: ["documentTitle", "documentSummary"],
   },
   {
-    heading: "Data & expressions",
+    heading: "Data & Expressions",
     fields: ["input", "output", "timeout", "schedule"],
   },
 ];
@@ -77,12 +77,12 @@ const COLLAPSED_SECTIONS: {
   fields: (keyof SettingsState)[];
 }[] = [
   {
-    heading: "Labels & extra metadata",
+    heading: "Labels & Extra Metadata",
     description: "Freeform - most workflows leave these unset.",
     fields: ["documentTags", "documentMetadata"],
   },
   {
-    heading: "Reusable components",
+    heading: "Reusable Components",
     description:
       'Named things tasks elsewhere in this workflow refer back to by name (e.g. a "raise" task\'s error, or a "call" task\'s authentication).',
     fields: [
@@ -115,17 +115,17 @@ const FIELD_LABEL: Record<keyof SettingsState, string> = {
   documentSummary: "Summary",
   documentTags: "Tags",
   documentMetadata: "Metadata",
-  input: "Workflow input",
-  output: "Workflow output",
+  input: "Workflow Input",
+  output: "Workflow Output",
   timeout: "Timeout",
   schedule: "Schedule",
-  authentications: "Authentication schemes",
-  errors: "Error definitions",
+  authentications: "Authentication Schemes",
+  errors: "Error Definitions",
   extensions: "Extensions",
-  retries: "Retry policies",
-  functions: "Reusable functions",
-  timeouts: "Named timeouts",
-  catalogs: "Resource catalogs",
+  retries: "Retry Policies",
+  functions: "Reusable Functions",
+  timeouts: "Named Timeouts",
+  catalogs: "Resource Catalogs",
   secrets: "Secrets",
 };
 
@@ -378,10 +378,10 @@ export function WorkflowSettingsPanel({
           {section.fields.map(renderField)}
           {section.heading === "Data & expressions" && (
             <FormControl size="small">
-              <InputLabel id="evaluate-mode-label">Evaluate mode</InputLabel>
+              <InputLabel id="evaluate-mode-label">Evaluate Mode</InputLabel>
               <Select
                 labelId="evaluate-mode-label"
-                label="Evaluate mode"
+                label="Evaluate Mode"
                 value={evaluateMode}
                 onChange={(event) => {
                   const next = event.target.value as "strict" | "loose";

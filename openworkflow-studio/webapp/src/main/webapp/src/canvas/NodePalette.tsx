@@ -44,7 +44,7 @@ export function NodePalette({
       }}
     >
       <Typography variant="overline" color="text.secondary" sx={{ px: 0.5 }}>
-        Add a task
+        Add a Task
       </Typography>
       {CATEGORY_ORDER.map((category) => (
         <Box key={category} sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>

@@ -75,7 +75,7 @@ export const KIND_CATEGORY: Record<Task["kind"], TaskCategory> = {
 
 export const CATEGORY_LABEL: Record<TaskCategory, string> = {
   action: "Actions",
-  control: "Control flow",
+  control: "Control Flow",
   integration: "Integration",
 };
 
@@ -99,10 +99,10 @@ export const KIND_PALETTE_LABEL: Record<Task["kind"], string> = {
   wait: "Wait",
   raise: "Raise",
   switch: "Switch",
-  do: "Do (group)",
-  for: "For (loop)",
-  fork: "Fork (parallel)",
-  try: "Try (error handling)",
-  listen: "Listen (event)",
+  do: "Do (Group)",
+  for: "For (Loop)",
+  fork: "Fork (Parallel)",
+  try: "Try (Error Handling)",
+  listen: "Listen (Event)",
   run: "Run",
 };
