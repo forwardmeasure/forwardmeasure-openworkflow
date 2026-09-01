@@ -64,6 +64,15 @@ export function TaskNode({
   const { task, trace, validationIssues, orientation = "horizontal" } = data;
   const targetPosition = orientation === "vertical" ? Position.Top : Position.Left;
   const sourcePosition = orientation === "vertical" ? Position.Bottom : Position.Right;
+  // "Nodes cannot be connected to from top, and cannot connect from
+  // bottom in landscape mode" - confirmed real: only one axis of handles
+  // ever existed at a time, tied to the whole-canvas orientation. These
+  // add the OTHER axis's pair as well, with explicit ids so they never
+  // collide with the primary (default-id) handles every existing edge
+  // already resolves to - a card now accepts/starts connections from any
+  // of its four sides regardless of which orientation mode is active.
+  const secondaryTargetPosition = orientation === "vertical" ? Position.Left : Position.Top;
+  const secondarySourcePosition = orientation === "vertical" ? Position.Right : Position.Bottom;
   const KindIcon = KIND_ICON[task.kind];
   const category = KIND_CATEGORY[task.kind];
   const categoryColor = CATEGORY_COLOR[category];
@@ -91,6 +100,7 @@ export function TaskNode({
         }}
       >
       <Handle type="target" position={targetPosition} />
+      <Handle type="target" position={secondaryTargetPosition} id="secondary-target" />
       <CardContent sx={{ p: 1.5, "&:last-child": { pb: 1.5 } }}>
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Avatar
@@ -220,8 +230,13 @@ export function TaskNode({
         // (down the right edge in horizontal mode, across the bottom edge
         // in vertical mode - same "%" trick, just the other axis), so each
         // branch's edge visibly leaves from its own case rather than all
-        // cases bunching into a single point.
-        task.cases.map((switchCase, index) => (
+        // cases bunching into a single point. Each case ALSO gets a second
+        // handle on the secondary axis, sharing the exact same id - React
+        // Flow reports whichever physical handle a drag actually started
+        // from, so both positions represent the same case's outgoing edge
+        // interchangeably; this is what lets a switch case be wired up
+        // from either axis, same as every other kind below.
+        task.cases.flatMap((switchCase, index) => [
           <Handle
             key={switchCase.name}
             type="source"
@@ -231,10 +246,23 @@ export function TaskNode({
               [orientation === "vertical" ? "left" : "top"]:
                 `${((index + 1) / (task.cases.length + 1)) * 100}%`,
             }}
-          />
-        ))
+          />,
+          <Handle
+            key={`${switchCase.name}-secondary`}
+            type="source"
+            position={secondarySourcePosition}
+            id={switchCase.name}
+            style={{
+              [orientation === "vertical" ? "top" : "left"]:
+                `${((index + 1) / (task.cases.length + 1)) * 100}%`,
+            }}
+          />,
+        ])
       ) : (
-        <Handle type="source" position={sourcePosition} />
+        <>
+          <Handle type="source" position={sourcePosition} />
+          <Handle type="source" position={secondarySourcePosition} id="secondary-source" />
+        </>
       )}
       </Card>
       {trace && TraceIcon && (

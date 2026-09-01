@@ -21,6 +21,11 @@ export function AnchorNode({ data }: NodeProps & { data: AnchorNodeData }) {
   const orientation = data.orientation ?? "horizontal";
   const targetPosition = orientation === "vertical" ? Position.Top : Position.Left;
   const sourcePosition = orientation === "vertical" ? Position.Bottom : Position.Right;
+  // Same reasoning as TaskNode.tsx's secondary handles - Start/End
+  // shouldn't be the one place on canvas still stuck accepting connections
+  // from only one axis.
+  const secondaryTargetPosition = orientation === "vertical" ? Position.Left : Position.Top;
+  const secondarySourcePosition = orientation === "vertical" ? Position.Right : Position.Bottom;
   return (
     <Box
       sx={{
@@ -34,14 +39,24 @@ export function AnchorNode({ data }: NodeProps & { data: AnchorNodeData }) {
         fontWeight: 600,
       }}
     >
-      {isStart ? undefined : <Handle type="target" position={targetPosition} />}
+      {isStart ? undefined : (
+        <>
+          <Handle type="target" position={targetPosition} />
+          <Handle type="target" position={secondaryTargetPosition} id="secondary-target" />
+        </>
+      )}
       <Typography
         variant="caption"
         sx={{ fontWeight: "inherit", color: "inherit" }}
       >
         {data.label}
       </Typography>
-      {isStart ? <Handle type="source" position={sourcePosition} /> : undefined}
+      {isStart ? (
+        <>
+          <Handle type="source" position={sourcePosition} />
+          <Handle type="source" position={secondarySourcePosition} id="secondary-source" />
+        </>
+      ) : undefined}
     </Box>
   );
 }
