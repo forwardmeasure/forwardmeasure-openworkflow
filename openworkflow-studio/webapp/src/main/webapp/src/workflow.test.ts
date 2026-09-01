@@ -1,18 +1,10 @@
 import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
-import { canPause, diagnostic, taskNames } from "./workflow";
+import { canPause, diagnostic } from "./workflow";
 import { tenantFromToken } from "./session";
 import { describe, expect, it } from "vitest";
 
-describe("lossless authoring helpers", () => {
-  it("derives a diagram without rewriting source", () => {
-    const source =
-      "do:\n  - first:\n      set: {value: 1}\n  - second:\n      set: {value: 2}\n";
-    expect(taskNames(source)).toEqual(["first", "second"]);
-    expect(source).toContain("set: {value: 1}");
-  });
-
+describe("workflow helpers", () => {
   it("keeps invalid documents available for server diagnostics", async () => {
-    expect(taskNames("do: [")).toEqual([]);
     expect(await diagnostic(new Error("line 1 is invalid"))).toBe(
       "line 1 is invalid",
     );

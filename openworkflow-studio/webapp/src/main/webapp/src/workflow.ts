@@ -1,4 +1,3 @@
-import { load } from "js-yaml";
 import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
 
 export const SAMPLE = `document:
@@ -12,16 +11,6 @@ do:
         message: Hello from OpenWorkflow Studio
 `;
 
-export function taskNames(source: string): string[] {
-  try {
-    const workflow = load(source) as { do?: Array<Record<string, unknown>> };
-    return Array.isArray(workflow?.do)
-      ? workflow.do.flatMap((task) => Object.keys(task))
-      : [];
-  } catch {
-    return [];
-  }
-}
 
 // The generated client's ResponseError only ever carries a generic message
 // ("Response returned an error code") - the actual server-side explanation

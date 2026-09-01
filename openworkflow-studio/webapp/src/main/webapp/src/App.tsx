@@ -21,7 +21,7 @@ import { parseContractViolations, type ValidationIssue } from "./canvas/validati
 import type { StudioIdentity } from "./runtime";
 import { tenantFromToken } from "./session";
 import { createStudioMuiTheme } from "./theme";
-import { canPause, diagnostic, SAMPLE, taskNames } from "./workflow";
+import { canPause, diagnostic, SAMPLE } from "./workflow";
 
 // Built once at module scope, not per-render - it only depends on THEMES in
 // theme.ts, never on component state.
@@ -113,7 +113,6 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
   // picks a different governed revision from the compare-against selector.
   const [compareDefinitionId, setCompareDefinitionId] = useState<string>();
   const [permissions, setPermissions] = useState<Record<string, boolean>>({});
-  const tasks = taskNames(source);
   const workflowById = new Map(
     workflows.map((workflow) => [workflow.id, workflow]),
   );
@@ -461,9 +460,9 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
           >
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Lossless source</p>
+                <p className="eyebrow">Canvas and Source always match</p>
                 <h2 id="editor-title">
-                  Workflow definition
+                  Workflow Definition
                   {isDirty && (
                     <span className="dirty-marker" title="Unsaved changes">
                       {" "}
@@ -603,29 +602,16 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
               </details>
             )}
           </section>
-          <aside className="panel diagram" aria-labelledby="diagram-title">
-            <details>
-              <summary>
-                <p className="eyebrow" style={{ display: "inline" }}>
-                  Derived view
-                </p>
-              </summary>
-              <h2 id="diagram-title">Execution flow</h2>
-              <p className="muted">The diagram never rewrites the source.</p>
-              <ol>
-              {tasks.length ? (
-                tasks.map((task, index) => (
-                  <li key={`${task}-${index}`}>
-                    <span>{index + 1}</span>
-                    {task}
-                  </li>
-                ))
-              ) : (
-                <li className="empty">No sequential tasks detected.</li>
-              )}
-              </ol>
-            </details>
-            <h3>Governed revisions</h3>
+          <aside className="panel diagram" aria-labelledby="governed-revisions-title">
+            {/* Used to also carry a collapsed "Execution flow" list here (a
+                numbered readout of task names) under a "Derived view"
+                label - genuinely redundant with the Source tab, which
+                already shows the exact same tasks with everything else
+                besides. This aside's real, non-redundant job is browsing
+                and acting on every OTHER governed revision - the only UI
+                for opening, submitting, and publishing a saved definition -
+                so it's labeled for what it actually does. */}
+            <h2 id="governed-revisions-title">Governed Revisions</h2>
             {definitions.length === 0 ? (
               <p className="muted">No definitions in this tenant.</p>
             ) : (
@@ -658,7 +644,19 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                       Open source
                     </button>
                     <div className="actions">
-                      {definition.status === "draft" &&
+                      {(definition.status === "draft" ||
+                        // The backend's own submit guard still accepts
+                        // IN_REVIEW as a source state (see
+                        // WorkflowGovernanceServiceImpl's comment: it's
+                        // there specifically so a definition already
+                        // sitting IN_REVIEW from before the manual
+                        // approve/reject gate was cut still has a way
+                        // through) - the Submit button needs to show for
+                        // it too, or a definition stuck there has no
+                        // reachable action at all: not "draft" (no
+                        // Submit), not "approved" (no Publish), and the
+                        // Approve/Reject gate no longer exists.
+                        definition.status === "in_review") &&
                         permissions["definition:submit"] && (
                           <button
                             disabled={busy}
