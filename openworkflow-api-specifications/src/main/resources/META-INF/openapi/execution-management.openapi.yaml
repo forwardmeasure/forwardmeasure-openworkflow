@@ -42,11 +42,7 @@ paths:
               $ref: '#/components/schemas/ExecutionStart'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '202':
           description: Execution durably admitted
           headers:
@@ -57,23 +53,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Execution'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
           description: The referenced revision is not a published, non-deprecated definition
           content:
@@ -87,11 +71,7 @@ paths:
               schema:
                 $ref: './common-definitions.yaml#/components/schemas/Problem'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
     get:
       tags: [Executions]
       operationId: listExecutions
@@ -136,11 +116,7 @@ paths:
             default: 50
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Canonical execution page
           content:
@@ -148,23 +124,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExecutionPage'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
   /v1/executions/{executionId}:
     parameters:
       - $ref: '#/components/parameters/ExecutionId'
@@ -174,11 +138,7 @@ paths:
       summary: Retrieve the canonical execution
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Canonical execution
           headers:
@@ -189,23 +149,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Execution'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
   /v1/executions/{executionId}/history:
     parameters:
       - $ref: '#/components/parameters/ExecutionId'
@@ -229,11 +177,7 @@ paths:
       summary: Retrieve ordered canonical execution history
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Ordered canonical history page
           content:
@@ -241,23 +185,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExecutionHistoryPage'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
   /v1/executions/{executionId}/pause:
     parameters:
       - $ref: '#/components/parameters/ExecutionId'
@@ -280,11 +212,7 @@ paths:
               $ref: '#/components/schemas/ExecutionControl'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '202':
           description: Pause command transition is durable
           content:
@@ -292,35 +220,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Execution'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/executions/{executionId}/resume:
     parameters:
       - $ref: '#/components/parameters/ExecutionId'
@@ -342,11 +250,7 @@ paths:
               $ref: '#/components/schemas/ExecutionControl'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '202':
           description: Resume command transition is durable
           content:
@@ -354,35 +258,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Execution'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/executions/{executionId}/cancel:
     parameters:
       - $ref: '#/components/parameters/ExecutionId'
@@ -406,11 +290,7 @@ paths:
               $ref: '#/components/schemas/ExecutionControl'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '202':
           description: Cancel command transition is durable
           content:
@@ -418,35 +298,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Execution'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
 components:
   securitySchemes:
     BearerAuth:

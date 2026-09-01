@@ -50,11 +50,7 @@ paths:
               $ref: '#/components/schemas/CreateWorkflowRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '201':
           description: Workflow created
           headers:
@@ -67,35 +63,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
     get:
       tags: [Workflows]
       operationId: listWorkflows
@@ -105,11 +81,7 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/Limit'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Authorized workflow page
           content:
@@ -117,23 +89,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowPage'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
   /v1/workflows/{workflowId}:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -143,11 +103,7 @@ paths:
       summary: Retrieve a workflow
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Workflow
           headers:
@@ -158,23 +114,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
     put:
       tags: [Workflows]
       operationId: updateWorkflow
@@ -189,11 +133,7 @@ paths:
               $ref: '#/components/schemas/UpdateWorkflowRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Workflow updated
           headers:
@@ -204,41 +144,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/Workflow'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
     delete:
       tags: [Workflows]
       operationId: deleteWorkflow
@@ -250,43 +166,19 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '204':
           description: Workflow deleted
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/workflows/{workflowId}/definitions:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -302,11 +194,7 @@ paths:
               $ref: '#/components/schemas/CreateWorkflowDefinitionRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '201':
           description: Draft definition created
           headers:
@@ -319,41 +207,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
     get:
       tags: [Workflow Definitions]
       operationId: listWorkflowDefinitions
@@ -368,11 +232,7 @@ paths:
             $ref: '#/components/schemas/WorkflowDefinitionStatus'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Authorized workflow-definition page
           content:
@@ -380,29 +240,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinitionPage'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
   /v1/workflow-definitions:
     get:
       tags: [Workflow Definitions]
@@ -423,11 +267,7 @@ paths:
             $ref: '#/components/schemas/WorkflowDefinitionStatus'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Authorized workflow-definition page
           content:
@@ -435,23 +275,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinitionPage'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
   /v1/workflows/{workflowId}/definitions/{definitionId}:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -462,11 +290,7 @@ paths:
       summary: Retrieve a workflow definition
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Workflow definition
           headers:
@@ -477,23 +301,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
     put:
       tags: [Workflow Definitions]
       operationId: updateWorkflowDefinition
@@ -513,11 +325,7 @@ paths:
               $ref: '#/components/schemas/UpdateWorkflowDefinitionRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Draft definition updated
           headers:
@@ -528,47 +336,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
     delete:
       tags: [Workflow Definitions]
       operationId: deleteWorkflowDefinition
@@ -577,43 +357,19 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '204':
           description: Draft definition deleted
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/workflows/{workflowId}/definitions/{definitionId}/validation:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -630,11 +386,7 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Validation completed
           content:
@@ -642,35 +394,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinitionValidation'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
   /v1/workflows/{workflowId}/definitions/{definitionId}/submission:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -684,11 +416,7 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Definition submitted for review
           headers:
@@ -699,35 +427,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
     delete:
       tags: [Workflow Definition Governance]
       operationId: withdrawWorkflowDefinition
@@ -737,11 +445,7 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Definition withdrawn to draft
           headers:
@@ -752,35 +456,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/workflows/{workflowId}/definitions/{definitionId}/approval:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -802,11 +486,7 @@ paths:
               $ref: '#/components/schemas/ReviewDecisionRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Definition approved
           headers:
@@ -817,35 +497,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/workflows/{workflowId}/definitions/{definitionId}/rejection:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -867,11 +527,7 @@ paths:
               $ref: '#/components/schemas/ReviewDecisionRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Definition rejected
           headers:
@@ -882,35 +538,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/workflows/{workflowId}/definitions/{definitionId}/publication:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -930,11 +566,7 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Published (idempotent repeat, or first publication)
           headers:
@@ -945,41 +577,17 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
         '422':
-          description: The request is syntactically valid but violates resource constraints
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity'
   /v1/workflows/{workflowId}/definitions/{definitionId}/deprecation:
     parameters:
       - $ref: '#/components/parameters/WorkflowId'
@@ -992,11 +600,7 @@ paths:
         - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Deprecated workflow definition
           headers:
@@ -1007,35 +611,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/WorkflowDefinition'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
         '403':
-          description: The authenticated actor is not authorized for the requested resource action
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Forbidden'
         '404':
-          description: The resource does not exist or is not visible to the authenticated actor
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/NotFound'
         '409':
-          description: The request conflicts with resource identity or lifecycle state
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Conflict'
         '412':
-          description: The supplied If-Match value does not identify the current revision
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/PreconditionFailed'
   /v1/authorizations:
     post:
       tags: [Authorization]
@@ -1056,11 +640,7 @@ paths:
               $ref: '#/components/schemas/BatchAuthorizationRequest'
       responses:
         '500':
-          description: An unexpected error occurred while processing the request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/InternalServerError'
         '200':
           description: Decisions for each requested action
           content:
@@ -1068,17 +648,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/BatchAuthorizationResponse'
         '400':
-          description: Malformed request
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/BadRequest'
         '401':
-          description: Authentication is absent or invalid
-          content:
-            application/problem+json:
-              schema:
-                $ref: './common-definitions.yaml#/components/schemas/Problem'
+          $ref: './common-definitions.yaml#/components/responses/Unauthorized'
 components:
   securitySchemes:
     BearerAuth:

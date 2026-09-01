@@ -84,7 +84,9 @@ public class ExecutionResource implements ExecutionsApi {
                     objectMapper.valueToTree(request.getInput())))
             .toCompletableFuture()
             .join();
-    return Response.accepted(map(execution)).build();
+    return Response.accepted(map(execution))
+        .header("Location", "/v1/executions/" + execution.executionId().value())
+        .build();
   }
 
   @Override
