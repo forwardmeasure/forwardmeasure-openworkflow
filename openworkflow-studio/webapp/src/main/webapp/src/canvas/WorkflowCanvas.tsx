@@ -253,37 +253,6 @@ export function reconnectEdgeTarget(
 }
 
 /**
- * Which edge a drop position is closest to, by distance to that edge's
- * source/target node midpoint - used so a palette drag-drop lands the new
- * task where it visually looks like it goes (spliced between whatever it
- * was dropped near), instead of always executing last regardless of where
- * it landed on screen. Returns undefined only if there are no edges at all
- * (never happens in practice - Start always has at least one, to the first
- * task or straight to End).
- */
-export function nearestEdge(
-  position: { x: number; y: number },
-  nodePositions: Map<string, { x: number; y: number }>,
-  edges: Edge[],
-): Edge | undefined {
-  let best: Edge | undefined;
-  let bestDistance = Infinity;
-  for (const edge of edges) {
-    const sourcePos = nodePositions.get(edge.source);
-    const targetPos = nodePositions.get(edge.target);
-    if (!sourcePos || !targetPos) continue;
-    const midX = (sourcePos.x + targetPos.x) / 2;
-    const midY = (sourcePos.y + targetPos.y) / 2;
-    const distance = Math.hypot(position.x - midX, position.y - midY);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = edge;
-    }
-  }
-  return best;
-}
-
-/**
  * Lightweight layered auto-layout: each node's column is the longest path
  * (in edge hops) from Start to it, computed by Bellman-Ford-style relaxation
  * bounded to nodeCount rounds. That bound also keeps this from looping
@@ -819,21 +788,44 @@ export function WorkflowCanvas({
     setSelectedTaskName(groupName);
   }
 
+  // "When I add a task, I want it dropped on the canvas so I can drag it to
+  // wherever I want and connect it to whatever node I want" - a task added
+  // via the palette (click or drag) is now always a self-contained,
+  // disconnected node ("then: exit") the author wires in deliberately,
+  // never auto-spliced into the live flow. Mirrors duplicateSelectedTask's
+  // same reasoning, and shares its same fix: appending to the END of
+  // tasksInView would otherwise silently change whichever task USED TO be
+  // last - if it relied on positional fallthrough (no explicit "then"), it
+  // would now positionally fall into the newly-appended task instead of
+  // End, a real, silent rewiring bug. Pinning that task to an explicit
+  // "exit" preserves its exact prior behavior.
+  function appendDisconnectedTask(tasks: Task[], task: Task): Task[] {
+    const last = tasks[tasks.length - 1];
+    const patched =
+      last && last.kind !== "switch" && last.then === undefined
+        ? [...tasks.slice(0, -1), { ...last, then: "exit" }]
+        : tasks;
+    return [...patched, task];
+  }
+
   function addTask(kind: Task["kind"], position?: { x: number; y: number }) {
     const name = uniqueTaskName(tasksInView.map((t) => t.name));
-    if (position) {
-      // A palette drag/drop chose this exact spot deliberately - preserve
-      // every other node's position and only seed this one, same as
-      // before. Without a position (a palette click), the new task just
-      // appends before End, which otherwise has ITS OLD (now one column
-      // too far left) preserved position waiting right where the new task
-      // needs to go - the same collision insertTaskOnEdge below fixes for
-      // the "+"-on-edge case, here for plain append.
-      pendingPositionRef.current = { name, position };
-    } else {
-      forceFullLayoutRef.current = true;
-    }
-    const next = [...tasksInView, emptyTask(kind, name)];
+    const instance = reactFlowInstanceRef.current;
+    const seededPosition =
+      position ??
+      instance?.screenToFlowPosition({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      });
+    // A palette drag/drop (or, now, a plain click) chose or implies a
+    // specific spot - preserve every other node's position and only seed
+    // this one, same as insertTaskOnEdge does for the "+"-on-edge case.
+    // Only genuinely falls back to a full relayout when there's no
+    // ReactFlow instance yet to resolve a screen position from (shouldn't
+    // happen post-mount).
+    if (seededPosition) pendingPositionRef.current = { name, position: seededPosition };
+    else forceFullLayoutRef.current = true;
+    const next = appendDisconnectedTask(tasksInView, { ...emptyTask(kind, name), then: "exit" });
     commitTasks(next);
     setSelectedTaskName(name);
   }
@@ -862,46 +854,14 @@ export function WorkflowCanvas({
     commitTasks(next);
   }
 
-  // A palette CLICK (as opposed to a drag - see onDrop below) carries no
-  // drop position at all, so this was the other half of "you still
-  // automatically add a new task to the end of the flow": onDrop got
-  // fixed, but a plain click still fell straight through to addTask's
-  // unconditional append. First choice: splice onto whatever task is
-  // currently SELECTED - the one piece of real context a click does
-  // carry. Second choice, when nothing's selected (the common case for a
-  // very first click): reuse nearestEdge against the current viewport's
-  // own center, so even a contextless click lands wherever the canvas
-  // happens to be showing right now, not blindly at the array's end -
-  // that blind append was a real, confirmed bug of its own: with ANY
-  // upstream task using an explicit "then" (skipping the positional
-  // fallthrough), the appended task landed after something unreachable
-  // and was orphaned the instant it was created. Only genuinely falls
-  // back to a bare append when there's no ReactFlow instance yet to
-  // convert a screen position from (shouldn't happen post-mount).
+  // A palette CLICK lands the new task at the current viewport center, via
+  // addTask's own position fallback - disconnected, same as a drag-drop
+  // (see onDrop below). Splicing into whatever was nearest used to be the
+  // behavior here; the author explicitly asked for the opposite ("dropped
+  // on the canvas so I can drag it wherever and connect it to whatever
+  // node I want"), so this no longer looks at selection or edge proximity
+  // at all.
   function addTaskFromPalette(kind: Task["kind"]) {
-    const outgoingEdge = selectedTaskName
-      ? edges.find((e) => e.source === selectedTaskName)
-      : undefined;
-    if (outgoingEdge) {
-      insertTaskOnEdge(outgoingEdge.id, kind);
-      return;
-    }
-    const instance = reactFlowInstanceRef.current;
-    if (instance) {
-      const center = instance.screenToFlowPosition({
-        x: window.innerWidth / 2,
-        y: window.innerHeight / 2,
-      });
-      const edge = nearestEdge(
-        center,
-        new Map(nodes.map((node) => [node.id, node.position])),
-        edges,
-      );
-      if (edge) {
-        insertTaskOnEdge(edge.id, kind);
-        return;
-      }
-    }
     addTask(kind);
   }
 
@@ -996,7 +956,7 @@ export function WorkflowCanvas({
     } else {
       forceFullLayoutRef.current = true;
     }
-    commitTasks([...tasksInView, clone]);
+    commitTasks(appendDisconnectedTask(tasksInView, clone));
     setSelectedTaskName(name);
   }
 
@@ -1196,18 +1156,11 @@ export function WorkflowCanvas({
                 x: event.clientX,
                 y: event.clientY,
               });
-              // Splice into whatever edge the drop is closest to, so a task
-              // dropped between two others actually runs between them -
-              // addTask always ran the new task last regardless of where it
-              // visually landed, which is exactly the "why does it need to
-              // be wired up separately" complaint this fixes.
-              const target = nearestEdge(
-                position,
-                new Map(nodes.map((node) => [node.id, node.position])),
-                edges,
-              );
-              if (target) insertTaskOnEdge(target.id, kind);
-              else addTask(kind, position);
+              // Dropped exactly where the pointer released, disconnected -
+              // see addTask/appendDisconnectedTask above. Used to splice
+              // into whatever edge the drop landed nearest; the author
+              // explicitly asked for a plain, manually-wired drop instead.
+              addTask(kind, position);
             }}
             fitView
             proOptions={{ hideAttribution: true }}

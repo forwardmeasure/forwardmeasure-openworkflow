@@ -3,7 +3,6 @@ import {
   deriveEdges,
   isPositionalEdge,
   layout,
-  nearestEdge,
   reconnectEdgeTarget,
   spliceTaskOnEdge,
 } from "./WorkflowCanvas";
@@ -122,32 +121,6 @@ describe("deriveEdges", () => {
     ];
     const edges = deriveEdges(tasks);
     expect(edges.find((e) => e.source === "a")?.target).toBe("b");
-  });
-});
-
-describe("nearestEdge", () => {
-  it("picks the edge whose source/target midpoint is closest to the drop position", () => {
-    const tasks: Task[] = [
-      { kind: "set", name: "a", set: {} },
-      { kind: "set", name: "b", set: {} },
-      { kind: "set", name: "c", set: {} },
-    ];
-    const edges = deriveEdges(tasks);
-    const positions = new Map([
-      ["__start__", { x: 0, y: 0 }],
-      ["a", { x: 200, y: 0 }],
-      ["b", { x: 400, y: 0 }],
-      ["c", { x: 600, y: 0 }],
-      ["__end__", { x: 800, y: 0 }],
-    ]);
-    // Dropped right on top of b - closest to the a->b or b->c midpoint, not
-    // to Start->a or c->End far off at the edges of the graph.
-    const chosen = nearestEdge({ x: 400, y: 0 }, positions, edges);
-    expect(["a", "b"]).toContain(chosen?.source);
-  });
-
-  it("returns undefined when no edge has both endpoints positioned", () => {
-    expect(nearestEdge({ x: 0, y: 0 }, new Map(), [])).toBeUndefined();
   });
 });
 
