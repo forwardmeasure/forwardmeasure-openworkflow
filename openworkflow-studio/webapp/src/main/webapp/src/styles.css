@@ -142,8 +142,15 @@ nav button.active {
 .author-grid,
 .execution-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(300px, 0.8fr);
   gap: 1rem;
+}
+/* The Derived view aside used to take a flexible 0.8fr share (~30% of the
+   editor's width on a normal monitor, confirmed live) just to keep
+   "Governed revisions" readable - a fixed, much narrower cap instead, so
+   the canvas/source editor (the thing actually being worked on) keeps the
+   vast majority of the width regardless of viewport size. */
+.author-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(200px, 240px);
 }
 .execution-grid {
   grid-template-columns: minmax(300px, 0.85fr) minmax(0, 1.6fr);
