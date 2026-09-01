@@ -13,8 +13,8 @@ state nor Pekko persistence is translated.
 | `com.forwardmeasure.openworkflow:oks-expression-jq` | `com.forwardmeasure.openworkflow:openworkflow-expression-jq` |
 | `com.forwardmeasure.openworkflow:oks-workflow-runtime-*` | `com.forwardmeasure.openworkflow:openworkflow-engine-kafka-streams` |
 | `com.forwardmeasure.openworkflow:openworkflow-actor-runtime` | `com.forwardmeasure.openworkflow:openworkflow-engine-pekko-core` |
-| standalone definition-management clients | generated clients from `openworkflow-api-specifications/openworkflow-services-api-spec/definition-management.openapi.yaml` |
-| standalone execution-management clients | generated clients from `openworkflow-api-specifications/openworkflow-services-api-spec/execution-management.openapi.yaml` |
+| standalone definition-management clients | generated clients from `openworkflow-api-specifications/src/main/resources/META-INF/openapi/definition-management.openapi.yaml` |
+| standalone execution-management clients | generated clients from `openworkflow-api-specifications/src/main/resources/META-INF/openapi/execution-management.openapi.yaml` |
 | standalone query clients | `openworkflow-execution-query-api` query contracts |
 | standalone Studio | unified `/studio/` application and `/api/openworkflow/*` capability APIs |
 

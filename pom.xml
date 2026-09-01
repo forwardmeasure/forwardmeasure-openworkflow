@@ -84,6 +84,7 @@
         <module>openworkflow-definition</module>
         <module>openworkflow-authorization</module>
         <module>openworkflow-definition-management</module>
+        <module>openworkflow-api-specifications</module>
         <module>openworkflow-api-language-bindings</module>
         <module>openworkflow-engine</module>
         <module>openworkflow-execution-management</module>

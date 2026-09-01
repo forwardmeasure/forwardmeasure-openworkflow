@@ -15,15 +15,25 @@
     <artifactId>openworkflow-execution-models</artifactId>
     <name>ForwardMeasure OpenWorkflow :: Execution :: Generated Models</name>
     <dependencies>
+        <!--
+        Needed as a real Maven dependency (not just the unpack goal's <artifactItems> below) so the
+        reactor's own build-order sorter knows to build openworkflow-api-specifications first.
+        Without this, <artifactItems> alone is invisible to reactor ordering - Maven only reads real
+        <dependency> entries (and a few other well-known places) to compute build order, never
+        arbitrary plugin configuration. provided scope: this module only unpacks the spec's
+        resources at build time, nothing here compiles against or should transitively carry a real
+        runtime dependency on it.
+        -->
+        <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-api-specifications</artifactId><version>${project.version}</version><scope>provided</scope></dependency>
         <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-annotations</artifactId></dependency>
         <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
         <dependency><groupId>jakarta.annotation</groupId><artifactId>jakarta.annotation-api</artifactId></dependency>
         <dependency><groupId>jakarta.validation</groupId><artifactId>jakarta.validation-api</artifactId></dependency>
     </dependencies>
     <build>
-        <resources><resource><directory>${project.basedir}/../../../../openworkflow-api-specifications/openworkflow-services-api-spec</directory><includes><include>execution-management.openapi.yaml</include><include>common-definitions.yaml</include></includes><targetPath>META-INF/resources/openapi</targetPath></resource></resources>
-        <plugins><plugin><groupId>org.openapitools</groupId><artifactId>openapi-generator-maven-plugin</artifactId><executions><execution><id>generate-models</id><phase>generate-sources</phase><goals><goal>generate</goal></goals><configuration>
-            <inputSpec>${project.basedir}/../../../../openworkflow-api-specifications/openworkflow-services-api-spec/execution-management.openapi.yaml</inputSpec><generatorName>jaxrs-spec</generatorName>
+        <resources><resource><directory>${project.build.directory}/unpacked-openapi-spec/META-INF/openapi</directory><includes><include>execution-management.openapi.yaml</include><include>common-definitions.yaml</include></includes><targetPath>META-INF/resources/openapi</targetPath></resource></resources>
+        <plugins><plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><executions><execution><id>unpack-openapi-spec</id><phase>initialize</phase><goals><goal>unpack</goal></goals><configuration><artifactItems><artifactItem><groupId>${project.groupId}</groupId><artifactId>openworkflow-api-specifications</artifactId><version>${project.version}</version><type>jar</type><includes>META-INF/openapi/**</includes><outputDirectory>${project.build.directory}/unpacked-openapi-spec</outputDirectory></artifactItem></artifactItems></configuration></execution></executions></plugin><plugin><groupId>org.openapitools</groupId><artifactId>openapi-generator-maven-plugin</artifactId><executions><execution><id>generate-models</id><phase>generate-sources</phase><goals><goal>generate</goal></goals><configuration>
+            <inputSpec>${project.build.directory}/unpacked-openapi-spec/META-INF/openapi/execution-management.openapi.yaml</inputSpec><generatorName>jaxrs-spec</generatorName>
             <templateDirectory>${project.basedir}/../../../../openworkflow-api-specifications/oas-generator-templates</templateDirectory>
             <modelPackage>com.forwardmeasure.openworkflow.execution.api.model</modelPackage><generateApis>false</generateApis><generateModels>true</generateModels><generateSupportingFiles>false</generateSupportingFiles><generateApiTests>false</generateApiTests><generateModelTests>false</generateModelTests><generateApiDocumentation>false</generateApiDocumentation><generateModelDocumentation>false</generateModelDocumentation><skipValidateSpec>false</skipValidateSpec>
             <configOptions><disallowAdditionalPropertiesIfNotPresent>true</disallowAdditionalPropertiesIfNotPresent><hideGenerationTimestamp>true</hideGenerationTimestamp><openApiNullable>false</openApiNullable><sourceFolder>src/main/java</sourceFolder><useBeanValidation>true</useBeanValidation><useJakartaEe>true</useJakartaEe><useSwaggerAnnotations>false</useSwaggerAnnotations></configOptions>

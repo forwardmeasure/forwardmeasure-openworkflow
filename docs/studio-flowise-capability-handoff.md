@@ -37,7 +37,7 @@ openworkflow-studio/
     src/main/java/.../StudioApiProxy.java   # Framework-neutral proxy: browser -> Studio backend -> real APIs
   framework-bindings/{quarkus,spring,micronaut}/   # Per-framework REST hosting; only quarkus is deployed live
 
-openworkflow-api-specifications/openworkflow-services-api-spec/  # OpenAPI specs (source of truth for all API shapes)
+openworkflow-api-specifications/src/main/resources/META-INF/openapi/  # OpenAPI specs (source of truth for all API shapes)
 ```
 
 Frontend stack: React + `@xyflow/react` 12.11.5 (React Flow) + MUI v9 + Vite + Vitest.

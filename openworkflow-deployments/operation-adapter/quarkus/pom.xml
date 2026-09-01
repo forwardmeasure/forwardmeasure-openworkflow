@@ -50,6 +50,54 @@
       <artifactId>org.osgi.annotation.bundle</artifactId>
       <scope>provided</scope>
     </dependency>
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit</artifactId>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.codehaus.plexus</groupId>
+          <artifactId>plexus-utils</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <!--
+    quarkus-junit's own exclusion above strips the old, colliding transitive plexus-utils copies -
+    quarkus-bom itself excludes plexus-utils from several of its own managed dependencies for the
+    same reason. This module's @QuarkusTest + @QuarkusTestResource(KafkaAdapterResource) actually
+    exercises Quarkus's real Maven-resolver-based "curated application" bootstrap (unlike the
+    engine-pekko/engine-kafka-streams Quarkus tests, which call binding methods directly and never
+    trigger it) - that bootstrap needs org.apache.maven.graph.DefaultGraphBuilder, which needs
+    org.codehaus.plexus.util.dag.CycleDetectedException, a real plexus-utils class. Without this
+    explicit re-add, plexus-utils is excluded from every path and the bootstrap fails with
+    NoClassDefFoundError instead of ever starting the test.
+
+    Pinned to 4.0.3, NOT the quarkus-bom-managed 3.6.1: something else in Quarkus's own bootstrap
+    dependency graph independently pulls org.codehaus.plexus:plexus-xml:4.0.2 (confirmed via
+    duplicate-finder-maven-plugin's real output - not assumed), a newer artifact that split
+    plexus-utils's org.codehaus.plexus.util.xml.* classes out into their own jar. plexus-utils:3.6.1
+    still bundles that same xml.* package, so it collides with plexus-xml as "duplicate and
+    different" classes (9 of them, including Xpp3Dom) and fails duplicate-class-check. Confirmed via
+    direct jar inspection: plexus-utils:4.0.3 has already had the xml.* package fully removed
+    (matching the plexus-xml split) while still containing dag.CycleDetectedException - the one
+    class actually needed here - so it coexists with plexus-xml cleanly.
+    -->
+    <dependency>
+      <groupId>org.codehaus.plexus</groupId>
+      <artifactId>plexus-utils</artifactId>
+      <version>4.0.3</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-redpanda</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

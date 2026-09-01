@@ -21,6 +21,21 @@
     <name>ForwardMeasure OpenWorkflow :: Definition Management :: Generated Apache HttpClient</name>
 
     <dependencies>
+        <!--
+        Needed as a real Maven dependency (not just the unpack goal's <artifactItems> below) so the
+        reactor's own build-order sorter knows to build openworkflow-api-specifications first.
+        Without this, <artifactItems> alone is invisible to reactor ordering - Maven only reads real
+        <dependency> entries (and a few other well-known places) to compute build order, never
+        arbitrary plugin configuration. provided scope: this module only unpacks the spec's
+        resources at build time, nothing here compiles against or should transitively carry a real
+        runtime dependency on it.
+        -->
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-api-specifications</artifactId>
+            <version>${project.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>com.forwardmeasure.openworkflow</groupId>
             <artifactId>openworkflow-definition-management-models</artifactId>
@@ -59,6 +74,31 @@
                 </configuration>
             </plugin>
             <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-dependency-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>unpack-openapi-spec</id>
+                        <phase>initialize</phase>
+                        <goals>
+                            <goal>unpack</goal>
+                        </goals>
+                        <configuration>
+                            <artifactItems>
+                                <artifactItem>
+                                    <groupId>${project.groupId}</groupId>
+                                    <artifactId>openworkflow-api-specifications</artifactId>
+                                    <version>${project.version}</version>
+                                    <type>jar</type>
+                                    <includes>META-INF/openapi/**</includes>
+                                    <outputDirectory>${project.build.directory}/unpacked-openapi-spec</outputDirectory>
+                                </artifactItem>
+                            </artifactItems>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
                 <groupId>org.openapitools</groupId>
                 <artifactId>openapi-generator-maven-plugin</artifactId>
                 <executions>
@@ -70,7 +110,7 @@
                         </goals>
                         <configuration>
                             <inputSpec>
-                                ${project.basedir}/../../../../openworkflow-api-specifications/openworkflow-services-api-spec/definition-management.openapi.yaml</inputSpec>
+                                ${project.build.directory}/unpacked-openapi-spec/META-INF/openapi/definition-management.openapi.yaml</inputSpec>
                             <generatorName>java</generatorName>
                             <library>apache-httpclient</library>
                             <apiPackage>

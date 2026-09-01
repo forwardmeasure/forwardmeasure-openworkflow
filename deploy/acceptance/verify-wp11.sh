@@ -44,8 +44,8 @@ rg -Uq 'only after[^\n]*\n[^\n]*rollback window' "$retirement"
 
 test "$(git -C /home/pn/Documents/code/forwardmeasure/openworkflow-kafka-streams rev-parse HEAD)" = 97db2233dec401b4df0413b00f346e53df60b9d7
 test "$(git -C /home/pn/Documents/code/forwardmeasure/openworkflow-actor-engine rev-parse HEAD)" = 77e8784c32508e81c3d00d802f549550380a8df9
-test -f openworkflow-api-specifications/openworkflow-services-api-spec/definition-management.openapi.yaml
-test -f openworkflow-api-specifications/openworkflow-services-api-spec/execution-management.openapi.yaml
+test -f openworkflow-api-specifications/src/main/resources/META-INF/openapi/definition-management.openapi.yaml
+test -f openworkflow-api-specifications/src/main/resources/META-INF/openapi/execution-management.openapi.yaml
 
 if rg -n '<artifactId>(openworkflow-kafka-streams-parent|openworkflow-actor-engine-parent)</artifactId>' --glob 'pom.xml' .; then
   echo 'Standalone parent dependency remains in the unified reactor' >&2

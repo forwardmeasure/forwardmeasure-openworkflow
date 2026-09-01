@@ -44,6 +44,40 @@
       <artifactId>kotlin-stdlib</artifactId>
       <scope>provided</scope>
     </dependency>
+    <!--
+    Classic Spring Boot Test collision, confirmed via duplicate-finder-maven-plugin's real output
+    and dependency:tree: spring-boot-starter-test -> jsonassert pulls both
+    com.vaadin.external.google:android-json (a same-API clone of org.json's classes, duplicating
+    org.json.JSONArray/JSONObject/etc.) AND bundles its own org.json.JSONString directly inside
+    jsonassert's own jar (confirmed via direct jar inspection - not a transitive artifact, so a
+    <exclusion> on android-json alone can't remove it). This module has a REAL org.json:json (via
+    openworkflow-operation-adapter-kafka -> openworkflow-operation-adapter-asyncapi-jms ->
+    com.ibm.mq:com.ibm.mq.allclient, compile scope). Excluding jsonassert entirely rather than
+    picking at each sub-collision - confirmed via repo-wide grep that no test anywhere in this
+    module uses JSONAssert, so it's pure unused baggage pulled in by spring-boot-starter-test's own
+    defaults, not something this module needs.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.skyscreamer</groupId>
+          <artifactId>jsonassert</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-redpanda</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

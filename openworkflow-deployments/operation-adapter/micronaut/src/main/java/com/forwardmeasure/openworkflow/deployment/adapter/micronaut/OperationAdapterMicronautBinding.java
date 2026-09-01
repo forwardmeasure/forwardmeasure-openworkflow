@@ -8,6 +8,7 @@ import com.forwardmeasure.openworkflow.adapter.pekko.PekkoOperationAdapterRuntim
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.authorization.authzen.AuthzenAuthorizationFactory;
 import com.forwardmeasure.openworkflow.workflow.runtime.kafka.OksTopics;
+import io.micronaut.context.annotation.Context;
 import io.micronaut.context.annotation.Factory;
 import io.micronaut.context.annotation.Value;
 import io.micronaut.context.env.Environment;
@@ -31,7 +32,14 @@ public class OperationAdapterMicronautBinding {
         mapper, issuer, id, secret, timeout, ttl, entries, version);
   }
 
-  @Singleton
+  // @Context, not @Singleton: Micronaut does not eagerly initialize plain @Singleton beans by
+  // default - only @Context beans, ApplicationEventListener beans, or beans some other
+  // eagerly-initialized bean actually depends on. Nothing else in this deployment injects
+  // PekkoOperationAdapterRuntime, so as a plain @Singleton this factory method would never
+  // actually run on a real deployment and the per-tenant-schema Postgres outboxes it starts would
+  // never start - the same silently-inert shape as the confirmed, since-fixed Pekko-engine
+  // binding bug (see PekkoEngineQuarkusBinding.eagerlyStartEventing for the CDI equivalent).
+  @Context
   PekkoOperationAdapterRuntime pekkoRuntime(
       AuthorizationService authorization, ObjectMapper mapper, Environment environment) {
     return new PekkoOperationAdapterRuntime(
@@ -41,7 +49,10 @@ public class OperationAdapterMicronautBinding {
         mapper);
   }
 
-  @Singleton
+  // @Context, not @Singleton: same eager-initialization reasoning as pekkoRuntime above - nothing
+  // else in this deployment injects KafkaOperationAdapterRuntime, so as a plain @Singleton this
+  // factory method (and its runtime.start() call) would never actually run on a real deployment.
+  @Context
   KafkaOperationAdapterRuntime runtime(
       AuthorizationService authorization,
       ObjectMapper mapper,

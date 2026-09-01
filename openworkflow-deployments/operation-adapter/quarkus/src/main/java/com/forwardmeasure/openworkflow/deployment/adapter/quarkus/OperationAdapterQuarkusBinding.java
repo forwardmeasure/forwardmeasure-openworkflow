@@ -8,7 +8,9 @@ import com.forwardmeasure.openworkflow.adapter.pekko.PekkoOperationAdapterRuntim
 import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.authorization.authzen.AuthzenAuthorizationFactory;
 import com.forwardmeasure.openworkflow.workflow.runtime.kafka.OksTopics;
+import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.enterprise.event.Observes;
 import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Produces;
 import java.net.URI;
@@ -118,4 +120,23 @@ public class OperationAdapterQuarkusBinding {
   void close(@Disposes KafkaOperationAdapterRuntime runtime) {
     runtime.close();
   }
+
+  /**
+   * CDI producer beans are lazily constructed by default - without something forcing it, neither
+   * {@code pekkoRuntime} nor {@code runtime} above would ever actually run unless some other bean
+   * happens to depend on them first, and nothing else in this deployment does (verified by grepping
+   * the whole deployable surface for production, non-test callers of {@code
+   * PekkoOperationAdapterRuntime}/{@code KafkaOperationAdapterRuntime} - there were none, anywhere,
+   * before this). Until this observer forced them, this binding built correct production wiring -
+   * the per-tenant-schema Postgres outboxes started by {@code PekkoOperationAdapterRuntime} and the
+   * Kafka consumer threads started by {@code KafkaOperationAdapterRuntime.start()} - that was never
+   * actually reachable on a real Quarkus deployment, the exact same silently-inert shape as the
+   * pre-fix {@code PekkoEngineQuarkusBinding.CloudEventIngress} gap (see {@code
+   * eagerlyStartEventing} there). This is that forcing trigger: a genuine observer method (no
+   * {@code @Produces}) with both runtimes as ordinary injected parameters.
+   */
+  void eagerlyStartAdapters(
+      @Observes StartupEvent event,
+      PekkoOperationAdapterRuntime pekko,
+      KafkaOperationAdapterRuntime kafka) {}
 }
