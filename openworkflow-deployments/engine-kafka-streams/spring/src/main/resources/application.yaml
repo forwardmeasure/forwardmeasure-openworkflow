@@ -1,4 +1,10 @@
-spring: {application: {name: openworkflow-engine-kafka-streams-spring}}
+spring:
+  application: {name: openworkflow-engine-kafka-streams-spring}
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: "${OPENWORKFLOW_KEYCLOAK_ISSUER:http://localhost:8080/realms/openworkflow}"
 server: {port: 8080}
 openworkflow:
   execution-events: {url: "${OPENWORKFLOW_EXECUTION_EVENTS_URL:http://openworkflow-execution-management-spring:8080/internal/v1/execution-events/}", timeout: 30s}
@@ -8,3 +14,17 @@ openworkflow:
     instance-id: "${OPENWORKFLOW_KAFKA_INSTANCE_ID:${HOSTNAME:local}}"
     topic-prefix: "${OPENWORKFLOW_KAFKA_TOPIC_PREFIX:openworkflow}"
     state-dir: "${OPENWORKFLOW_KAFKA_STATE_DIR:/tmp/openworkflow-kafka}"
+  authorization:
+    issuer: "${OPENWORKFLOW_KEYCLOAK_ISSUER:http://localhost:8080/realms/openworkflow}"
+    client-id: "${OPENWORKFLOW_CLIENT_ID:openworkflow}"
+    client-secret: "${OPENWORKFLOW_CLIENT_SECRET}"
+    # Not the same client as client-id above (this service's own AuthZEN
+    # OAuth identity) - this is which client's roles to read out of an
+    # INCOMING CloudEvent-routing request's JWT organization claim. Must
+    # match the client the public/browser OIDC client (forwardmeasure-public)
+    # role mappings actually live on.
+    organization-client-id: "${OPENWORKFLOW_ORGANIZATION_CLIENT_ID:forwardmeasure-public}"
+    request-timeout: 5s
+    decision-ttl: 5s
+    maximum-cache-entries: 10000
+    policy-version: v1

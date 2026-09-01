@@ -11,6 +11,7 @@ import java.util.Objects;
 public final class KafkaStreamsEngineRuntime implements AutoCloseable {
   private final OksKafkaRuntime runtime;
   private final OksKafkaCommandGateway gateway;
+  private final OksInboundCloudEventGateway inboundEvents;
   private final ExecutionEngineProvider provider;
 
   public KafkaStreamsEngineRuntime(Configuration configuration, ExecutionEventSink events) {
@@ -33,6 +34,11 @@ public final class KafkaStreamsEngineRuntime implements AutoCloseable {
             configuration.applicationId() + '-' + configuration.instanceId() + "-ingress",
             topics,
             Clock.systemUTC());
+    inboundEvents =
+        new OksInboundCloudEventGateway(
+            configuration.bootstrapServers(),
+            configuration.applicationId() + '-' + configuration.instanceId() + "-inbound-events",
+            topics);
     provider = new KafkaStreamsExecutionEngineProvider(gateway, events, Clock.systemUTC(), true);
   }
 
@@ -44,9 +50,20 @@ public final class KafkaStreamsEngineRuntime implements AutoCloseable {
     return provider;
   }
 
+  /**
+   * The CloudEvents HTTP ingress's only path onto {@code inbound-events} - see {@link
+   * OksInboundCloudEventGateway}. Framework bindings pull this through to construct the JAX-RS
+   * resource that accepts external CloudEvents, the same way {@link #provider()} is pulled through
+   * to construct {@code EngineCommandResource}.
+   */
+  public OksInboundCloudEventGateway inboundEvents() {
+    return inboundEvents;
+  }
+
   @Override
   public void close() {
     gateway.close();
+    inboundEvents.close();
     runtime.close();
   }
 

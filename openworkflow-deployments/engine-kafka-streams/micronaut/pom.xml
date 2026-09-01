@@ -24,11 +24,26 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-kafka-streams-engine-jaxrs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http</artifactId>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http-server</artifactId>
+    </dependency>
+    <!--
+      Gives ActiveOrganizationProvider (MicronautActiveOrganizationProvider) and Micronaut Security
+      JWT validation - same shared module openworkflow-engine-pekko-micronaut already depends on for
+      CloudEventIngressResource's identical authorization needs. No Pekko on this module's
+      classpath, so (unlike engine-pekko/micronaut) no osgi.annotation exclusion is needed.
+    -->
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-micronaut-binding</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>io.micronaut</groupId>

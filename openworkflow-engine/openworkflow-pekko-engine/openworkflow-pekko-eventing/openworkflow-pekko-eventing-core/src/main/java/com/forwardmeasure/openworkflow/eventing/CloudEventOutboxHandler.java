@@ -10,11 +10,14 @@
  */
 package com.forwardmeasure.openworkflow.eventing;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.forwardmeasure.openworkflow.actor.WorkflowCommand;
 import com.forwardmeasure.openworkflow.actor.WorkflowReply;
 import com.forwardmeasure.openworkflow.actor.WorkflowSharding;
 import com.forwardmeasure.openworkflow.engine.api.EngineEvent;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
+import com.forwardmeasure.openworkflow.engine.api.TenantId;
 import com.forwardmeasure.openworkflow.execution.query.ExecutionQueryRepository;
 import java.time.Clock;
 import java.time.Duration;
@@ -98,16 +101,16 @@ public final class CloudEventOutboxHandler extends Handler<EventEnvelope<EngineE
   @Override
   public CompletionStage<Done> process(EventEnvelope<EngineEvent> envelope) {
     Objects.requireNonNull(envelope, "envelope");
+    ExecutionId executionId = executionId(envelope.persistenceId());
     String operationId;
     com.forwardmeasure.openworkflow.engine.api.WorkflowCloudEvent event;
     if (envelope.event() instanceof EngineEvent.EmitRequested requested) {
       operationId = requested.operationId();
-      event = requested.event();
+      event = withTenant(requested.event(), executionId.tenantId());
     } else if (envelope.event() instanceof EngineEvent.ForkBranchEmitRequested requested) {
       operationId = requested.operationId();
-      event = requested.event();
+      event = withTenant(requested.event(), executionId.tenantId());
     } else return publishLifecycle(envelope);
-    ExecutionId executionId = executionId(envelope.persistenceId());
     return publishLifecycle(envelope)
         .thenCompose(ignored -> publisher.publish(operationId, event))
         .thenCompose(ignored -> acknowledger.acknowledge(executionId, operationId))
@@ -168,6 +171,34 @@ public final class CloudEventOutboxHandler extends Handler<EventEnvelope<EngineE
 
   private static boolean acknowledged(WorkflowReply reply) {
     return reply instanceof WorkflowReply.Accepted;
+  }
+
+  /**
+   * Ensures every published {@code emit:} CloudEvent carries the durable {@code tenant} extension,
+   * matching what {@link LifecycleCloudEventMapper} already stamps on every auto-generated
+   * lifecycle event. A workflow-authored {@code emit:} event's extensions are entirely up to its
+   * DSL template and carry no engine-known tenant field otherwise - a closed-loop transport that
+   * recovers the tenant from the event itself (there being no independently-authenticated caller to
+   * supply it, unlike the HTTP transport) depends on this always being present. An extension the
+   * workflow author already set explicitly wins.
+   */
+  private static com.forwardmeasure.openworkflow.engine.api.WorkflowCloudEvent withTenant(
+      com.forwardmeasure.openworkflow.engine.api.WorkflowCloudEvent event, TenantId tenantId) {
+    if (event.extensions().containsKey("tenant")) {
+      return event;
+    }
+    Map<String, JsonNode> extensions = new LinkedHashMap<>(event.extensions());
+    extensions.put("tenant", JsonNodeFactory.instance.textNode(tenantId.value().toString()));
+    return new com.forwardmeasure.openworkflow.engine.api.WorkflowCloudEvent(
+        event.specVersion(),
+        event.id(),
+        event.source(),
+        event.type(),
+        event.subject(),
+        event.time(),
+        event.dataContentType(),
+        event.data(),
+        extensions);
   }
 
   static ExecutionId executionId(String persistenceId) {

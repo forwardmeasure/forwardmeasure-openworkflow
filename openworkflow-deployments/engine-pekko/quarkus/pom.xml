@@ -51,6 +51,10 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-pekko-eventing-kafka</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http</artifactId>
     </dependency>
     <dependency>
@@ -118,8 +122,32 @@
             <goals>
               <goal>build</goal>
               <goal>generate-code</goal>
+            </goals>
+          </execution>
+          <!--
+            generate-code-tests split into its own execution, scoped skip only here (not on
+            generate-code above, which production augmentation still needs): quarkusio/quarkus#7747
+            - Quarkus's LocalProject re-reads reactor-sibling raw pom.xml via non-interpolating XML
+            parsing during TEST-mode bootstrap. openworkflow-pekko-runtime's forwardmeasure-jpa-tenancy
+            dependency (added for per-tenant Postgres journal schema isolation) reaches this module's
+            reactor-sibling set for the first time and hits forwardmeasure-jpa-tenancy's own raw
+            <parent><version>${revision}</version> - unresolvable, since only the flattened, already-
+            installed pom (which LocalProject bypasses) has the real version. The previously-tried
+            fix, quarkus.bootstrap.effective-model-builder=true, was reverted repo-wide as net
+            negative (it trades this bug for a separate, worse Quarkus NPE in WorkspaceLoader.
+            findVersions). This module has no @QuarkusTest classes (confirmed: none in src/test),
+            so its own test-mode codegen is not actually needed - skipping it here is narrower and
+            safer than the global property, and does not affect any other module's
+            generate-code-tests execution.
+          -->
+          <execution>
+            <id>generate-code-tests</id>
+            <goals>
               <goal>generate-code-tests</goal>
             </goals>
+            <configuration>
+              <skipSourceGeneration>true</skipSourceGeneration>
+            </configuration>
           </execution>
         </executions>
       </plugin>

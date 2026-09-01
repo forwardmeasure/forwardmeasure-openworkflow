@@ -30,6 +30,8 @@ import com.forwardmeasure.openworkflow.eventing.cassandra.CassandraSubworkflowOu
 import com.forwardmeasure.openworkflow.eventing.jaxrs.AuthenticatedActorProvider;
 import com.forwardmeasure.openworkflow.eventing.jaxrs.AuthzenAuthenticatedActorProvider;
 import com.forwardmeasure.openworkflow.eventing.jaxrs.CloudEventIngressResource;
+import com.forwardmeasure.openworkflow.eventing.kafka.KafkaCloudEventConsumer;
+import com.forwardmeasure.openworkflow.eventing.kafka.KafkaCloudEventPublisher;
 import com.forwardmeasure.openworkflow.eventing.persistence.HibernateSessionExecutionQueryRepository;
 import com.forwardmeasure.openworkflow.eventing.persistence.HibernateSessionSubworkflowPlanResolver;
 import com.forwardmeasure.openworkflow.eventing.postgresql.PostgresqlCloudEventOutbox;
@@ -47,7 +49,9 @@ import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.Properties;
 import javax.sql.DataSource;
+import org.apache.kafka.clients.CommonClientConfigs;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.jersey.autoconfigure.ResourceConfigCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -77,12 +81,41 @@ public class PekkoEngineSpringBinding {
         url, HttpClient.newBuilder().connectTimeout(timeout).build(), mapper, timeout);
   }
 
+  /**
+   * {@code transport} selects the wire carrier for {@code publish:emit:}/{@code receive:}/{@code
+   * listen:} CloudEvents; {@code http} (unset/default) preserves the original behavior exactly -
+   * {@code publish-url} is still required and still has no safe default, since guessing it wrong
+   * would silently misroute events. {@code kafka} instead needs no subscriber URL at all (see
+   * {@link #kafkaCloudEventConsumer} for the read side of that same topic), which is the whole
+   * point of adding it: {@code publish-url}'s hard requirement with no safe default has caused a
+   * real production outage by crashing pod startup for deployments that only wanted Kafka. {@code
+   * publish-url}/{@code timeout} therefore can no longer be unconditionally-required {@code @Value}
+   * parameters (that would crash Kafka-transport startup on the same missing value this change
+   * exists to route around) - {@code publish-url} is validated inside the {@code http} branch
+   * instead, once {@code transport} is known. This bean is not given an explicit {@code
+   * destroyMethod} (unlike, e.g., {@code runtime} below) because the interface-typed return means
+   * Spring resolves any destroy method by reflection on the actual object at shutdown - its default
+   * "(inferred)" behavior already finds and calls {@code close()} on the Kafka producer when that
+   * transport is selected, and silently does nothing for the HTTP transport's non-closeable
+   * publisher, which an explicit {@code destroyMethod = "close"} would instead fail against.
+   */
   @Bean
   CloudEventPublisher cloudEventPublisher(
       ObjectMapper mapper,
-      @Value("${openworkflow.cloud-events.publish-url}") URI url,
-      @Value("${openworkflow.cloud-events.timeout}") Duration timeout) {
-    return new HttpCloudEventPublisher(url, mapper, timeout);
+      @Value("${openworkflow.cloud-events.transport:http}") String transport,
+      @Value("${openworkflow.cloud-events.publish-url:}") String publishUrl,
+      @Value("${openworkflow.cloud-events.timeout:30s}") Duration timeout,
+      @Value("${openworkflow.kafka.bootstrap-servers:localhost:9092}") String bootstrap,
+      @Value("${openworkflow.kafka.topic-prefix:openworkflow}") String topicPrefix) {
+    return switch (transport) {
+      case "kafka" ->
+          new KafkaCloudEventPublisher(
+              kafkaProperties(bootstrap), cloudEventsTopic(topicPrefix), mapper);
+      case "http" -> new HttpCloudEventPublisher(requirePublishUrl(publishUrl), mapper, timeout);
+      default ->
+          throw new IllegalArgumentException(
+              "Unknown openworkflow.cloud-events.transport: " + transport);
+    };
   }
 
   @Bean
@@ -217,6 +250,42 @@ public class PekkoEngineSpringBinding {
         workflows, schedules, system, askTimeout, subscriptions, 10_000);
   }
 
+  /**
+   * The read side of the Kafka transport: consumes the same topic {@link #cloudEventPublisher}
+   * writes to when {@code transport=kafka} and routes each CloudEvent via {@code ingress}. Always
+   * constructed - like {@code startEventing} above, a plain {@code @Bean} is an eager singleton
+   * Spring constructs regardless of whether anything else injects it - but only actually {@code
+   * start()}ed for the Kafka transport; for {@code http} it stays a harmless, never-started object.
+   * The concrete (not interface) return type makes an explicit {@code destroyMethod = "close"} safe
+   * here, unlike {@link #cloudEventPublisher}: {@code close()} always exists on this type and is
+   * itself a no-op when the consumer was never started.
+   */
+  @Bean(destroyMethod = "close")
+  KafkaCloudEventConsumer kafkaCloudEventConsumer(
+      CloudEventIngress ingress,
+      ObjectMapper mapper,
+      @Value("${openworkflow.cloud-events.transport:http}") String transport,
+      @Value("${openworkflow.kafka.bootstrap-servers:localhost:9092}") String bootstrap,
+      @Value("${openworkflow.kafka.topic-prefix:openworkflow}") String topicPrefix,
+      @Value("${openworkflow.eventing.consumer-group:openworkflow-pekko-cloud-events}")
+          String group,
+      @Value("${openworkflow.eventing.instance-id:local}") String instanceId,
+      @Value("${openworkflow.eventing.ask-timeout}") Duration askTimeout) {
+    var consumer =
+        new KafkaCloudEventConsumer(
+            kafkaProperties(bootstrap),
+            cloudEventsTopic(topicPrefix),
+            group,
+            instanceId,
+            ingress,
+            mapper,
+            askTimeout);
+    if ("kafka".equals(transport)) {
+      consumer.start();
+    }
+    return consumer;
+  }
+
   @Bean
   CloudEventIngressResource cloudEventIngress(
       CloudEventIngress ingress, AuthenticatedActorProvider actors, CloudEventHttpDecoder decoder) {
@@ -246,5 +315,25 @@ public class PekkoEngineSpringBinding {
     }
     return new InetSocketAddress(
         endpoint.substring(0, separator), Integer.parseInt(endpoint.substring(separator + 1)));
+  }
+
+  private static Properties kafkaProperties(String bootstrap) {
+    Properties properties = new Properties();
+    properties.put(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrap);
+    return properties;
+  }
+
+  /** Distinct from Kafka-Streams' own {@code <prefix>.inbound-events}/{@code .emitted-events}. */
+  private static String cloudEventsTopic(String prefix) {
+    return prefix + ".pekko-cloud-events";
+  }
+
+  private static URI requirePublishUrl(String value) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalStateException(
+          "openworkflow.cloud-events.publish-url is required when "
+              + "openworkflow.cloud-events.transport=http");
+    }
+    return URI.create(value);
   }
 }

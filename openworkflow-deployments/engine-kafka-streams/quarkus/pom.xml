@@ -22,11 +22,38 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-kafka-streams-engine-jaxrs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http</artifactId>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http-server</artifactId>
+    </dependency>
+    <!--
+      Gives TenantScope/EntityManagerFactory (forwardmeasure-jpa-quarkus + quarkus-hibernate-orm),
+      ActiveOrganizationProvider (QuarkusActiveOrganizationProvider), and AuthorizationService
+      (openworkflow-authorization-authzen) - same shared module openworkflow-engine-pekko-quarkus
+      already depends on for CloudEventIngressResource's identical authorization needs. This engine
+      has no other use for JPA/Hibernate; it comes along only because ActiveOrganizationProvider
+      lives in the same module.
+
+      Excludes org.osgi:osgi.annotation: hibernate-jcache -> caffeine -> jcache pulls the old,
+      combined 8.1.0 jar, while this module's own pre-existing direct org.osgi.annotation.bundle
+      dependency (below) pulls the newer, split org.osgi.annotation.bundle/versioning jars
+      providing the identical classes - the same collision (and same fix)
+      openworkflow-engine-pekko-quarkus already carries, just triggered by this module's own OSGi
+      dependency instead of by Pekko.
+    -->
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-quarkus-binding</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion><groupId>org.osgi</groupId><artifactId>osgi.annotation</artifactId></exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>io.quarkus</groupId>
@@ -72,8 +99,24 @@
             <goals>
               <goal>build</goal>
               <goal>generate-code</goal>
+            </goals>
+          </execution>
+          <!--
+            Skipped: quarkusio/quarkus#7747 - Quarkus's TEST-mode bootstrap resolves dependencies
+            via LocalProject, which re-reads reactor-sibling raw pom.xml (non-interpolating) instead
+            of the properly-flattened, installed artifact. forwardmeasure-jpa-tenancy (reached here
+            via openworkflow-quarkus-binding/openworkflow-authorization-api) hits this on its own
+            ${revision} parent reference. Skipped repo-wide for generate-code-tests specifically
+            (generate-code above, needed for real production augmentation, is untouched).
+          -->
+          <execution>
+            <id>generate-code-tests</id>
+            <goals>
               <goal>generate-code-tests</goal>
             </goals>
+            <configuration>
+              <skipSourceGeneration>true</skipSourceGeneration>
+            </configuration>
           </execution>
         </executions>
       </plugin>

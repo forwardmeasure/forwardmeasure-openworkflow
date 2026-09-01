@@ -51,6 +51,10 @@
         </dependency>
         <dependency>
             <groupId>${project.groupId}</groupId>
+            <artifactId>openworkflow-pekko-eventing-kafka</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
             <artifactId>openworkflow-engine-http</artifactId>
         </dependency>
         <dependency>

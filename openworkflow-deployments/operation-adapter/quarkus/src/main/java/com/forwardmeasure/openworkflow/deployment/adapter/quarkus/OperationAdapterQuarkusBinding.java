@@ -15,6 +15,7 @@ import jakarta.enterprise.inject.Disposes;
 import jakarta.enterprise.inject.Produces;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Optional;
 import org.eclipse.microprofile.config.Config;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
@@ -67,22 +68,19 @@ public class OperationAdapterQuarkusBinding {
       @ConfigProperty(name = "openworkflow.adapters.consumer-group") String group,
       @ConfigProperty(name = "openworkflow.adapters.instance-id") String instance,
       @ConfigProperty(name = "openworkflow.adapters.secret-directory") String secrets,
-      @ConfigProperty(name = "openworkflow.adapters.http-egress-allowlist", defaultValue = "")
-          String allowlist,
+      @ConfigProperty(name = "openworkflow.adapters.http-egress-allowlist")
+          Optional<String> allowlist,
       @ConfigProperty(name = "openworkflow.operations.protocol.timeout-ms", defaultValue = "30000")
           long timeout,
-      @ConfigProperty(name = "openworkflow.operations.mcp-command-allowlist", defaultValue = "")
-          String mcp,
-      @ConfigProperty(name = "openworkflow.operations.run.command-allowlist", defaultValue = "")
-          String commands,
-      @ConfigProperty(name = "openworkflow.operations.run.interpreter-allowlist", defaultValue = "")
-          String interpreters,
-      @ConfigProperty(name = "openworkflow.operations.run.image-allowlist", defaultValue = "")
-          String images,
-      @ConfigProperty(name = "openworkflow.operations.run.volume-allowlist", defaultValue = "")
-          String volumes,
-      @ConfigProperty(name = "openworkflow.operations.run.port-allowlist", defaultValue = "")
-          String ports,
+      @ConfigProperty(name = "openworkflow.operations.mcp-command-allowlist") Optional<String> mcp,
+      @ConfigProperty(name = "openworkflow.operations.run.command-allowlist")
+          Optional<String> commands,
+      @ConfigProperty(name = "openworkflow.operations.run.interpreter-allowlist")
+          Optional<String> interpreters,
+      @ConfigProperty(name = "openworkflow.operations.run.image-allowlist") Optional<String> images,
+      @ConfigProperty(name = "openworkflow.operations.run.volume-allowlist")
+          Optional<String> volumes,
+      @ConfigProperty(name = "openworkflow.operations.run.port-allowlist") Optional<String> ports,
       @ConfigProperty(name = "openworkflow.operations.run.oci-runtime", defaultValue = "podman")
           String oci) {
     OksTopics topics = OksTopics.withPrefix(prefix);
@@ -98,20 +96,20 @@ public class OperationAdapterQuarkusBinding {
             authorization,
             mapper,
             secrets,
-            allowlist,
+            allowlist.orElse(""),
             KafkaProtocolOperationExecutors.create(
                 authorization,
                 mapper,
                 new KafkaProtocolOperationExecutors.Configuration(
                     timeout,
-                    allowlist,
+                    allowlist.orElse(""),
                     secrets,
-                    mcp,
-                    commands,
-                    interpreters,
-                    images,
-                    volumes,
-                    ports,
+                    mcp.orElse(""),
+                    commands.orElse(""),
+                    interpreters.orElse(""),
+                    images.orElse(""),
+                    volumes.orElse(""),
+                    ports.orElse(""),
                     oci)));
     runtime.start();
     return runtime;

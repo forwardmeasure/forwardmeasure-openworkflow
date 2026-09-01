@@ -77,7 +77,8 @@ final class CloudEventOutboxHandlerTest {
         new CloudEventOutboxHandler(
             (operationId, emitted) -> {
               calls.add("publish:" + operationId);
-              assertEquals(event, emitted);
+              assertEquals(event.id(), emitted.id());
+              assertEquals(tenant.toString(), emitted.extensions().get("tenant").asText());
               return CompletableFuture.completedFuture(null);
             },
             (routedId, operationId) -> {
@@ -134,7 +135,8 @@ final class CloudEventOutboxHandlerTest {
         new CloudEventOutboxHandler(
             (operationId, emitted) -> {
               calls.add("publish:" + operationId);
-              assertEquals(event, emitted);
+              assertEquals(event.id(), emitted.id());
+              assertEquals(tenant.toString(), emitted.extensions().get("tenant").asText());
               return CompletableFuture.completedFuture(null);
             },
             (routedId, operationId) -> {
@@ -372,6 +374,7 @@ final class CloudEventOutboxHandlerTest {
             "io.serverlessworkflow.task.started.v1",
             "orders.submitted"),
         published.stream().map(WorkflowCloudEvent::type).toList());
+    assertEquals(tenant.toString(), published.getLast().extensions().get("tenant").asText());
   }
 
   private static CloudEventOutboxHandler lifecycleHandler(

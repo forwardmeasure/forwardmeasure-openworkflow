@@ -19,11 +19,48 @@
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-kafka-streams-engine-jaxrs</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http</artifactId>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-engine-http-server</artifactId>
+    </dependency>
+    <!--
+      Gives ActiveOrganizationProvider (SpringActiveOrganizationProvider) and the Spring Security
+      JWT resource-server filter chain - same shared module openworkflow-engine-pekko-spring already
+      depends on for CloudEventIngressResource's identical authorization needs. No Pekko on this
+      module's classpath, so (unlike engine-pekko/spring) no osgi/jakarta.el exclusions are needed -
+      those exclusions guard against a SECOND source of the same classes colliding, and this module
+      has no second source.
+    -->
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-spring-binding</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <!--
+      openworkflow-spring-binding's own jakarta.enterprise.cdi-api is provided-scope, so it does not
+      propagate here (provided is non-transitive). Without it present at all, hibernate-processor
+      (globally registered, root pom.xml) cannot resolve jakarta.enterprise.context.NormalScope's
+      classfile while processing this module's sources and emits a -Werror-fatal warning
+      ("class file for NormalScope not found") - this module is the first Spring binding consumer
+      with zero other source of jakarta.enterprise.cdi-api on its classpath (engine-pekko/spring
+      already carries this exact dependency directly, for the same reason). Mirrors that module's
+      declaration exactly, including the jakarta.el-api exclusion (cdi-api pulls it transitively for
+      its own EL-based bean resolution; Spring Boot's embedded Tomcat already provides a complete,
+      compatible EL implementation).
+    -->
+    <dependency>
+      <groupId>jakarta.enterprise</groupId>
+      <artifactId>jakarta.enterprise.cdi-api</artifactId>
+      <scope>provided</scope>
+      <exclusions>
+        <exclusion><groupId>jakarta.el</groupId><artifactId>jakarta.el-api</artifactId></exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

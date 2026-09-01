@@ -15,6 +15,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.forwardmeasure.openworkflow.authorization.ActiveOrganizationProvider;
+import com.forwardmeasure.openworkflow.authorization.AuthorizationService;
 import com.forwardmeasure.openworkflow.engine.api.EngineId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEngineProvider;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionEvent;
@@ -24,6 +26,8 @@ import com.forwardmeasure.openworkflow.engine.api.ExecutionLifecycleState;
 import com.forwardmeasure.openworkflow.engine.api.TenantId;
 import com.forwardmeasure.openworkflow.engine.http.server.EngineCommandResource;
 import com.forwardmeasure.openworkflow.workflow.runtime.kafka.KafkaStreamsEngineRuntime;
+import com.forwardmeasure.openworkflow.workflow.runtime.kafka.OksInboundCloudEventGateway;
+import com.forwardmeasure.openworkflow.workflow.runtime.kafka.jaxrs.OksCloudEventIngressResource;
 import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -192,6 +196,24 @@ class KafkaEngineMicronautBindingTest {
 
     resource.health();
     verify(provider, times(1)).health();
+  }
+
+  @Test
+  void cloudEvents_wiresRuntimeInboundGatewayIntoTheResource() {
+    var binding = new KafkaEngineMicronautBinding();
+    KafkaStreamsEngineRuntime runtime = mock(KafkaStreamsEngineRuntime.class);
+    OksInboundCloudEventGateway gateway = mock(OksInboundCloudEventGateway.class);
+    when(runtime.inboundEvents()).thenReturn(gateway);
+    ActiveOrganizationProvider organizations = mock(ActiveOrganizationProvider.class);
+    AuthorizationService authorization = mock(AuthorizationService.class);
+
+    OksCloudEventIngressResource resource =
+        binding.cloudEvents(runtime, organizations, authorization, new ObjectMapper());
+    assertNotNull(resource);
+    // The exact regression this guards against: a resource bean that is built against the wrong
+    // (or a fresh, unwired) gateway instead of the one runtime.inboundEvents() actually owns,
+    // leaving posted CloudEvents published through a producer nothing else observes.
+    verify(runtime, times(1)).inboundEvents();
   }
 
   private record CapturedRequest(String method, String uri, String contentType, byte[] body) {}

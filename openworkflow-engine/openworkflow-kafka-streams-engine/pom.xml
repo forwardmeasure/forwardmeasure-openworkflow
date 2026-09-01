@@ -33,5 +33,6 @@
         <module>openworkflow-kafka-streams-runtime-api</module>
         <module>openworkflow-kafka-streams-runtime-core</module>
         <module>openworkflow-kafka-streams-engine</module>
+        <module>openworkflow-kafka-streams-engine-jaxrs</module>
     </modules>
 </project>

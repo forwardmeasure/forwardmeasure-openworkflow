@@ -318,6 +318,11 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-pekko-eventing-kafka</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-durable-processing-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -344,6 +349,11 @@
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-kafka-streams-engine</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-kafka-streams-engine-jaxrs</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

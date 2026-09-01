@@ -70,6 +70,13 @@ nothing gated which ones actually got deployed until now.
           - {name: OPENWORKFLOW_EXECUTION_EVENTS_URL, value: {{ printf "http://openworkflow-execution-management-%s:8080/internal/v1/execution-events/" $framework | quote }}}
           {{- if eq $engine "kafka-streams" }}
           - {name: OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS, value: {{ dig "kafka" "bootstrapServers" "redpanda:9092" $.Values | quote }}}
+          # The inbound CloudEvent ingress (openworkflow-kafka-streams-engine-jaxrs) needs a real
+          # AuthorizationService (event:route decisions) - same client-credentials identity the
+          # pekko branch below and execution-services.yaml.gotmpl already use. client-id/
+          # organization-client-id/request-timeout/decision-ttl/maximum-cache-entries/policy-version
+          # all have working baked-in defaults in this image's application.yaml; only the real
+          # issuer (here) and the real client secret (secretEnv, below) need setting.
+          - {name: OPENWORKFLOW_KEYCLOAK_ISSUER, value: {{ dig "keycloak" "issuer" "http://keycloak:8080/realms/openworkflow" $.Values | quote }}}
           {{- else }}
           - {name: OPENWORKFLOW_PERSISTENCE_PROFILE, value: {{ if $isCassandra }}cassandra{{ else }}postgresql{{ end }}}
           - {name: OPENWORKFLOW_PERSISTENCE_ENDPOINT, value: {{ if $isCassandra }}{{ dig "pekko" "cassandraEndpoint" "cassandra:9042" $.Values | quote }}{{ else }}{{ dig "pekko" "postgresqlEndpoint" "jdbc:postgresql://postgresql:5432/openworkflow" $.Values | quote }}{{ end }}}
@@ -147,6 +154,11 @@ nothing gated which ones actually got deployed until now.
         serviceAccount: {create: false, name: openworkflow-runtime, automount: true}
         {{- end }}
         {{- end }}
+        {{- else }}
+        secretEnv:
+          # Same client secret the pekko branch above and execution-services.yaml.gotmpl already
+          # source - the kafka-streams inbound CloudEvent ingress's AuthorizationService needs it too.
+          - {name: OPENWORKFLOW_CLIENT_SECRET, valueFrom: {secretKeyRef: {name: {{ dig "credentialsSecretName" "openworkflow-foundation" $.Values | quote }}, key: OPENWORKFLOW_CLIENT_SECRET}}}
         {{- end }}
     labels: {stage: execution, capability: workflow-engine, engine: {{ $engine }}, framework: {{ $framework }}}
 {{- end }}

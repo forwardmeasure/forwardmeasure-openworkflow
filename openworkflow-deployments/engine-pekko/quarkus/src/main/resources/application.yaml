@@ -13,6 +13,17 @@ quarkus:
     password: "${OPENWORKFLOW_DATABASE_PASSWORD:openworkflow}"
 openworkflow:
   execution-events: {url: "${OPENWORKFLOW_EXECUTION_EVENTS_URL:http://openworkflow-execution-management-quarkus:8080/internal/v1/execution-events/}", timeout: 30S}
+  # publish-url is deliberately absent here (no safe default - guessing it wrong would silently
+  # misroute events; set OPENWORKFLOW_CLOUD_EVENTS_PUBLISH_URL directly when transport=http).
+  cloud-events:
+    transport: "${OPENWORKFLOW_CLOUD_EVENTS_TRANSPORT:http}"
+    timeout: "${OPENWORKFLOW_CLOUD_EVENTS_TIMEOUT:30S}"
+  kafka:
+    bootstrap-servers: "${OPENWORKFLOW_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}"
+    topic-prefix: "${OPENWORKFLOW_KAFKA_TOPIC_PREFIX:openworkflow}"
+  eventing:
+    consumer-group: "${OPENWORKFLOW_EVENTING_CONSUMER_GROUP:openworkflow-pekko-cloud-events}"
+    instance-id: "${OPENWORKFLOW_EVENTING_INSTANCE_ID:${HOSTNAME:local}}"
   persistence:
     profile: "${OPENWORKFLOW_PERSISTENCE_PROFILE:postgresql}"
     endpoint: "${OPENWORKFLOW_PERSISTENCE_ENDPOINT:jdbc:postgresql://postgresql:5432/openworkflow}"

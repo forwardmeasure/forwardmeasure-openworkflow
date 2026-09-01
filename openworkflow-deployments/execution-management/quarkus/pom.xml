@@ -66,8 +66,24 @@
             <goals>
               <goal>build</goal>
               <goal>generate-code</goal>
+            </goals>
+          </execution>
+          <!--
+            Skipped: quarkusio/quarkus#7747 - Quarkus's TEST-mode bootstrap resolves dependencies
+            via LocalProject, which re-reads reactor-sibling raw pom.xml (non-interpolating) instead
+            of the properly-flattened, installed artifact. forwardmeasure-jpa-tenancy (reached here
+            via openworkflow-quarkus-binding/openworkflow-authorization-api) hits this on its own
+            ${revision} parent reference. Skipped repo-wide for generate-code-tests specifically
+            (generate-code above, needed for real production augmentation, is untouched).
+          -->
+          <execution>
+            <id>generate-code-tests</id>
+            <goals>
               <goal>generate-code-tests</goal>
             </goals>
+            <configuration>
+              <skipSourceGeneration>true</skipSourceGeneration>
+            </configuration>
           </execution>
         </executions>
       </plugin>
