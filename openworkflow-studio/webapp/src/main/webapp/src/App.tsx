@@ -31,7 +31,7 @@ const muiTheme = createStudioMuiTheme();
 
 type View = "author" | "revisions" | "executions";
 type EditorView = "source" | "canvas" | "settings";
-type GovernanceAction = "submit" | "approve" | "reject" | "publish";
+type GovernanceAction = "submit" | "approve" | "reject" | "publish" | "withdraw";
 type ExecutionControlAction = "pause" | "resume" | "cancel";
 
 // One explicit, reviewable table of "which governance action is valid
@@ -44,12 +44,18 @@ type ExecutionControlAction = "pause" | "resume" | "cancel";
 // methods still exist but nothing in this UI calls them anymore.
 const ALLOWED_TRANSITIONS: Partial<Record<WorkflowDefinitionStatus, GovernanceAction[]>> = {
   [WorkflowDefinitionStatus.Draft]: ["submit"],
-  // The backend's submitWorkflowDefinition guard still accepts IN_REVIEW
-  // as a source state too (see WorkflowGovernanceServiceImpl's own
-  // comment on that guard) - kept here so a definition already stuck
-  // IN_REVIEW from before the approve/reject gate was cut still has a
-  // reachable action.
-  [WorkflowDefinitionStatus.InReview]: ["submit"],
+  // "I will save drafts as many times as I want until I want to publish
+  // it" - IN_REVIEW is where that broke: Save Draft correctly refuses to
+  // overwrite a submitted revision's locked source, and until now there
+  // was no way back to draft short of a brand new version number.
+  // withdrawWorkflowDefinition (IN_REVIEW -> DRAFT, same version, source
+  // re-opened for editing) already existed on the backend - it just had
+  // no button here. Submit is also still listed: the backend's guard
+  // accepts IN_REVIEW as a submit source too (see
+  // WorkflowGovernanceServiceImpl's own comment on that guard), kept for
+  // a definition already stuck IN_REVIEW from before the approve/reject
+  // gate was cut.
+  [WorkflowDefinitionStatus.InReview]: ["submit", "withdraw"],
   [WorkflowDefinitionStatus.Approved]: ["publish"],
 };
 
@@ -218,6 +224,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
         "definition:validate",
         "definition:update",
         "definition:submit",
+        "definition:withdraw",
         "definition:approve",
         "definition:reject",
         "definition:publish",
@@ -362,7 +369,9 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                     reason: "Rejected in OpenWorkflow Studio",
                   },
                 })
-              : await api.governance.publishWorkflowDefinition(request);
+              : action === "withdraw"
+                ? await api.governance.withdrawWorkflowDefinition(request)
+                : await api.governance.publishWorkflowDefinition(request);
       const workflow = workflowById.get(changed.workflowId);
       setDiagnostics(
         `${workflow?.title ?? changed.namespace ?? changed.workflowId} is now ${changed.status}.`,
@@ -687,6 +696,17 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                             }
                           >
                             Submit
+                          </button>
+                        )}
+                      {ALLOWED_TRANSITIONS[definition.status]?.includes("withdraw") &&
+                        permissions["definition:withdraw"] && (
+                          <button
+                            disabled={busy}
+                            onClick={() =>
+                              void transition(definition, "withdraw")
+                            }
+                          >
+                            Withdraw to Draft
                           </button>
                         )}
                       {ALLOWED_TRANSITIONS[definition.status]?.includes("publish") &&
