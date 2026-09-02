@@ -529,7 +529,6 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
           >
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Canvas and Source always match</p>
                 <h2 id="editor-title">
                   Workflow Definition
                   {isDirty && (
