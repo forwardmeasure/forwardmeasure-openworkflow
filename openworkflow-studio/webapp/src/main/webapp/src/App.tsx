@@ -63,6 +63,26 @@ function entityTag(revision: number): string {
   return `"${revision}"`;
 }
 
+// The version string is otherwise entirely author-controlled - draft
+// saves, Validate, and Submit never touch it, no matter how many times or
+// how many login sessions apart. The one point it advances on its own is
+// a successful Publish: increments the last dot-separated numeric segment
+// ("1.0.0" -> "1.0.1"), so the editor is left pointed at the next version
+// to author rather than still sitting on the one that's now permanently
+// locked. Falls back to a guaranteed-new suffix for anything that isn't a
+// plain dotted-numeric string, rather than guessing at a convention that
+// might not fit.
+function nextVersion(version: string): string {
+  const parts = version.split(".");
+  const last = parts[parts.length - 1];
+  const asNumber = Number(last);
+  if (last !== "" && Number.isInteger(asNumber)) {
+    parts[parts.length - 1] = String(asNumber + 1);
+    return parts.join(".");
+  }
+  return `${version}-${Date.now()}`;
+}
+
 export function App({ identity }: { identity: StudioIdentity }) {
   const [token, setToken] = useState(identity.token);
 
@@ -367,6 +387,17 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
       setDiagnostics(
         `${workflow?.title ?? changed.namespace ?? changed.workflowId} is now ${changed.status}.`,
       );
+      // Only advance the editor's version field when the definition just
+      // published IS the one currently open here - publishing something
+      // else from the Revisions list shouldn't touch what this editor is
+      // pointed at.
+      if (
+        action === "publish" &&
+        changed.workflowId === currentWorkflow?.id &&
+        changed.version === definitionVersion
+      ) {
+        setDefinitionVersion(nextVersion(changed.version));
+      }
       await refreshDefinitions();
     } catch (error) {
       setDiagnostics(await diagnostic(error));
