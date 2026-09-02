@@ -63,6 +63,22 @@ function entityTag(revision: number): string {
   return `"${revision}"`;
 }
 
+// saveDraft()'s automatic recovery when the current version is already
+// governed (see there) - increments the last dot-separated numeric segment
+// ("1.0.0" -> "1.0.1"). Falls back to a guaranteed-new suffix for anything
+// that doesn't parse that way ("v1", "latest", ...) rather than guessing at
+// a bump convention that might not fit.
+function bumpVersion(version: string): string {
+  const parts = version.split(".");
+  const last = parts[parts.length - 1];
+  const asNumber = Number(last);
+  if (last !== "" && Number.isInteger(asNumber)) {
+    parts[parts.length - 1] = String(asNumber + 1);
+    return parts.join(".");
+  }
+  return `${version}-${Date.now()}`;
+}
+
 export function App({ identity }: { identity: StudioIdentity }) {
   const [token, setToken] = useState(identity.token);
 
@@ -95,8 +111,16 @@ export function App({ identity }: { identity: StudioIdentity }) {
     <ThemeProvider theme={muiTheme}>
       <Studio
         token={token}
+        // window.location.origin alone drops the path Studio is actually
+        // served under (e.g. "/owf/studio/", behind the gateway's
+        // path-prefix routing) - Keycloak then redirected back to the bare
+        // origin after logout, which serves nothing there: a confirmed
+        // live 404. pathname keeps it on the same page the app is
+        // actually running at.
         logout={() =>
-          void identity.keycloak.logout({ redirectUri: window.location.origin })
+          void identity.keycloak.logout({
+            redirectUri: window.location.origin + window.location.pathname,
+          })
         }
       />
     </ThemeProvider>
@@ -292,33 +316,53 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
           },
         });
       }
+      const savedWorkflow = workflow;
 
-      const existing = definitions.find(
+      let targetVersion = definitionVersion;
+      let existing = definitions.find(
         (definition) =>
-          definition.workflowId === workflow.id &&
-          definition.version === definitionVersion,
+          definition.workflowId === savedWorkflow.id &&
+          definition.version === targetVersion,
       );
-      if (existing && existing.status !== WorkflowDefinitionStatus.Draft) {
-        throw new Error(
-          `Version ${definitionVersion} is ${existing.status}; choose a new version to author another revision.`,
+      const blockedStatus =
+        existing && existing.status !== WorkflowDefinitionStatus.Draft
+          ? existing.status
+          : undefined;
+      // A governed revision's source is immutable past "draft" - used to
+      // just refuse the save outright and leave the author to retype a new
+      // version number by hand. "Save" should never be a dead end: bump the
+      // version automatically and save as a new draft revision instead
+      // (looped, in case the bumped version is ALSO already governed).
+      // definitionVersion itself is only updated once, after the loop
+      // settles, so this doesn't re-render mid-loop.
+      while (existing && existing.status !== WorkflowDefinitionStatus.Draft) {
+        targetVersion = bumpVersion(targetVersion);
+        existing = definitions.find(
+          (definition) =>
+            definition.workflowId === savedWorkflow.id &&
+            definition.version === targetVersion,
         );
       }
+      if (blockedStatus) setDefinitionVersion(targetVersion);
+
       const saved = existing
         ? await api.definitions.updateWorkflowDefinition({
             ifMatch: entityTag(existing.revision),
-            workflowId: workflow.id,
+            workflowId: savedWorkflow.id,
             definitionId: existing.id,
             updateWorkflowDefinitionRequest: { source },
           })
         : await api.definitions.createWorkflowDefinition({
-            workflowId: workflow.id,
+            workflowId: savedWorkflow.id,
             createWorkflowDefinitionRequest: {
-              version: definitionVersion,
+              version: targetVersion,
               source,
             },
           });
       setDiagnostics(
-        `Saved ${workflow.name} version ${saved.version} as ${saved.status}.`,
+        blockedStatus
+          ? `Version ${definitionVersion} is ${blockedStatus} and can't be edited in place - saved as new version ${targetVersion} instead.`
+          : `Saved ${savedWorkflow.name} version ${saved.version} as ${saved.status}.`,
       );
       await refreshDefinitions();
     } catch (error) {
