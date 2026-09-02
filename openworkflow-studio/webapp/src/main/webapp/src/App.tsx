@@ -63,22 +63,6 @@ function entityTag(revision: number): string {
   return `"${revision}"`;
 }
 
-// saveDraft()'s automatic recovery when the current version is already
-// governed (see there) - increments the last dot-separated numeric segment
-// ("1.0.0" -> "1.0.1"). Falls back to a guaranteed-new suffix for anything
-// that doesn't parse that way ("v1", "latest", ...) rather than guessing at
-// a bump convention that might not fit.
-function bumpVersion(version: string): string {
-  const parts = version.split(".");
-  const last = parts[parts.length - 1];
-  const asNumber = Number(last);
-  if (last !== "" && Number.isInteger(asNumber)) {
-    parts[parts.length - 1] = String(asNumber + 1);
-    return parts.join(".");
-  }
-  return `${version}-${Date.now()}`;
-}
-
 export function App({ identity }: { identity: StudioIdentity }) {
   const [token, setToken] = useState(identity.token);
 
@@ -316,53 +300,36 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
           },
         });
       }
-      const savedWorkflow = workflow;
-
-      let targetVersion = definitionVersion;
-      let existing = definitions.find(
+      const existing = definitions.find(
         (definition) =>
-          definition.workflowId === savedWorkflow.id &&
-          definition.version === targetVersion,
+          definition.workflowId === workflow.id &&
+          definition.version === definitionVersion,
       );
-      const blockedStatus =
-        existing && existing.status !== WorkflowDefinitionStatus.Draft
-          ? existing.status
-          : undefined;
-      // A governed revision's source is immutable past "draft" - used to
-      // just refuse the save outright and leave the author to retype a new
-      // version number by hand. "Save" should never be a dead end: bump the
-      // version automatically and save as a new draft revision instead
-      // (looped, in case the bumped version is ALSO already governed).
-      // definitionVersion itself is only updated once, after the loop
-      // settles, so this doesn't re-render mid-loop.
-      while (existing && existing.status !== WorkflowDefinitionStatus.Draft) {
-        targetVersion = bumpVersion(targetVersion);
-        existing = definitions.find(
-          (definition) =>
-            definition.workflowId === savedWorkflow.id &&
-            definition.version === targetVersion,
+      if (existing && existing.status !== WorkflowDefinitionStatus.Draft) {
+        // A governed revision's source is immutable past "draft" - the
+        // author decides the new version number themselves (bumping it
+        // automatically was tried and explicitly rejected: "that makes no
+        // sense, I will increment the revision manually").
+        throw new Error(
+          `Version ${definitionVersion} is ${existing.status}; choose a new version to author another revision.`,
         );
       }
-      if (blockedStatus) setDefinitionVersion(targetVersion);
-
       const saved = existing
         ? await api.definitions.updateWorkflowDefinition({
             ifMatch: entityTag(existing.revision),
-            workflowId: savedWorkflow.id,
+            workflowId: workflow.id,
             definitionId: existing.id,
             updateWorkflowDefinitionRequest: { source },
           })
         : await api.definitions.createWorkflowDefinition({
-            workflowId: savedWorkflow.id,
+            workflowId: workflow.id,
             createWorkflowDefinitionRequest: {
-              version: targetVersion,
+              version: definitionVersion,
               source,
             },
           });
       setDiagnostics(
-        blockedStatus
-          ? `Version ${definitionVersion} is ${blockedStatus} and can't be edited in place - saved as new version ${targetVersion} instead.`
-          : `Saved ${savedWorkflow.name} version ${saved.version} as ${saved.status}.`,
+        `Saved ${workflow.name} version ${saved.version} as ${saved.status}.`,
       );
       await refreshDefinitions();
     } catch (error) {
