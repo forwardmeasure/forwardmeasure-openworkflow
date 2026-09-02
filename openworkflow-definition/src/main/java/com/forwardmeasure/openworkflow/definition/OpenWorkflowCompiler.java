@@ -166,26 +166,45 @@ public final class OpenWorkflowCompiler {
     WorkflowDataFlow dataFlow =
         workflowDataFlow(root, expressionConfiguration.mode(), resourcesByUri);
     ReusableComponents reusable = reusableComponents(root);
-    TimeoutPlan workflowTimeout =
-        root.has("timeout")
-            ? compileTimeout(
-                root.required("timeout"), "/timeout", expressionConfiguration.mode(), reusable)
-            : null;
-    SchedulePlan schedule =
-        root.has("schedule")
-            ? compileSchedule(
-                root.required("schedule"), expressionConfiguration.mode(), resourcesByUri)
-            : null;
-    List<PlanStep> steps =
-        compileTasks(
-            root.required("do"),
-            "/do",
-            expressionConfiguration.mode(),
-            resourcesByUri,
-            reusable,
-            Set.of(),
-            workflowCatalog,
-            true);
+    TimeoutPlan workflowTimeout;
+    SchedulePlan schedule;
+    List<PlanStep> steps;
+    try {
+      workflowTimeout =
+          root.has("timeout")
+              ? compileTimeout(
+                  root.required("timeout"), "/timeout", expressionConfiguration.mode(), reusable)
+              : null;
+      schedule =
+          root.has("schedule")
+              ? compileSchedule(
+                  root.required("schedule"), expressionConfiguration.mode(), resourcesByUri)
+              : null;
+      steps =
+          compileTasks(
+              root.required("do"),
+              "/do",
+              expressionConfiguration.mode(),
+              resourcesByUri,
+              reusable,
+              Set.of(),
+              workflowCatalog,
+              true);
+    } catch (IllegalArgumentException incomplete) {
+      // Plan records (CallPlan, TimeoutPlan, ...) validate their own semantic
+      // invariants in their compact constructors via plain
+      // IllegalArgumentException - appropriate for a record's own internal
+      // consistency, but when the compiler itself is the one constructing
+      // them from author-provided (possibly still-incomplete) YAML, that's
+      // exactly the same "not yet compilable" signal WorkflowDefinitionException
+      // already carries everywhere else in this method (the schema/DSL-version
+      // checks above, for instance) - this specific failure mode just wasn't
+      // translated before now. Confirmed live: saving a fresh, blank "call"
+      // task (call: "") crashed the whole request with a raw
+      // IllegalArgumentException instead of falling back to the source-only
+      // draft save every OTHER incomplete-document shape already gets.
+      throw new WorkflowDefinitionException(List.of(incomplete.getMessage()));
+    }
     validateSchemas(dataFlow, schedule, steps, resources);
     String sourceSha256 = sha256(source);
     WorkflowPlan plan =

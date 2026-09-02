@@ -1428,6 +1428,38 @@ class OpenWorkflowCompilerTest {
   }
 
   @Test
+  void rejectsAFunctionCallWithNoCatalogueNameAsAnOrdinaryCompilationFailure() {
+    // Regression test for a real live crash: a freshly added "call" task
+    // (Studio's palette seeds it with a blank "call: ''", edited in
+    // afterward) fell into CallPlan's Kind.FUNCTION branch with an empty
+    // functionName, and CallPlan's own compact constructor validates that
+    // invariant via a plain IllegalArgumentException - appropriate for the
+    // record itself, but that exception type escaped uncaught all the way
+    // up through updateWorkflowDefinition's "a draft doesn't have to
+    // compile" catch (which only ever caught WorkflowDefinitionException),
+    // producing a raw 500 instead of the same graceful "not yet
+    // compilable" outcome every other incomplete-document shape gets.
+    byte[] source =
+        yaml(
+            """
+            document:
+              dsl: '1.0.3'
+              namespace: evidence
+              name: blank-call
+              version: '1.0.0'
+            do:
+              - draft:
+                  call: ''
+                  with: {}
+            """);
+
+    WorkflowDefinitionException failure =
+        assertThrows(WorkflowDefinitionException.class, () -> compiler.compile(source));
+
+    assertEquals(List.of("A function call requires its catalogue name"), failure.violations());
+  }
+
+  @Test
   void compilesEveryRunVariantAndPinsExternalScriptSource() {
     byte[] source =
         yaml(
