@@ -22,6 +22,30 @@ describe("deriveEdges", () => {
     ]);
   });
 
+  it("suppresses a task's own outgoing edge when nothing points at it", () => {
+    // Confirmed live, repeatedly: a freshly added/duplicated task always
+    // gets "then: exit" (see WorkflowCanvas's addTask/
+    // duplicateSelectedTask) so it renders as a complete, self-terminating
+    // task rather than an invalid one - but that "then" alone still meant
+    // deriveEdges drew a "b -> End" edge for it despite nothing pointing
+    // AT "b", reading as "the tool auto-connected this to End" even
+    // though the task is meant to be fully disconnected until wired in
+    // deliberately.
+    const tasks: Task[] = [
+      // "a" has its own explicit "then" here too, matching what
+      // appendDisconnectedTask actually does in WorkflowCanvas.tsx: without
+      // it, "a"'s positional fallthrough would target "b" simply because
+      // "b" is next in array order, silently wiring the two together.
+      { kind: "set", name: "a", set: {}, then: "exit" },
+      { kind: "set", name: "b", set: {}, then: "exit" },
+    ];
+    const edges = deriveEdges(tasks);
+    expect(edges.map((e) => [e.source, e.target])).toEqual([
+      ["__start__", "a"],
+      ["a", "__end__"],
+    ]);
+  });
+
   it("connects Start straight to End when there are no tasks", () => {
     expect(deriveEdges([]).map((e) => [e.source, e.target])).toEqual([
       ["__start__", "__end__"],
@@ -63,10 +87,13 @@ describe("deriveEdges", () => {
       { kind: "set", name: "c", set: {} },
     ];
     const edges = deriveEdges(tasks);
+    // "b" itself has no incoming edge here - "a" skips straight to "c" -
+    // so its own outgoing edge is suppressed too (see deriveEdges'
+    // reachability filter): rendering "b -> c" would read as "b is part
+    // of this flow," which it isn't while nothing points to it.
     expect(edges.map((e) => [e.source, e.target])).toEqual([
       ["__start__", "a"],
       ["a", "c"],
-      ["b", "c"],
       ["c", "__end__"],
     ]);
   });

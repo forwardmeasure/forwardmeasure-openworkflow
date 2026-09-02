@@ -93,9 +93,9 @@ function resolveThenTarget(then: string | undefined, positionalTarget: string): 
 }
 
 export function deriveEdges(tasks: Task[]): Edge[] {
-  const edges: Edge[] = [];
+  const rawEdges: Edge[] = [];
   const firstTask = tasks[0];
-  edges.push(
+  rawEdges.push(
     firstTask
       ? {
           id: `${START_ID}->${firstTask.name}`,
@@ -108,7 +108,7 @@ export function deriveEdges(tasks: Task[]): Edge[] {
     if (task.kind === "switch") {
       task.cases.forEach((switchCase) => {
         const target = resolveThenTarget(switchCase.then, END_ID);
-        edges.push({
+        rawEdges.push({
           id: `${task.name}:${switchCase.name}->${target}`,
           source: task.name,
           sourceHandle: switchCase.name,
@@ -132,7 +132,7 @@ export function deriveEdges(tasks: Task[]): Edge[] {
       if (task.then !== undefined) {
         const next = tasks[index + 1];
         const target = resolveThenTarget(task.then, next ? next.name : END_ID);
-        edges.push({ id: `${task.name}->${target}`, source: task.name, target });
+        rawEdges.push({ id: `${task.name}->${target}`, source: task.name, target });
       }
       return;
     }
@@ -144,9 +144,31 @@ export function deriveEdges(tasks: Task[]): Edge[] {
     // positionalTarget unconditionally, so the canvas silently drew the
     // WRONG edge for any task using an explicit override.
     const target = resolveThenTarget(task.then, positionalTarget);
-    edges.push({ id: `${task.name}->${target}`, source: task.name, target });
+    rawEdges.push({ id: `${task.name}->${target}`, source: task.name, target });
   });
-  return edges;
+  // A task nothing points at (a freshly added or duplicated task,
+  // deliberately disconnected - see WorkflowCanvas's addTask/
+  // duplicateSelectedTask; or any other task an edit left orphaned) still
+  // gets its OWN outgoing edge computed above unconditionally, same as
+  // every reachable task - rendering that edge read as "the tool
+  // auto-connected it to End," directly contradicting "disconnected until
+  // I wire it in myself" (confirmed live, reported repeatedly). Only an
+  // edge whose SOURCE is actually reachable from Start renders at all -
+  // an orphaned task's own outgoing edge(s) stay silently suppressed
+  // until something upstream is wired into it, at which point they
+  // reappear on the very next derive with no other change needed.
+  const reachable = new Set<string>([START_ID]);
+  const queue: string[] = [START_ID];
+  while (queue.length > 0) {
+    const current = queue.pop()!;
+    for (const edge of rawEdges) {
+      if (edge.source === current && !reachable.has(edge.target)) {
+        reachable.add(edge.target);
+        queue.push(edge.target);
+      }
+    }
+  }
+  return rawEdges.filter((edge) => reachable.has(edge.source));
 }
 
 export type EdgeEndpoint = { source: string; target: string; sourceHandle?: string | null };
