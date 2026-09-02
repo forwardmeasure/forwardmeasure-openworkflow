@@ -1,5 +1,6 @@
 import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
 import { canPause, diagnostic } from "./workflow";
+import { ExecutionState } from "@forwardmeasure/openworkflow-execution-client";
 import { tenantFromToken } from "./session";
 import { describe, expect, it } from "vitest";
 
@@ -71,10 +72,10 @@ describe("workflow helpers", () => {
   });
 
   it("allows pause at active and durable waiting boundaries", () => {
-    expect(canPause("RUNNING")).toBe(true);
-    expect(canPause("WAITING")).toBe(true);
-    expect(canPause("PAUSED")).toBe(false);
-    expect(canPause("CANCELLED")).toBe(false);
+    expect(canPause(ExecutionState.Running)).toBe(true);
+    expect(canPause(ExecutionState.Waiting)).toBe(true);
+    expect(canPause(ExecutionState.Paused)).toBe(false);
+    expect(canPause(ExecutionState.Cancelled)).toBe(false);
   });
 });
 /*

@@ -4,13 +4,15 @@ import FormControl from "@mui/material/FormControl";
 import InputLabel from "@mui/material/InputLabel";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
-import type {
-  Workflow,
-  WorkflowDefinition,
+import {
+  WorkflowDefinitionStatus,
+  type Workflow,
+  type WorkflowDefinition,
 } from "@forwardmeasure/openworkflow-definition-management-client";
-import type {
-  Execution,
-  ExecutionHistoryEntry,
+import {
+  ExecutionState,
+  type Execution,
+  type ExecutionHistoryEntry,
 } from "@forwardmeasure/openworkflow-execution-client";
 import { authorizationDecisions, clients, correlationId } from "./api";
 import { DiffView } from "./canvas/DiffView";
@@ -31,6 +33,25 @@ type View = "author" | "revisions" | "executions";
 type EditorView = "source" | "canvas" | "settings";
 type GovernanceAction = "submit" | "approve" | "reject" | "publish";
 type ExecutionControlAction = "pause" | "resume" | "cancel";
+
+// One explicit, reviewable table of "which governance action is valid
+// from which status" - replaces what used to be ad-hoc
+// definition.status === "draft"-style checks scattered across the JSX
+// below, hardcoded string literals with no connection to the real
+// generated WorkflowDefinitionStatus enum. A typo or a backend status
+// rename now fails to compile instead of silently never matching.
+// Approve/reject aren't listed - that manual gate was cut; the backend
+// methods still exist but nothing in this UI calls them anymore.
+const ALLOWED_TRANSITIONS: Partial<Record<WorkflowDefinitionStatus, GovernanceAction[]>> = {
+  [WorkflowDefinitionStatus.Draft]: ["submit"],
+  // The backend's submitWorkflowDefinition guard still accepts IN_REVIEW
+  // as a source state too (see WorkflowGovernanceServiceImpl's own
+  // comment on that guard) - kept here so a definition already stuck
+  // IN_REVIEW from before the approve/reject gate was cut still has a
+  // reachable action.
+  [WorkflowDefinitionStatus.InReview]: ["submit"],
+  [WorkflowDefinitionStatus.Approved]: ["publish"],
+};
 
 // Refresh well before the access token's own 1-hour lifetime (see the real
 // expires_in on an issued token) - 30s poll, refresh once under 60s
@@ -277,7 +298,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
           definition.workflowId === workflow.id &&
           definition.version === definitionVersion,
       );
-      if (existing && existing.status !== "draft") {
+      if (existing && existing.status !== WorkflowDefinitionStatus.Draft) {
         throw new Error(
           `Version ${definitionVersion} is ${existing.status}; choose a new version to author another revision.`,
         );
@@ -646,19 +667,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                       Open Source
                     </button>
                     <div className="actions">
-                      {(definition.status === "draft" ||
-                        // The backend's own submit guard still accepts
-                        // IN_REVIEW as a source state (see
-                        // WorkflowGovernanceServiceImpl's comment: it's
-                        // there specifically so a definition already
-                        // sitting IN_REVIEW from before the manual
-                        // approve/reject gate was cut still has a way
-                        // through) - the Submit button needs to show for
-                        // it too, or a definition stuck there has no
-                        // reachable action at all: not "draft" (no
-                        // Submit), not "approved" (no Publish), and the
-                        // Approve/Reject gate no longer exists.
-                        definition.status === "in_review") &&
+                      {ALLOWED_TRANSITIONS[definition.status]?.includes("submit") &&
                         permissions["definition:submit"] && (
                           <button
                             disabled={busy}
@@ -669,7 +678,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                             Submit
                           </button>
                         )}
-                      {definition.status === "approved" &&
+                      {ALLOWED_TRANSITIONS[definition.status]?.includes("publish") &&
                         permissions["definition:publish"] && (
                           <button
                             disabled={busy}
@@ -681,7 +690,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                           </button>
                         )}
                     </div>
-                    {definition.status === "published" &&
+                    {definition.status === WorkflowDefinitionStatus.Published &&
                       permissions["execution:start"] && (
                         <>
                           <label>
@@ -762,7 +771,7 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                   )}
                   {permissions["execution:resume"] && (
                     <button
-                      disabled={busy || selected.state !== "PAUSED"}
+                      disabled={busy || selected.state !== ExecutionState.Paused}
                       onClick={() => void control("resume")}
                     >
                       Resume
@@ -773,9 +782,13 @@ function Studio({ token, logout }: { token: string; logout: () => void }) {
                       className="danger"
                       disabled={
                         busy ||
-                        ["COMPLETED", "CANCELLED", "FAILED"].includes(
-                          selected.state,
-                        )
+                        (
+                          [
+                            ExecutionState.Completed,
+                            ExecutionState.Cancelled,
+                            ExecutionState.Failed,
+                          ] as ExecutionState[]
+                        ).includes(selected.state)
                       }
                       onClick={() => void control("cancel")}
                     >

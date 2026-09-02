@@ -1,4 +1,5 @@
 import { ResponseError } from "@forwardmeasure/openworkflow-definition-management-client";
+import { ExecutionState } from "@forwardmeasure/openworkflow-execution-client";
 
 export const SAMPLE = `document:
   dsl: '1.0.3'
@@ -56,8 +57,8 @@ export async function diagnostic(error: unknown): Promise<string> {
   return String(error);
 }
 
-export function canPause(status: string): boolean {
-  return status === "RUNNING" || status === "WAITING";
+export function canPause(status: ExecutionState): boolean {
+  return status === ExecutionState.Running || status === ExecutionState.Waiting;
 }
 
 /*
