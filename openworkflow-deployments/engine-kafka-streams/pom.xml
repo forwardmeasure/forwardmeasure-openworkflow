@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-deployments</artifactId><version>${revision}</version><relativePath>../pom.xml</relativePath></parent>
+  <artifactId>openworkflow-deployments-engine-kafka-streams-parent</artifactId><packaging>pom</packaging>
+  <name>ForwardMeasure OpenWorkflow :: Deployable Assemblies :: Engine Kafka Streams</name>
+  <modules>
+    <module>quarkus</module><module>spring</module><module>micronaut</module>
+  </modules>
+</project>
