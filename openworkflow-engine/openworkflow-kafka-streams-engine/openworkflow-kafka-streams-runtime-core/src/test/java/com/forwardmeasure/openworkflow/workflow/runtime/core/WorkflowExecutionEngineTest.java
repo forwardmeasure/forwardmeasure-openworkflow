@@ -1384,7 +1384,7 @@ class WorkflowExecutionEngineTest {
           version: '1.0.0'
         do:
           - approve:
-              call: com.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.openworkflow.human-task
               with:
                 title: Review extracted evidence
                 description: Confirm the extracted people
@@ -1506,7 +1506,7 @@ class WorkflowExecutionEngineTest {
           version: '1.0.0'
         do:
           - approve:
-              call: com.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.openworkflow.human-task
               with:
                 title: Review extraction
                 approvals:
@@ -2360,7 +2360,7 @@ class WorkflowExecutionEngineTest {
                   command: printf
                   arguments: [ready]
           - review:
-              call: com.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.openworkflow.human-task
               with:
                 title: Review extracted evidence
                 presentation:
@@ -4283,7 +4283,7 @@ class WorkflowExecutionEngineTest {
           version: '1.0.0'
         do:
           - approve:
-              call: com.forwardmeasure.oks.human-task
+              call: com.forwardmeasure.openworkflow.human-task
               with:
                 title: Review Evidence
                 input: '${ .caseMaterial }'
@@ -5057,7 +5057,7 @@ class WorkflowExecutionEngineTest {
       version: '1.0.0'
     do:
       - execute:
-          call: com.forwardmeasure.oks.correlated-worker
+          call: com.forwardmeasure.openworkflow.correlated-worker
           with:
             document:
               endpoint:

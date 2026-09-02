@@ -45,7 +45,7 @@ public final class ProtocolOperationMaterializer {
   }
 
   /**
-   * Decomposes one {@code com.forwardmeasure.oks.correlated-worker} call into its command
+   * Decomposes one {@code com.forwardmeasure.openworkflow.correlated-worker} call into its command
    * (PUBLISH), events (SUBSCRIBE), and optional cancellation (PUBLISH) operations - each an
    * ordinary {@link ProtocolOperationDescriptor} that every AsyncAPI transport executor already
    * runs unchanged. {@code lifecycleId} is the durable identity the workflow uses to correlate the

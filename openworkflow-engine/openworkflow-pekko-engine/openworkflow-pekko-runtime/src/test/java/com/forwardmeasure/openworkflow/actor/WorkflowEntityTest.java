@@ -6592,7 +6592,7 @@ class WorkflowEntityTest {
                 compete: false
                 branches:
                   - execute:
-                      call: com.forwardmeasure.oks.correlated-worker
+                      call: com.forwardmeasure.openworkflow.correlated-worker
                       with:
                         document:
                           endpoint: https://contracts.example.test/workers.yaml
@@ -6623,7 +6623,7 @@ class WorkflowEntityTest {
       version: '1.0.0'
     do:
       - execute:
-          call: com.forwardmeasure.oks.correlated-worker
+          call: com.forwardmeasure.openworkflow.correlated-worker
           with:
             document:
               endpoint: https://contracts.example.test/workers.yaml

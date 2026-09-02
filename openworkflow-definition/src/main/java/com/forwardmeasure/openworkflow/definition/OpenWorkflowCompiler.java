@@ -43,6 +43,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.yaml.snakeyaml.LoaderOptions;
 
@@ -305,9 +306,13 @@ public final class OpenWorkflowCompiler {
               : null;
       TaskDataFlow dataFlow = taskDataFlow(task, path, expressionMode, resources);
       String keyword = taskKeyword(task);
-      switch (keyword) {
-        case "set" -> {
-          JsonNode configuration = task.required("set");
+      PlanStepKind stepKind = KEYWORD_TO_KIND.get(keyword);
+      if (stepKind == null) {
+        throw unsupported(path, "task kind '" + keyword + "' is not implemented");
+      }
+      switch (stepKind) {
+        case SET -> {
+          JsonNode configuration = task.required(keyword);
           validateTransform(configuration, expressionMode, path + "/set");
           result.add(
               new PlanStep(
@@ -326,7 +331,7 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "do" -> {
+        case DO -> {
           result.add(
               new PlanStep(
                   name,
@@ -335,7 +340,7 @@ public final class OpenWorkflowCompiler {
                   task,
                   null,
                   compileTasks(
-                      task.required("do"),
+                      task.required(keyword),
                       path + "/do",
                       expressionMode,
                       resources,
@@ -352,8 +357,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "switch" -> {
-          JsonNode configuration = task.required("switch");
+        case SWITCH -> {
+          JsonNode configuration = task.required(keyword);
           result.add(
               new PlanStep(
                   name,
@@ -371,8 +376,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "for" -> {
-          JsonNode configuration = task.required("for");
+        case FOR -> {
+          JsonNode configuration = task.required(keyword);
           ForPlan forPlan = compileFor(task, configuration, path, expressionMode);
           result.add(
               new PlanStep(
@@ -382,6 +387,10 @@ public final class OpenWorkflowCompiler {
                   task,
                   configuration,
                   compileTasks(
+                      // Deliberately still the literal "do", not keyword ("for" here) - a for
+                      // loop's own body sits under a sibling "do" key, a DIFFERENT field from
+                      // its own "for" configuration (see KNOWN_TASK_KEYWORDS' comment on why
+                      // that ordering matters too).
                       task.required("do"),
                       path + "/do",
                       expressionMode,
@@ -399,8 +408,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "fork" -> {
-          JsonNode configuration = task.required("fork");
+        case FORK -> {
+          JsonNode configuration = task.required(keyword);
           List<PlanStep> branches =
               compileForkBranches(
                   configuration.required("branches"),
@@ -428,8 +437,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "emit" -> {
-          JsonNode properties = task.required("emit").required("event").required("with");
+        case EMIT -> {
+          JsonNode properties = task.required(keyword).required("event").required("with");
           validateTransform(properties, expressionMode, path + "/emit/event/with");
           result.add(
               new PlanStep(
@@ -448,11 +457,11 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "call" -> {
+        case CALL -> {
           JsonNode arguments =
               task.has("with") ? task.required("with") : JsonNodeFactory.instance.objectNode();
           validateTransform(arguments, expressionMode, path + "/with");
-          String call = task.required("call").textValue();
+          String call = task.required(keyword).textValue();
           CallPlan callPlan =
               compileCall(call, arguments, expressionMode, resources, reusable, path);
           List<PlanStep> functionBody;
@@ -503,8 +512,8 @@ public final class OpenWorkflowCompiler {
                   callPlan,
                   dataFlow));
         }
-        case "run" -> {
-          JsonNode configuration = task.required("run");
+        case RUN -> {
+          JsonNode configuration = task.required(keyword);
           validateTransform(configuration, expressionMode, path + "/run");
           RunPlan runPlan = compileRun(configuration, resources, path + "/run", workflowCatalog);
           result.add(
@@ -526,8 +535,8 @@ public final class OpenWorkflowCompiler {
                   dataFlow,
                   runPlan));
         }
-        case "listen" -> {
-          JsonNode configuration = task.required("listen");
+        case LISTEN -> {
+          JsonNode configuration = task.required(keyword);
           ListenPlan listenPlan =
               compileListen(task, configuration, path, expressionMode, resources);
           JsonNode foreach = task.get("foreach");
@@ -558,8 +567,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "wait" -> {
-          JsonNode configuration = task.required("wait");
+        case WAIT -> {
+          JsonNode configuration = task.required(keyword);
           result.add(
               new PlanStep(
                   name,
@@ -577,8 +586,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "raise" -> {
-          JsonNode configuration = task.required("raise");
+        case RAISE -> {
+          JsonNode configuration = task.required(keyword);
           RaisePlan raisePlan =
               compileRaise(
                   configuration.required("error"), path + "/raise/error", expressionMode, reusable);
@@ -599,8 +608,8 @@ public final class OpenWorkflowCompiler {
                   null,
                   dataFlow));
         }
-        case "try" -> {
-          JsonNode configuration = task.required("try");
+        case TRY -> {
+          JsonNode configuration = task.required(keyword);
           JsonNode catchDefinition = task.required("catch");
           List<PlanStep> trySteps =
               compileTasks(
@@ -676,9 +685,12 @@ public final class OpenWorkflowCompiler {
       Set<String> functionStack,
       WorkflowDefinitionCatalog workflowCatalog) {
     if (reusable.extensions().isEmpty()) return target;
+    // Reuses KEYWORD_TO_KIND (already built, see above) rather than adding a stepKind parameter
+    // just for this - targetKind's non-composite branch still needs the plain keyword string
+    // regardless, since it's matched against an author-typed extend: "<kind>" value elsewhere.
     String targetKind =
-        switch (keyword) {
-          case "do", "fork" -> "composite";
+        switch (KEYWORD_TO_KIND.get(keyword)) {
+          case DO, FORK -> "composite";
           default -> keyword;
         };
     List<ExtensionApplicationPlan> applications = new ArrayList<>();
@@ -854,6 +866,18 @@ public final class OpenWorkflowCompiler {
           .map(kind -> kind.name().toLowerCase(Locale.ROOT))
           .toList();
 
+  // The dispatch table compileTasks' switch below uses, built from the exact same keyword list
+  // above (plus "call", checked the same separate way taskKeyword() checks it) - one place maps
+  // a keyword string to its PlanStepKind, so the switch itself can be written against the enum
+  // (case SET, case DO, ...) instead of repeating each keyword a second time as a case-label
+  // string literal.
+  private static final Map<String, PlanStepKind> KEYWORD_TO_KIND =
+      Stream.concat(
+              KNOWN_TASK_KEYWORDS.stream()
+                  .map(kw -> Map.entry(kw, PlanStepKind.valueOf(kw.toUpperCase(Locale.ROOT)))),
+              Stream.of(Map.entry("call", PlanStepKind.CALL)))
+          .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
   private static String taskKeyword(JsonNode task) {
     for (String supported : KNOWN_TASK_KEYWORDS) {
       if (task.has(supported)) return supported;
@@ -868,6 +892,30 @@ public final class OpenWorkflowCompiler {
     throw unsupported("/", "task kind could not be determined");
   }
 
+  // The six reserved call-variant keywords plus the two reserved custom-function names, mapped
+  // to their CallPlan.Kind - same reasoning as KEYWORD_TO_KIND above: compileCall's own switch
+  // dispatches on the enum instead of repeating each string a second time as a case label. Any
+  // "call" value NOT in this map is an ordinary catalogued/inline function name, not an error -
+  // it resolves to Kind.FUNCTION, the switch's own default.
+  private static final Map<String, CallPlan.Kind> CALL_VARIANT_TO_KIND =
+      Map.of(
+          "asyncapi",
+          CallPlan.Kind.ASYNC_API,
+          "grpc",
+          CallPlan.Kind.GRPC,
+          "http",
+          CallPlan.Kind.HTTP,
+          "openapi",
+          CallPlan.Kind.OPEN_API,
+          "a2a",
+          CallPlan.Kind.A2A,
+          "mcp",
+          CallPlan.Kind.MCP,
+          CallPlan.HUMAN_TASK_FUNCTION,
+          CallPlan.Kind.HUMAN_TASK,
+          CallPlan.CORRELATED_WORKER_FUNCTION,
+          CallPlan.Kind.CORRELATED_WORKER);
+
   private static CallPlan compileCall(
       String call,
       JsonNode arguments,
@@ -878,8 +926,8 @@ public final class OpenWorkflowCompiler {
     AuthenticationPlan authentication =
         compileCallAuthentication(call, arguments, reusable, path, expressionMode);
     JsonNode safeArguments = withoutAuthentication(call, arguments);
-    return switch (call) {
-      case "asyncapi" -> {
+    return switch (CALL_VARIANT_TO_KIND.getOrDefault(call, CallPlan.Kind.FUNCTION)) {
+      case ASYNC_API -> {
         WorkflowResourceReference document =
             callResource(
                 arguments.required("document"),
@@ -901,7 +949,7 @@ public final class OpenWorkflowCompiler {
                 : null,
             authentication);
       }
-      case "grpc" -> {
+      case GRPC -> {
         WorkflowResourceReference proto =
             callResource(
                 arguments.required("proto"),
@@ -911,9 +959,9 @@ public final class OpenWorkflowCompiler {
         validateGrpcOperation(proto, arguments, resources, path);
         yield new CallPlan(CallPlan.Kind.GRPC, null, proto, safeArguments, null, authentication);
       }
-      case "http" ->
+      case HTTP ->
           new CallPlan(CallPlan.Kind.HTTP, null, null, safeArguments, null, authentication);
-      case "openapi" -> {
+      case OPEN_API -> {
         WorkflowResourceReference document =
             callResource(
                 arguments.required("document"),
@@ -925,7 +973,7 @@ public final class OpenWorkflowCompiler {
         yield new CallPlan(
             CallPlan.Kind.OPEN_API, null, document, safeArguments, null, authentication);
       }
-      case "a2a" ->
+      case A2A ->
           new CallPlan(
               CallPlan.Kind.A2A,
               null,
@@ -939,15 +987,15 @@ public final class OpenWorkflowCompiler {
               safeArguments,
               null,
               authentication);
-      case "mcp" -> {
+      case MCP -> {
         validateMcpStdioEnvironmentSecret(safeArguments, reusable, path);
         yield new CallPlan(CallPlan.Kind.MCP, null, null, safeArguments, null, authentication);
       }
-      case CallPlan.HUMAN_TASK_FUNCTION -> {
+      case HUMAN_TASK -> {
         validateHumanTaskCall(safeArguments, path + "/with");
         yield new CallPlan(CallPlan.Kind.HUMAN_TASK, null, null, safeArguments);
       }
-      case CallPlan.CORRELATED_WORKER_FUNCTION -> {
+      case CORRELATED_WORKER -> {
         validateCorrelatedWorkerCall(safeArguments, path + "/with");
         yield new CallPlan(
             CallPlan.Kind.CORRELATED_WORKER,
@@ -965,7 +1013,7 @@ public final class OpenWorkflowCompiler {
                 path + "/with/events/subscription"),
             authentication);
       }
-      default -> {
+      case FUNCTION -> {
         WorkflowResourceReference functionResource =
             CatalogFunctionReference.resolve(call, reusable.catalogs())
                 .map(
@@ -1187,14 +1235,14 @@ public final class OpenWorkflowCompiler {
       String path,
       ExpressionMode expressionMode) {
     JsonNode configured =
-        switch (call) {
-          case "asyncapi", "openapi" -> arguments.get("authentication");
-          case "grpc" -> arguments.path("service").get("authentication");
-          case "http" -> arguments.path("endpoint").get("authentication");
-          case "a2a" -> arguments.path("server").get("authentication");
-          case "mcp" ->
+        switch (CALL_VARIANT_TO_KIND.getOrDefault(call, CallPlan.Kind.FUNCTION)) {
+          case ASYNC_API, OPEN_API -> arguments.get("authentication");
+          case GRPC -> arguments.path("service").get("authentication");
+          case HTTP -> arguments.path("endpoint").get("authentication");
+          case A2A -> arguments.path("server").get("authentication");
+          case MCP ->
               arguments.path("transport").path("http").path("endpoint").get("authentication");
-          default -> null;
+          case HUMAN_TASK, CORRELATED_WORKER, FUNCTION -> null;
         };
     if (configured == null || configured.isNull()) {
       return null;
@@ -1335,19 +1383,19 @@ public final class OpenWorkflowCompiler {
 
   private static JsonNode withoutAuthentication(String call, JsonNode arguments) {
     JsonNode copy = arguments.deepCopy();
-    switch (call) {
-      case "asyncapi", "openapi" ->
+    switch (CALL_VARIANT_TO_KIND.getOrDefault(call, CallPlan.Kind.FUNCTION)) {
+      case ASYNC_API, OPEN_API ->
           ((com.fasterxml.jackson.databind.node.ObjectNode) copy).remove("authentication");
-      case "grpc" -> removeNestedAuthentication(copy, "service");
-      case "http" -> removeNestedAuthentication(copy, "endpoint");
-      case "a2a" -> removeNestedAuthentication(copy, "server");
-      case "mcp" -> {
+      case GRPC -> removeNestedAuthentication(copy, "service");
+      case HTTP -> removeNestedAuthentication(copy, "endpoint");
+      case A2A -> removeNestedAuthentication(copy, "server");
+      case MCP -> {
         JsonNode endpoint = copy.path("transport").path("http").path("endpoint");
         if (endpoint.isObject()) {
           ((com.fasterxml.jackson.databind.node.ObjectNode) endpoint).remove("authentication");
         }
       }
-      default -> {
+      case HUMAN_TASK, CORRELATED_WORKER, FUNCTION -> {
         // User-defined reusable functions do not define adapter auth.
       }
     }

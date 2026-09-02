@@ -24,13 +24,19 @@ public record CallPlan(
     AuthenticationPlan authentication) {
 
   /**
-   * Reserved legacy-compatible custom-function name for the governed human-task extension.
+   * Reserved custom-function name for the governed human-task extension.
    *
    * <p>The upstream 1.0.3 schema deliberately permits implementation-defined function names. Using
    * that standards-defined extension point keeps human work in an otherwise valid OpenWorkflow
    * document without changing or forking the upstream schema.
+   *
+   * <p>Not a "legacy-compatible" name carried over from anywhere - {@code oks} (the {@code
+   * openworkflow-kafka-streams} source repo this compiler was originally consolidated from, see
+   * {@code docs/source-provenance.md}) was never itself deployed, so there is no real document
+   * anywhere depending on that branding to keep reading. Named to match this product's own {@code
+   * com.forwardmeasure.openworkflow} package convention instead.
    */
-  public static final String HUMAN_TASK_FUNCTION = "com.forwardmeasure.oks.human-task";
+  public static final String HUMAN_TASK_FUNCTION = "com.forwardmeasure.openworkflow.human-task";
 
   /**
    * Reserved custom-function name for one durable request/progress/result lifecycle implemented
@@ -41,7 +47,7 @@ public record CallPlan(
    * independent send task and receive task.
    */
   public static final String CORRELATED_WORKER_FUNCTION =
-      "com.forwardmeasure.oks.correlated-worker";
+      "com.forwardmeasure.openworkflow.correlated-worker";
 
   public CallPlan(
       Kind kind, String functionName, WorkflowResourceReference resource, JsonNode arguments) {

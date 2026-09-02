@@ -106,7 +106,7 @@ class ExecutionManagementServiceTest {
                   version: '1.0.0'
                 do:
                   - approve:
-                      call: com.forwardmeasure.oks.human-task
+                      call: com.forwardmeasure.openworkflow.human-task
                       with:
                         title: Review extracted evidence
                         input: '${ . }'
