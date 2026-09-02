@@ -37,11 +37,13 @@ import java.util.HexFormat;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 import org.yaml.snakeyaml.LoaderOptions;
 
 /**
@@ -54,6 +56,17 @@ public final class OpenWorkflowCompiler {
   /** Exact schema bytes shipped by the pinned official SDK 7.29.0.Final. */
   public static final String SCHEMA_SHA256 =
       "e0cfa77227a9b537be7519041683508151e21dc80aa991dfbf6362dfc36b2331";
+
+  // The one DSL version this build's bundled schema (SCHEMA_RESOURCE, hash-pinned via
+  // SCHEMA_SHA256 above) and compilation logic actually target - a real spec version bump
+  // (a new SDK release, a new /schema/workflow.yaml, and whatever compileTasks changes that
+  // new version's constructs require) is real engineering work this constant doesn't do for
+  // you; it exists so that work has exactly one place to start from instead of a string to grep
+  // for. NOT the same thing as COMPILER_SHA256 below - that's a deliberately hand-authored,
+  // separately-reviewed fingerprint of this compiler's admitted semantics as a whole (dsl
+  // version included, but not driven by this constant), not a place this should be substituted
+  // into.
+  public static final String SUPPORTED_DSL_VERSION = "1.0.3";
 
   /**
    * Digest of the explicitly versioned compilation profile. Any change to admitted semantics must
@@ -156,8 +169,9 @@ public final class OpenWorkflowCompiler {
             document.required("name").textValue(),
             document.required("version").textValue(),
             document.required("dsl").textValue());
-    if (!"1.0.3".equals(coordinates.dsl())) {
-      throw new WorkflowDefinitionException(List.of("/document/dsl must be exactly 1.0.3"));
+    if (!SUPPORTED_DSL_VERSION.equals(coordinates.dsl())) {
+      throw new WorkflowDefinitionException(
+          List.of("/document/dsl must be exactly " + SUPPORTED_DSL_VERSION));
     }
     WorkflowExpressionConfiguration expressionConfiguration = expressionConfiguration(root);
     List<ResolvedWorkflowResource> resources = validatedResources(suppliedResources);
@@ -815,11 +829,33 @@ public final class OpenWorkflowCompiler {
         applyExtensions);
   }
 
+  // Every string here is a PlanStepKind's own .name() (compiler-checked - a typo or a renamed
+  // enum constant fails to compile instead of silently never matching), but the ORDER is
+  // explicit and load-bearing, not PlanStepKind's declaration order: a "for" task's own body
+  // sits under a sibling "do" key on the SAME task object (the loop's config and its body are
+  // two separate top-level fields, not one nested under the other), so "for" must be checked
+  // before "do" or a for-loop task gets silently misidentified as a plain "do" container -
+  // confirmed by two real test failures when this was first derived via
+  // Arrays.stream(PlanStepKind.values()), which happens to declare DO before FOR. CALL is
+  // intentionally checked separately below, unchanged from before this refactor.
+  private static final List<String> KNOWN_TASK_KEYWORDS =
+      Stream.of(
+              PlanStepKind.SET,
+              PlanStepKind.SWITCH,
+              PlanStepKind.FOR,
+              PlanStepKind.FORK,
+              PlanStepKind.EMIT,
+              PlanStepKind.LISTEN,
+              PlanStepKind.WAIT,
+              PlanStepKind.RAISE,
+              PlanStepKind.TRY,
+              PlanStepKind.DO,
+              PlanStepKind.RUN)
+          .map(kind -> kind.name().toLowerCase(Locale.ROOT))
+          .toList();
+
   private static String taskKeyword(JsonNode task) {
-    for (String supported :
-        List.of(
-            "set", "switch", "for", "fork", "emit", "listen", "wait", "raise", "try", "do",
-            "run")) {
+    for (String supported : KNOWN_TASK_KEYWORDS) {
       if (task.has(supported)) return supported;
     }
     if (task.has("call")) return "call";
