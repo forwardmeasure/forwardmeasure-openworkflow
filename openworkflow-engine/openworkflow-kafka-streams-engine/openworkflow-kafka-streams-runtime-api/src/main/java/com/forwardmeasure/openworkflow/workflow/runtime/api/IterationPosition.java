@@ -1,5 +1,6 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.api;
 
+import com.forwardmeasure.openworkflow.data.DataReference;
 import java.util.Objects;
 
 /** Exact, durable identity and bindings for one active {@code for} iteration. */

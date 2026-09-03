@@ -24,6 +24,7 @@
     <name>ForwardMeasure OpenWorkflow :: Operation Adapter AsyncAPI STOMP</name>
     <dependencies>
         <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-core</artifactId></dependency>
+        <dependency><groupId>jakarta.enterprise</groupId><artifactId>jakarta.enterprise.cdi-api</artifactId><scope>provided</scope></dependency>
         <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
     </dependencies>
 </project>

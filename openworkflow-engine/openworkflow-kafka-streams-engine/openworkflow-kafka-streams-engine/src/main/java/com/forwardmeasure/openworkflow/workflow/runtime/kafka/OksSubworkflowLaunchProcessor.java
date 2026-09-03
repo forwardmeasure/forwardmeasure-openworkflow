@@ -1,9 +1,9 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.forwardmeasure.openworkflow.data.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReferenceJson;
 import com.forwardmeasure.openworkflow.definition.WorkflowCoordinates;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferenceJson;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.StartExecutionCommand;

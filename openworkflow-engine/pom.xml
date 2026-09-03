@@ -27,6 +27,7 @@
   <packaging>pom</packaging>
   <name>ForwardMeasure OpenWorkflow :: Engines</name>
   <modules>
+    <module>openworkflow-identity-api</module>
     <module>openworkflow-engine-api</module>
     <module>openworkflow-engine-http</module>
     <module>openworkflow-engine-http-server</module>

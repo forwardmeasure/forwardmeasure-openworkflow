@@ -16,6 +16,9 @@ import com.forwardmeasure.durableprocessing.api.DurableDecision;
 import com.forwardmeasure.durableprocessing.api.DurableDisposition;
 import com.forwardmeasure.durableprocessing.api.DurableProcessContext;
 import com.forwardmeasure.durableprocessing.core.DurableProcessingKernel;
+import com.forwardmeasure.openworkflow.data.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReferenceJson;
+import com.forwardmeasure.openworkflow.data.DataReferences;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.definition.ResolvedWorkflowResource;
 import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
@@ -25,9 +28,6 @@ import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorType;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.AdvanceExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.BusinessCorrelationId;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ControlExecutionCommand;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferenceJson;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferences;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionControlAction;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionEventType;
@@ -2412,10 +2412,7 @@ class WorkflowExecutionEngineTest {
         assertInstanceOf(
             ActiveHumanTaskState.class, progressed.aggregate().state().pendingInteraction());
     JsonNode descriptor = humanTask.descriptor().inlineValue();
-    assertEquals(
-        artifact,
-        com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferenceJson.decode(
-            descriptor.required("inputReference")));
+    assertEquals(artifact, DataReferenceJson.decode(descriptor.required("inputReference")));
     assertEquals(WorkflowEffectType.CREATE_HUMAN_TASK, progressed.outbox().getFirst().type());
   }
 

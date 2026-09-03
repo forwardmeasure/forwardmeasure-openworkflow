@@ -1,9 +1,9 @@
 package com.forwardmeasure.openworkflow.adapter.api;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferenceJson;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferences;
+import com.forwardmeasure.openworkflow.data.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReferenceJson;
+import com.forwardmeasure.openworkflow.data.DataReferences;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey;
 import java.util.Objects;
 

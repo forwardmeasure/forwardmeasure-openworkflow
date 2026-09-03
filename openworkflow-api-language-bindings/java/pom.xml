@@ -27,5 +27,6 @@
         <module>openworkflow-common-models</module>
         <module>workflow-definition-management-service</module>
         <module>workflow-execution-management-service</module>
+        <module>human-task-management-service</module>
     </modules>
 </project>

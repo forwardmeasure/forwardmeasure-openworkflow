@@ -16,6 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.forwardmeasure.openworkflow.data.DataReference;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
 import com.forwardmeasure.openworkflow.engine.api.ActorIdentity;
@@ -24,6 +25,9 @@ import com.forwardmeasure.openworkflow.engine.api.EngineEvent;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
 import com.forwardmeasure.openworkflow.engine.api.ExecutionStatus;
 import com.forwardmeasure.openworkflow.engine.api.TenantId;
+import com.forwardmeasure.openworkflow.humantask.domain.HumanTaskDefinition.DispositionKind;
+import com.forwardmeasure.openworkflow.humantask.domain.HumanTaskId;
+import com.forwardmeasure.openworkflow.humantask.domain.HumanTaskState;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -216,6 +220,266 @@ class WorkflowEntityTest {
     assertEquals(executionId, snapshot.executionId());
     assertEquals(0, snapshot.revision());
     assertEquals(ExecutionStatus.NEW, snapshot.status());
+  }
+
+  @Test
+  void humanTaskRequestPersistsAWaitingFrameAndRecovers() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:human-task");
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    EngineEvent.HumanTaskRequested event =
+        requestHumanTask(kit, executionId, tenant, "durable-human-task");
+    assertEquals("/do/0/review", event.taskPath());
+    assertEquals(executionId.canonicalValue(), event.workflowCorrelation());
+    assertEquals("Review evidence", event.descriptor().required("title").textValue());
+    WorkflowState.Waiting waiting = assertInstanceOf(WorkflowState.Waiting.class, kit.getState());
+    assertEquals("human-task:" + event.humanTaskId(), waiting.reason());
+    assertEquals(event.nextStep(), waiting.nextStep());
+    assertEquals(1, waiting.taskStack().size());
+    assertEquals(EventExecutionFrame.Kind.HUMAN_TASK, waiting.taskStack().getLast().event().kind());
+    assertEquals(kit.getState(), kit.restart().state());
+  }
+
+  @Test
+  void successfulHumanTaskOutcomeResumesAtPersistedContinuation() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:human-task-outcome");
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    EngineEvent.HumanTaskRequested request =
+        requestHumanTask(kit, executionId, tenant, "durable-human-task-outcome");
+    var taskId = new HumanTaskId(request.humanTaskId());
+    var output = JsonNodeFactory.instance.objectNode().put("approved", true);
+    var content =
+        new DataReference(
+            DataReference.Storage.INLINE, output, null, "application/json", 17, "a".repeat(64));
+    var decision =
+        new HumanTaskState.Outcome(
+            taskId,
+            "decision-1",
+            DispositionKind.APPROVE,
+            "approve",
+            1,
+            "Evidence Review",
+            0,
+            content.sha256(),
+            content,
+            null,
+            REQUESTED_AT.plusSeconds(2));
+    var completed =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.HumanTaskOutcomeObserved(
+                    UUID.randomUUID(),
+                    new PekkoHumanTaskOutcome(
+                        "outcome-1",
+                        executionId,
+                        taskId,
+                        request.workflowCorrelation(),
+                        request.taskPath(),
+                        decision,
+                        REQUESTED_AT.plusSeconds(2)),
+                    actor(tenant, "human-task-service"),
+                    REQUESTED_AT.plusSeconds(2),
+                    replyTo));
+
+    EngineEvent.HumanTaskCompleted event =
+        assertInstanceOf(EngineEvent.HumanTaskCompleted.class, completed.events().getFirst());
+    assertEquals(request.taskPath(), event.taskPath());
+    assertEquals(request.humanTaskId(), event.humanTaskId());
+    assertEquals("outcome-1", event.outcomeId());
+    assertEquals(output, event.output());
+    WorkflowState.Running running =
+        assertInstanceOf(WorkflowState.Running.class, completed.state());
+    assertEquals(request.nextStep(), running.nextStep());
+    assertTrue(running.taskStack().isEmpty());
+    assertEquals(running, kit.restart().state());
+  }
+
+  @Test
+  void declinedHumanTaskOutcomeEntersWorkflowErrorPath() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:human-task-decline");
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    EngineEvent.HumanTaskRequested request =
+        requestHumanTask(kit, executionId, tenant, "durable-human-task-decline");
+    var taskId = new HumanTaskId(request.humanTaskId());
+    var content =
+        new DataReference(
+            DataReference.Storage.INLINE,
+            JsonNodeFactory.instance.nullNode(),
+            null,
+            "application/json",
+            0,
+            "b".repeat(64));
+    var decision =
+        new HumanTaskState.Outcome(
+            taskId,
+            "decision-1",
+            DispositionKind.DECLINE,
+            "decline",
+            1,
+            "Evidence Review",
+            0,
+            content.sha256(),
+            content,
+            null,
+            REQUESTED_AT.plusSeconds(2));
+    var declined =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.HumanTaskOutcomeObserved(
+                    UUID.randomUUID(),
+                    new PekkoHumanTaskOutcome(
+                        "outcome-1",
+                        executionId,
+                        taskId,
+                        request.workflowCorrelation(),
+                        request.taskPath(),
+                        decision,
+                        REQUESTED_AT.plusSeconds(2)),
+                    actor(tenant, "human-task-service"),
+                    REQUESTED_AT.plusSeconds(2),
+                    replyTo));
+
+    EngineEvent.ErrorRaised raised =
+        assertInstanceOf(EngineEvent.ErrorRaised.class, declined.events().getFirst());
+    assertEquals(
+        "urn:openworkflow:human-task:outcome", raised.error().required("type").textValue());
+    assertInstanceOf(EngineEvent.Failed.class, declined.events().get(1));
+    WorkflowState.Failed failed = assertInstanceOf(WorkflowState.Failed.class, declined.state());
+    assertEquals(failed, kit.restart().state());
+  }
+
+  @Test
+  void declinedHumanTaskOutcomeCanBeCaughtByWorkflow() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:human-task-catch");
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    WorkflowPlan plan = humanTaskCatchPlan();
+    kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.Start(
+                UUID.randomUUID(),
+                executionId,
+                actor(tenant, "alice"),
+                plan,
+                JsonNodeFactory.instance.objectNode(),
+                REQUESTED_AT,
+                replyTo));
+    runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(1));
+    var requested = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(2));
+    EngineEvent.HumanTaskRequested request =
+        assertInstanceOf(EngineEvent.HumanTaskRequested.class, requested.events().getFirst());
+    var taskId = new HumanTaskId(request.humanTaskId());
+    var content =
+        new DataReference(
+            DataReference.Storage.INLINE,
+            JsonNodeFactory.instance.nullNode(),
+            null,
+            "application/json",
+            0,
+            "c".repeat(64));
+    var outcome =
+        new PekkoHumanTaskOutcome(
+            "outcome-1",
+            executionId,
+            taskId,
+            request.workflowCorrelation(),
+            request.taskPath(),
+            new HumanTaskState.Outcome(
+                taskId,
+                "decision-1",
+                DispositionKind.DECLINE,
+                "decline",
+                1,
+                "Evidence Review",
+                0,
+                content.sha256(),
+                content,
+                null,
+                REQUESTED_AT.plusSeconds(3)),
+            REQUESTED_AT.plusSeconds(3));
+
+    var declined = observeHumanTaskOutcome(kit, tenant, UUID.randomUUID(), outcome);
+
+    assertInstanceOf(EngineEvent.ErrorRaised.class, declined.events().getFirst());
+    assertInstanceOf(EngineEvent.ErrorCaught.class, declined.events().get(1));
+    var catchTask = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(4));
+    assertInstanceOf(WorkflowState.Running.class, catchTask.state());
+    var completed = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(5));
+    WorkflowState.Completed terminal =
+        assertInstanceOf(WorkflowState.Completed.class, completed.state());
+    assertEquals(
+        "urn:openworkflow:human-task:outcome", terminal.data().required("caught").textValue());
+    assertEquals(terminal, kit.restart().state());
+  }
+
+  @Test
+  void duplicateHumanTaskOutcomeCommandIsAcknowledgedWithoutNewEvent() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:human-task-duplicate");
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    EngineEvent.HumanTaskRequested request =
+        requestHumanTask(kit, executionId, tenant, "durable-human-task-duplicate");
+    var taskId = new HumanTaskId(request.humanTaskId());
+    var commandId = UUID.randomUUID();
+    var output = JsonNodeFactory.instance.objectNode().put("approved", true);
+    var outcome =
+        new PekkoHumanTaskOutcome(
+            "outcome-1",
+            executionId,
+            taskId,
+            request.workflowCorrelation(),
+            request.taskPath(),
+            approvedDecision(taskId, output, REQUESTED_AT.plusSeconds(2)),
+            REQUESTED_AT.plusSeconds(2));
+
+    var completed = observeHumanTaskOutcome(kit, tenant, commandId, outcome);
+    assertInstanceOf(EngineEvent.HumanTaskCompleted.class, completed.events().getFirst());
+    var duplicate = observeHumanTaskOutcome(kit, tenant, commandId, outcome);
+
+    assertTrue(duplicate.hasNoEvents());
+    assertEquals(completed.state(), duplicate.state());
+  }
+
+  @Test
+  void lateHumanTaskOutcomeIsAcknowledgedWithoutNewEvent() {
+    var tenant =
+        com.forwardmeasure.openworkflow.actor.TestTenantIds.tenant(
+            "did:web:forwardmeasure.com:tenant:human-task-late");
+    var executionId = new ExecutionId(tenant, UUID.randomUUID());
+    var kit = testKit(executionId);
+    EngineEvent.HumanTaskRequested request =
+        requestHumanTask(kit, executionId, tenant, "durable-human-task-late");
+    var taskId = new HumanTaskId(request.humanTaskId());
+    var output = JsonNodeFactory.instance.objectNode().put("approved", true);
+    var outcome =
+        new PekkoHumanTaskOutcome(
+            "outcome-1",
+            executionId,
+            taskId,
+            request.workflowCorrelation(),
+            request.taskPath(),
+            approvedDecision(taskId, output, REQUESTED_AT.plusSeconds(2)),
+            REQUESTED_AT.plusSeconds(2));
+
+    observeHumanTaskOutcome(kit, tenant, UUID.randomUUID(), outcome);
+    var terminal = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(3));
+    assertInstanceOf(WorkflowState.Completed.class, terminal.state());
+    var late = observeHumanTaskOutcome(kit, tenant, UUID.randomUUID(), outcome);
+
+    assertTrue(late.hasNoEvents());
+    assertEquals(terminal.state(), late.state());
   }
 
   @Test
@@ -7459,6 +7723,120 @@ class WorkflowEntityTest {
         actorTestKit.system(),
         WorkflowEntity.create(executionId, false),
         EventSourcedBehaviorTestKit.enabledSerializationSettings());
+  }
+
+  private static EngineEvent.HumanTaskRequested requestHumanTask(
+      EventSourcedBehaviorTestKit<WorkflowCommand, EngineEvent, WorkflowState> kit,
+      ExecutionId executionId,
+      TenantId tenant,
+      String workflowName) {
+    var started =
+        kit.<WorkflowReply>runCommand(
+            replyTo ->
+                new WorkflowCommand.Start(
+                    UUID.randomUUID(),
+                    executionId,
+                    actor(tenant, "alice"),
+                    humanTaskPlan(workflowName),
+                    JsonNodeFactory.instance.objectNode(),
+                    REQUESTED_AT,
+                    replyTo));
+    assertInstanceOf(WorkflowReply.Accepted.class, started.reply());
+    var requested = runNext(kit, executionId, tenant, REQUESTED_AT.plusSeconds(1));
+    return assertInstanceOf(EngineEvent.HumanTaskRequested.class, requested.events().getFirst());
+  }
+
+  private static HumanTaskState.Outcome approvedDecision(
+      HumanTaskId taskId,
+      com.fasterxml.jackson.databind.node.ObjectNode output,
+      Instant occurredAt) {
+    var content =
+        new DataReference(
+            DataReference.Storage.INLINE, output, null, "application/json", 17, "a".repeat(64));
+    return new HumanTaskState.Outcome(
+        taskId,
+        "decision-1",
+        DispositionKind.APPROVE,
+        "approve",
+        1,
+        "Evidence Review",
+        0,
+        content.sha256(),
+        content,
+        null,
+        occurredAt);
+  }
+
+  private static EventSourcedBehaviorTestKit.CommandResult<
+          WorkflowCommand, EngineEvent, WorkflowState>
+      observeHumanTaskOutcome(
+          EventSourcedBehaviorTestKit<WorkflowCommand, EngineEvent, WorkflowState> kit,
+          TenantId tenant,
+          UUID commandId,
+          PekkoHumanTaskOutcome outcome) {
+    return kit.<WorkflowReply>runCommand(
+        replyTo ->
+            new WorkflowCommand.HumanTaskOutcomeObserved(
+                commandId,
+                outcome,
+                actor(tenant, "human-task-service"),
+                outcome.occurredAt(),
+                replyTo));
+  }
+
+  private static WorkflowPlan humanTaskPlan(String workflowName) {
+    return new OpenWorkflowCompiler()
+        .compile(
+            String.join(
+                    "\n",
+                    "document:",
+                    "  dsl: '1.0.3'",
+                    "  namespace: forwardmeasure",
+                    "  name: " + workflowName,
+                    "  version: '1.0.0'",
+                    "do:",
+                    "  - review:",
+                    "      call: com.forwardmeasure.openworkflow.human-task",
+                    "      with:",
+                    "        title: Review evidence",
+                    "        input:",
+                    "          account: ACCT-7",
+                    "        presentation:",
+                    "          kind: RAW_JSON",
+                    "        approvals:",
+                    "          stages:",
+                    "            - level: 1",
+                    "              name: Evidence Review",
+                    "              requiredApprovals: 1",
+                    "              candidateRoles: [evidence-reviewer]")
+                .getBytes(StandardCharsets.UTF_8));
+  }
+
+  private static WorkflowPlan humanTaskCatchPlan() {
+    var root = JsonNodeFactory.instance.objectNode();
+    var document = root.putObject("document");
+    document.put("dsl", "1.0.3");
+    document.put("namespace", "forwardmeasure");
+    document.put("name", "durable-human-task-catch");
+    document.put("version", "1.0.0");
+    var guarded = root.putArray("do").addObject().putObject("guarded");
+    var review = guarded.putArray("try").addObject().putObject("review");
+    review.put("call", "com.forwardmeasure.openworkflow.human-task");
+    var input = review.putObject("with");
+    input.put("title", "Review evidence");
+    input.putObject("input").put("account", "ACCT-7");
+    input.putObject("presentation").put("kind", "RAW_JSON");
+    var stage = input.putObject("approvals").putArray("stages").addObject();
+    stage.put("level", 1);
+    stage.put("name", "Evidence Review");
+    stage.put("requiredApprovals", 1);
+    stage.putArray("candidateRoles").add("evidence-reviewer");
+    var catchClause = guarded.putObject("catch");
+    catchClause.putObject("errors").putObject("with").put("status", 409);
+    catchClause.put("as", "problem");
+    var set = catchClause.putArray("do").addObject().putObject("record").putObject("set");
+    set.put("caught", "${ $problem.type }");
+    return new OpenWorkflowCompiler().compile(root.toString().getBytes(StandardCharsets.UTF_8));
   }
 
   private static EventSourcedBehaviorTestKit<WorkflowCommand, EngineEvent, WorkflowState>

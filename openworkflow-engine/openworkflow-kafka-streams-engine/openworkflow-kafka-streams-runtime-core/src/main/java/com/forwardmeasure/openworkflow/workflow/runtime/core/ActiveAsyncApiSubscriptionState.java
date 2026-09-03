@@ -1,6 +1,6 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.core;
 
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReference;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.List;

@@ -3,6 +3,7 @@ package com.forwardmeasure.openworkflow.workflow.runtime.api;
 /** Terminal or workflow-resuming observations produced by the governed human-task subsystem. */
 public enum HumanTaskObservationStatus {
   APPROVED,
+  RESOLVED,
   REJECTED,
   REWORK_REQUESTED,
   EXPIRED,

@@ -56,6 +56,9 @@ public final class OpenWorkflowWireSerializer extends SerializerWithStringManife
               WorkflowCommand.ProtocolCallObserved.class, "ow.command.protocol-call-observed.v1"),
           Map.entry(
               WorkflowCommand.SubworkflowCompleted.class, "ow.command.subworkflow-completed.v1"),
+          Map.entry(
+              WorkflowCommand.HumanTaskOutcomeObserved.class,
+              "ow.command.human-task-outcome-observed.v1"),
           Map.entry(WorkflowCommand.CloudEventReceived.class, "ow.command.cloud-event-received.v2"),
           Map.entry(WorkflowCommand.GetState.class, "ow.command.get-state.v1"),
           Map.entry(WorkflowCommand.GetRuntimeState.class, "ow.command.get-runtime-state.v1"),
@@ -189,6 +192,8 @@ public final class OpenWorkflowWireSerializer extends SerializerWithStringManife
           Map.entry(
               EngineEvent.CorrelatedWorkerRequested.class,
               "ow.event.correlated-worker-requested.v1"),
+          Map.entry(EngineEvent.HumanTaskRequested.class, "ow.event.human-task-requested.v1"),
+          Map.entry(EngineEvent.HumanTaskCompleted.class, "ow.event.human-task-completed.v1"),
           Map.entry(
               EngineEvent.CorrelatedWorkerCommandPublished.class,
               "ow.event.correlated-worker-command-published.v1"),

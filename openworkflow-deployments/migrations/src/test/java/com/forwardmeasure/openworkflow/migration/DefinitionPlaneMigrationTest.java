@@ -47,6 +47,12 @@ class DefinitionPlaneMigrationTest {
 
     List<String> expected =
         List.of(
+            "human_task",
+            "human_task_command_receipt",
+            "human_task_content_revision",
+            "human_task_event",
+            "human_task_outbox",
+            "human_task_review_session",
             "openworkflow_event_subscription",
             "pekko_projection_management",
             "pekko_projection_offset_store",
@@ -62,8 +68,8 @@ class DefinitionPlaneMigrationTest {
             "workflow_review");
     assertEquals(expected, applicationTables(database, TenantSchema.forTenant(TENANT_A).value()));
     assertEquals(expected, applicationTables(database, TenantSchema.forTenant(TENANT_B).value()));
-    assertEquals(23, changeSetCount(database, TenantSchema.forTenant(TENANT_A).value()));
-    assertEquals(23, changeSetCount(database, TenantSchema.forTenant(TENANT_B).value()));
+    assertEquals(25, changeSetCount(database, TenantSchema.forTenant(TENANT_A).value()));
+    assertEquals(25, changeSetCount(database, TenantSchema.forTenant(TENANT_B).value()));
     // openworkflow-170 unconditionally aligns every definition-plane sequence to the next
     // 50-boundary, even on a fresh schema - matches incrementBy=50 on these sequences, which
     // matches allocationSize=50 on each entity's @SequenceGenerator.
@@ -79,7 +85,8 @@ class DefinitionPlaneMigrationTest {
                 "select table_name from information_schema.tables where table_schema = ? and"
                     + " (table_name = 'openworkflow_event_subscription' or table_name = 'workflow'"
                     + " or table_name like 'workflow\\_%' escape '\\' or"
-                    + " table_name like 'pekko_projection_%') order by table_name")) {
+                    + " table_name like 'pekko_projection_%' or table_name = 'human_task' or"
+                    + " table_name like 'human_task\\_%' escape '\\') order by table_name")) {
       statement.setString(1, schema);
       try (var result = statement.executeQuery()) {
         var tables = new java.util.ArrayList<String>();

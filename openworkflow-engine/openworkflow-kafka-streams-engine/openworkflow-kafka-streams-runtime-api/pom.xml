@@ -16,6 +16,14 @@
     <dependencies>
         <dependency>
             <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-identity-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
+            <artifactId>openworkflow-data</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.forwardmeasure.openworkflow</groupId>
             <artifactId>openworkflow-definition</artifactId>
         </dependency>
         <dependency>

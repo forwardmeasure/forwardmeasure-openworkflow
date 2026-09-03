@@ -41,6 +41,7 @@ final class MilestoneOneProgram {
           ExitListen,
           ExecuteSubworkflow,
           ExecuteHttpCall,
+          ExecuteHumanTask,
           ExecuteProtocolCall,
           ExitProtocolCall,
           ExecuteCorrelatedWorkerCall,
@@ -86,6 +87,8 @@ final class MilestoneOneProgram {
   record ExecuteSubworkflow(PlanStep step, int next) implements Instruction {}
 
   record ExecuteHttpCall(PlanStep step, int next) implements Instruction {}
+
+  record ExecuteHumanTask(PlanStep step, int next) implements Instruction {}
 
   record ExecuteProtocolCall(PlanStep step, int next, int after) implements Instruction {}
 
@@ -148,6 +151,7 @@ final class MilestoneOneProgram {
               && !(lane instanceof ExecuteListen)
               && !(lane instanceof ExecuteSubworkflow)
               && !(lane instanceof ExecuteHttpCall)
+              && !(lane instanceof ExecuteHumanTask)
               && !(lane instanceof ExecuteProtocolCall)
               && !(lane instanceof ExitProtocolCall)
               && !(lane instanceof EnterFunction)
@@ -305,12 +309,18 @@ final class MilestoneOneProgram {
             && step.callPlan().kind()
                 != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.MCP
             && step.callPlan().kind()
+                != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.HUMAN_TASK
+            && step.callPlan().kind()
                 != com.forwardmeasure.openworkflow.definition.CallPlan.Kind.CORRELATED_WORKER) {
           throw new IllegalArgumentException(
               "The current function increment supports only reusable function calls at "
                   + step.path());
         }
         if (step.callPlan().kind()
+            == com.forwardmeasure.openworkflow.definition.CallPlan.Kind.HUMAN_TASK) {
+          output.add(new MutableHumanTask(step));
+          members.add(new Member(step, entry, entry));
+        } else if (step.callPlan().kind()
             == com.forwardmeasure.openworkflow.definition.CallPlan.Kind.CORRELATED_WORKER) {
           output.add(new MutableCorrelatedWorkerCall(step));
           members.add(new Member(step, entry, entry));
@@ -701,6 +711,17 @@ final class MilestoneOneProgram {
     @Override
     Instruction resolve(int end) {
       return new ExecuteHttpCall(step, resolvedNext(end));
+    }
+  }
+
+  private static final class MutableHumanTask extends MutableInstruction {
+    MutableHumanTask(PlanStep step) {
+      super(step);
+    }
+
+    @Override
+    Instruction resolve(int end) {
+      return new ExecuteHumanTask(step, resolvedNext(end));
     }
   }
 

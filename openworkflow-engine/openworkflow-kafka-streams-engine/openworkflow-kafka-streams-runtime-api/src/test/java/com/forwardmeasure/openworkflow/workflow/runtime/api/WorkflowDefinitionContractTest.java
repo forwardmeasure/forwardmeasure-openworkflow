@@ -6,6 +6,8 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.forwardmeasure.openworkflow.data.DataReferences;
+import com.forwardmeasure.openworkflow.data.RuntimeDataLimitException;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.definition.ResolvedWorkflowResource;
 import com.forwardmeasure.openworkflow.definition.WorkflowCoordinates;

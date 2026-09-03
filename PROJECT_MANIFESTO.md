@@ -1,8 +1,9 @@
 # ForwardMeasure OpenWorkflow Project Manifesto
 
 **Project:** `forwardmeasure-openworkflow`  
-**Status:** Proposed for product-owner approval  
+**Status:** Approved architectural authority<br>
 **Created:** 2026-08-17T12:53:58-04:00  
+**Last amended:** 2026-09-01 — human-task management confirmed as a committed capability<br>
 **Specification:** Open Workflow `1.0.3`, pinned  
 **Java SDK:** `io.serverlessworkflow` `7.29.0.Final`, pinned  
 **Persistence foundation:** `forwardmeasure-jpa` `1.0.0`  
@@ -45,7 +46,8 @@ The resulting product will provide:
 8. portable application and transport implementations;
 9. equivalent Quarkus, Spring Boot, and Micronaut distributions;
 10. one Maven-built Studio application with three thin framework hosts; and
-11. Maven-built images and Helm/Helmfile/Kustomize Kubernetes deployment.
+11. governed, durable human-task management integrated with both engines; and
+12. Maven-built images and Helm/Helmfile/Kustomize Kubernetes deployment.
 
 This is a consolidation program, not permission to invent a third workflow
 engine or a second persistence/security/framework foundation.
@@ -65,6 +67,9 @@ It requires:
 - fail-closed AuthZEN decisions for every protected operation;
 - maker-checker governance for definition approval/publication;
 - durable start, pause, resume, and cancel semantics;
+- durable human-task creation, assignment, claiming, multi-stage decision,
+  rework, expiry, cancellation, recovery, query, and workflow resumption from
+  both engines;
 - real infrastructure and process-level disruption evidence;
 - official CTK/example coverage plus ForwardMeasure conformance fixtures;
 - serialization and upgrade compatibility;
@@ -95,6 +100,7 @@ The following capabilities exist exactly once:
 - execution admission and engine selection;
 - canonical execution/query model;
 - audit model;
+- human-task model, lifecycle, management API, query model, and presentation;
 - Studio; and
 - deployment model.
 
@@ -383,7 +389,7 @@ The initial public API families are:
 - workflow execution management/control;
 - workflow execution query/history;
 - workflow event ingress where required by the specification;
-- human task management where adopted; and
+- human task management; and
 - operational health/readiness endpoints that do not leak framework-specific
   models.
 
@@ -621,6 +627,50 @@ architectural role rather than the host framework. Configuration property
 names remain common across hosts wherever the frameworks permit it, and all
 checked-in application configuration uses YAML.
 
+### 3.17 Human-task management is a committed product capability
+
+Human-task management is a first-class ForwardMeasure extension to the pinned
+Open Workflow `1.0.3` product. It is not optional future scope and is required
+before Milestone 4 or 100-percent completion may be claimed.
+
+The capability exists exactly once in the common product plane. It owns:
+
+- the contract-first human-task management API and generated Java,
+  TypeScript, and Python bindings;
+- the portable task aggregate, application services, query model, audit model,
+  and presentation contract;
+- tenant-scoped persistence, optimistic concurrency, idempotent commands, and
+  durable task history;
+- assignment, claim, release, delegation, approval, rejection, rework,
+  reopening, escalation, expiry, and cancellation semantics;
+- multi-stage approval policy and actor/role eligibility;
+- AuthZEN resources/actions and fail-closed authorization; and
+- Studio work queues, task detail, history, actionable controls, and approved
+  presentation extensions such as A2UI.
+
+The durable lifecycle includes `OPEN`, `ASSIGNED`, `CLAIMED`, `APPROVED`,
+`REJECTED`, `REWORK_REQUESTED`, `EXPIRED`, and `CANCELLED`. Exact transition
+rules belong to the shared human-task domain contract, not to either workflow
+engine or a framework host.
+
+Both Kafka Streams and Pekko integrate through the same engine-neutral
+human-task ports. A workflow persists its human-task effect intent before task
+creation is dispatched. Task creation and terminal/rework observations are
+idempotently correlated to the originating execution and branch. Pause,
+resume, cancellation, retry, late observations, engine restart, and task
+service restart cannot lose a task, repeat a completed decision, or resurrect
+a cancelled workflow.
+
+Human-task management is an independently deployable and scalable capability.
+Quarkus, Spring Boot, and Micronaut host the same portable implementation and
+contract; a platform installation deploys only the selected framework image.
+The workflow-engine images do not absorb the task-management API, persistence,
+or user work queue.
+
+The approved implementation design, state machine, lease semantics, API shape,
+and Studio experience are specified in
+[`docs/human-task-design.md`](docs/human-task-design.md).
+
 ## 4. Common relational product model
 
 Each tenant schema contains common application-owned tables for:
@@ -632,6 +682,7 @@ Each tenant schema contains common application-owned tables for:
 - publications and deprecation;
 - canonical execution identity and selected engine;
 - canonical execution state/history projections;
+- human-task current state, assignment, decisions, and immutable history;
 - idempotent command receipts; and
 - authorization/audit correlation.
 
@@ -755,6 +806,8 @@ Contract suites establish:
 - PostgreSQL/Cassandra Pekko recovery parity;
 - Kafka restart/rebalance behavior;
 - pause/resume/cancel under process disruption;
+- human-task lifecycle, authorization, multi-stage decisions, workflow
+  correlation, restart recovery, and cross-engine parity;
 - AuthZEN active-Organization isolation; and
 - Kubernetes definition-to-execution journeys.
 
@@ -777,11 +830,14 @@ executions through one Studio webapp and all three Studio hosts.
 Start, pause, resume, and cancel through common APIs and Studio with durable,
 recoverable, equivalent behavior from both engines.
 
-### Milestone 4 — Complete Open Workflow `1.0.3`
+### Milestone 4 — Complete Open Workflow `1.0.3` and committed extensions
 
 Complete every `1.0.3` semantic capability, adapter, conformance fixture,
 recovery path, query representation, API/framework binding, and Studio view;
-pass the complete acceptance matrix; and establish 100 percent.
+complete the committed human-task capability through both engines, all three
+framework hosts, its management API, persistence, authorization, query, and
+Studio journeys; pass the complete acceptance matrix; and establish 100
+percent.
 
 ## 9. Prohibited shortcuts
 
@@ -798,6 +854,9 @@ The implementation must not:
   contracts;
 - implement only one framework and label the portable modules complete;
 - implement only one engine and call the unified milestone complete;
+- omit human-task management, leave it unreachable behind engine capability
+  rejection, or mark it implemented from compiler/internal-state evidence
+  alone;
 - share engine-native persistence under a misleading common abstraction;
 - write a generic custom FSM beside Pekko;
 - authorize from merged top-level Keycloak roles;
@@ -816,6 +875,6 @@ begin without reconstructing decisions from conversation history.
 Routine implementation choices that comply with these laws proceed without
 additional approval. A material change to the pinned specification, engines,
 persistence profiles, tenancy, `forwardmeasure-jpa` boundary, API-generation
-model, framework parity, AuthZEN, maker-checker, deployment ownership, or
-milestone acceptance contract requires an amendment before code silently
-diverges.
+model, framework parity, AuthZEN, maker-checker, deployment ownership,
+human-task capability, or milestone acceptance contract requires an amendment
+before code silently diverges.

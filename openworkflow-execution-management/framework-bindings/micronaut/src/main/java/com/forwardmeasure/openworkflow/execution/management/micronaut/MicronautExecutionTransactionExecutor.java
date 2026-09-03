@@ -10,6 +10,7 @@
  */
 package com.forwardmeasure.openworkflow.execution.management.micronaut;
 
+import com.forwardmeasure.openworkflow.binding.micronaut.MicronautTenantScopedExecution;
 import com.forwardmeasure.openworkflow.execution.management.ExecutionTransactionExecutor;
 import io.micronaut.transaction.TransactionOperations;
 import jakarta.inject.Singleton;
@@ -17,18 +18,27 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import org.hibernate.Session;
 
-/** Programmatic transaction boundary via Micronaut's own transaction API - no AOP interceptor. */
+/**
+ * Programmatic transaction boundary via Micronaut's own transaction API - no AOP interceptor. Opens
+ * the tenant scope around the transaction (not via an HTTP filter - see {@link
+ * MicronautTenantScopedExecution}'s javadoc for why that isn't safe on Micronaut) - a real,
+ * previously-missing fix, confirmed by full-tree grep that no {@code TenantScope} was ever opened
+ * on this framework at all before this.
+ */
 @Singleton
 public class MicronautExecutionTransactionExecutor implements ExecutionTransactionExecutor {
   private final TransactionOperations<Session> transactions;
+  private final MicronautTenantScopedExecution tenantScoped;
 
-  public MicronautExecutionTransactionExecutor(TransactionOperations<Session> transactions) {
+  public MicronautExecutionTransactionExecutor(
+      TransactionOperations<Session> transactions, MicronautTenantScopedExecution tenantScoped) {
     this.transactions = Objects.requireNonNull(transactions, "transactions");
+    this.tenantScoped = Objects.requireNonNull(tenantScoped, "tenantScoped");
   }
 
   @Override
   public <T> T execute(Supplier<T> work) {
     Objects.requireNonNull(work, "work");
-    return transactions.executeWrite(status -> work.get());
+    return tenantScoped.call(() -> transactions.executeWrite(status -> work.get()));
   }
 }

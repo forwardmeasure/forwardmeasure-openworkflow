@@ -13,6 +13,7 @@ package com.forwardmeasure.openworkflow.definition;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -158,6 +159,10 @@ class OpenWorkflowCompilerTest {
     PlanStep step = plan.steps().getFirst();
     assertEquals(PlanStepKind.CALL, step.kind());
     assertEquals(CallPlan.Kind.HUMAN_TASK, step.callPlan().kind());
+    assertNotNull(step.callPlan().humanTask());
+    assertEquals("Review extracted evidence", step.callPlan().humanTask().title().textValue());
+    assertEquals("PT4H", step.callPlan().humanTask().dueAfter().textValue());
+    assertEquals(step.callPlan().arguments(), step.callPlan().humanTask().arguments());
     assertTrue(step.children().isEmpty());
     assertEquals(
         "Review extracted evidence", step.callPlan().arguments().required("title").textValue());

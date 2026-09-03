@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.forwardmeasure.openworkflow.data.DataReferences;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorContext;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorId;
@@ -15,7 +16,6 @@ import com.forwardmeasure.openworkflow.workflow.runtime.api.Actors;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.AdvanceExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.BusinessCorrelationId;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ControlExecutionCommand;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferences;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionControlAction;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionEventType;

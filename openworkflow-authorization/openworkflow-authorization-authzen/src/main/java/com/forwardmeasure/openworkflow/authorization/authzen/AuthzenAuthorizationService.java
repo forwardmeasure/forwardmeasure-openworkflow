@@ -179,7 +179,7 @@ public final class AuthzenAuthorizationService implements AuthorizationService {
             "id", request.resource().id(),
             "properties", Map.copyOf(resourceProperties)),
         "action",
-        Map.of("name", request.action().scope()),
+        Map.of("name", request.resolvedActionScope()),
         "context",
         Map.copyOf(context));
   }

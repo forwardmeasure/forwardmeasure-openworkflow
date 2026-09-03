@@ -1,5 +1,6 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.api;
 
+import com.forwardmeasure.openworkflow.data.DataReference;
 import com.forwardmeasure.openworkflow.definition.SchemaViolation;
 import java.util.List;
 import java.util.Objects;

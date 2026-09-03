@@ -62,6 +62,11 @@ public record AuthorizationResource(String type, String id, Map<String, Object> 
         "openworkflow-schedule", "schedules", Map.of("schedule_id", requireText(id, "id")));
   }
 
+  public static AuthorizationResource humanTask(String id) {
+    return new AuthorizationResource(
+        "openworkflow-human-task", "human-tasks", Map.of("task_id", requireText(id, "id")));
+  }
+
   private static String requireText(String value, String name) {
     if (value == null || value.isBlank()) {
       throw new IllegalArgumentException(name + " must not be blank");

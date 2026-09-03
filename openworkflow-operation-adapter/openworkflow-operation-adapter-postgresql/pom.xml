@@ -23,6 +23,7 @@
   <name>ForwardMeasure OpenWorkflow :: PostgreSQL Operation Outbox</name>
   <dependencies>
     <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-core</artifactId></dependency>
+    <dependency><groupId>jakarta.enterprise</groupId><artifactId>jakarta.enterprise.cdi-api</artifactId><scope>provided</scope></dependency>
     <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-projection-jdbc_${scala.binary.version}</artifactId></dependency>
     <dependency><groupId>org.apache.pekko</groupId><artifactId>pekko-persistence-jdbc_${scala.binary.version}</artifactId></dependency>
   </dependencies>

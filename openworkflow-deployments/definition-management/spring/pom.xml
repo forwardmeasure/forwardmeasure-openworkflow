@@ -44,6 +44,23 @@
       <groupId>com.forwardmeasure.jpa</groupId>
       <artifactId>forwardmeasure-jpa-locking</artifactId>
     </dependency>
+    <!--
+    openworkflow-spring-binding's own forwardmeasure-jpa-spring dependency deliberately excludes
+    forwardmeasure-jpa-async-task (and forwardmeasure-jpa-locking, re-added above), so this leaf
+    must re-add it - confirmed missing the hard way, discovered by this module's first-ever full
+    @SpringBootTest (AuthorizationSmokeSpringTest): without it, ANY Spring context refresh in this
+    leaf (test or production) fails at boot with NoClassDefFoundError on
+    com.forwardmeasure.jpa.asynctask.repository.AsyncTaskRepository - Spring's
+    @ConditionalOnMissingBean evaluation for ForwardMeasureJpaAutoConfiguration.forwardMeasureTenantScope
+    reflectively introspects every bean method on that auto-configuration class, including an
+    unrelated one that references AsyncTaskRepository, so the whole class fails to load regardless
+    of whether tenant-scope or async-task capability is actually used. The Micronaut sibling leaf
+    already carries this same dependency for the same underlying reason.
+    -->
+    <dependency>
+      <groupId>com.forwardmeasure.jpa</groupId>
+      <artifactId>forwardmeasure-jpa-async-task</artifactId>
+    </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-spring-binding</artifactId>
@@ -73,6 +90,45 @@
           <artifactId>jakarta.el-api</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-authorization-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+    A full @SpringBootTest here boots the real production wiring, including every JPA-backed
+    resource OpenWorkflowDefinitionManagementSpringBinding registers - not just
+    AuthorizationSmokeResource, which has no persistence dependency of its own. Unlike Quarkus
+    (which tolerates an unreachable datasource at boot and only fails lazily on first use), Spring
+    Boot's HibernateJpaConfiguration eagerly builds the EntityManagerFactory during context
+    refresh, which needs a real reachable connection to resolve the Hibernate dialect via JDBC
+    metadata - confirmed missing the hard way ("Unable to determine Dialect without JDBC
+    metadata") against the checked-in application.yaml's unreachable localhost:5432 default. A
+    real, disposable Postgres testcontainer is a lighter, more honest fix than faking
+    hibernate.dialect as a property: ddl-auto is none, so no schema/tables are needed for boot to
+    succeed - the container only has to be reachable.
+    -->
+    <dependency>
+      <groupId>com.forwardmeasure.testcontainers</groupId>
+      <artifactId>forwardmeasure-testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+    This leaf previously had no JUnit5/Spring Boot test infrastructure at all (its only test class
+    before AuthorizationSmokeSpringTest was none). spring-boot-starter-test is what actually
+    supplies junit-jupiter, spring-boot-test (@SpringBootTest, @DynamicPropertySource,
+    @LocalServerPort, @TestConfiguration), confirmed missing the hard way: test-compile failed with
+    "package org.junit.jupiter.api does not exist" until this was added. See the sibling
+    openworkflow-operation-adapter-spring module's identical dependency for the
+    jsonassert/org.json duplicate-finder collision this module doesn't need to worry about (that
+    collision is specific to modules pulling in com.ibm.mq via openworkflow-operation-adapter-kafka,
+    which this module does not depend on).
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
   <build>

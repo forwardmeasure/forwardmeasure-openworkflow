@@ -4,13 +4,13 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.forwardmeasure.openworkflow.data.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReferences;
 import com.forwardmeasure.openworkflow.definition.PlanStepKind;
 import com.forwardmeasure.openworkflow.definition.WorkflowCoordinates;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorContext;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorId;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorType;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferences;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionEventType;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionHistoryEvent;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey;

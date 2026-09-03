@@ -48,10 +48,37 @@
       <groupId>com.forwardmeasure.jpa</groupId>
       <artifactId>forwardmeasure-jpa-async-task</artifactId>
     </dependency>
+    <!--
+    openworkflow-micronaut-binding declares org.glassfish.jersey.core:jersey-common directly
+    (presumably only for its bundled jakarta.ws.rs-api types, already separately available via
+    micronaut-jaxrs-common/-server). jersey-common ALSO bundles its own
+    META-INF/services/jakarta.ws.rs.ext.RuntimeDelegate registration
+    (org.glassfish.jersey.internal.RuntimeDelegateImpl), which wins jakarta.ws.rs's
+    ServiceLoader-based RuntimeDelegate.getInstance() lookup over micronaut-jaxrs-common's own
+    io.micronaut.jaxrs.common.MicronautRuntimeDelegate (ServiceLoader discovery is checked before
+    the jakarta.ws.rs.ext.RuntimeDelegate system property, so that property cannot override it).
+    Confirmed the hard way, building AuthorizationSmokeMicronautTest: with jersey-common present,
+    EVERY jakarta.ws.rs.core.Response built anywhere in this leaf - explicitly by resource code, or
+    implicitly by micronaut-jaxrs-server's own dispatch machinery - comes back as Jersey's
+    OutboundJaxrsResponse, which micronaut-jaxrs-server cannot cast to its own JaxRsMutableResponse
+    or serialize as JSON, failing every single JAX-RS response in this leaf with HTTP 500
+    regardless of what the resource method returns. This is a real, pre-existing classpath defect
+    in openworkflow-micronaut-binding itself (out of this testkit's scope to fix at the source, and
+    likely present in every other Micronaut deployment leaf that pulls it in too) - excluded here
+    at the leaf level since nothing in this leaf's own or its dependencies' JAX-RS code needs
+    Jersey's actual implementation classes, only the API types jakarta.ws.rs-api already supplies
+    via micronaut-jaxrs-common/-server.
+    -->
     <dependency>
       <groupId>${project.groupId}</groupId>
       <artifactId>openworkflow-micronaut-binding</artifactId>
       <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>org.glassfish.jersey.core</groupId>
+          <artifactId>jersey-common</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>${project.groupId}</groupId>
@@ -95,6 +122,43 @@
       <artifactId>junit-jupiter</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-authorization-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+    This leaf's only prior test (OrmEntityMappingConsistencyTest) needed no live Micronaut context,
+    so micronaut-test-junit5 - which actually supplies @MicronautTest/TestPropertyProvider and their
+    annotation processing - was never declared here. Confirmed missing the hard way: without it,
+    test-compile fails with "The argument does not represent an annotation type: MicronautTest"
+    rather than a plain unresolved-symbol error. See openworkflow-deployments/studio/micronaut's
+    identical dependency for precedent.
+    -->
+    <dependency>
+      <groupId>io.micronaut.test</groupId>
+      <artifactId>micronaut-test-junit5</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.micronaut</groupId>
+      <artifactId>micronaut-http-client</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+    A full @MicronautTest here boots the real production wiring, including the Hibernate
+    SessionFactory ForwardMeasureJpaFactory.tenantConnectionProvider needs - a @Context (eager)
+    singleton, unlike Quarkus's lazy Hibernate ORM. Confirmed missing the hard way: without a real
+    reachable database, context startup fails immediately with a HikariPool connection-refused
+    error against the checked-in application.yaml's unreachable localhost:5432 default, before this
+    test's own two @Test methods ever run. See the same fix on the Spring sibling leaf's pom.xml
+    for the identical underlying reason (there via HibernateJpaConfiguration instead).
+    -->
+    <dependency>
+      <groupId>com.forwardmeasure.testcontainers</groupId>
+      <artifactId>forwardmeasure-testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
@@ -109,6 +173,49 @@
             </path>
           </annotationProcessorPaths>
         </configuration>
+        <!--
+        The bare <configuration> above only reaches default-compile. Confirmed via
+        openworkflow-deployments/studio/micronaut/pom.xml: default-testCompile does not inherit it,
+        so the new AuthorizationSmokeMicronautTest's test-sourced @Singleton
+        AuthorizationSmokeResource would silently get zero Micronaut annotation processing (no
+        BeanDefinition generated) without this explicit repeat.
+
+        io.micronaut.jaxrs:micronaut-jaxrs-processor is ALSO required here, separately from
+        micronaut-inject-java - confirmed the hard way: without it, AuthorizationSmokeResource's
+        @Singleton bean compiled and was fully injectable, but its JAX-RS @Path/@GET annotations
+        never became an actual Micronaut route (runtime log: "No matching route: GET
+        /internal/v1/smoke/active-organization"), because micronaut-jaxrs-processor registers a
+        io.micronaut.inject.visitor.TypeElementVisitor (see its META-INF/services entry) - a
+        Micronaut compile-time visitor extension discovered from the SAME isolated annotation
+        processor classpath micronaut-inject-java's own Processor scans, not from the ordinary
+        compile classpath, so it silently never runs unless listed here explicitly too.
+
+        io.micronaut.serde:micronaut-serde-processor is needed because AuthorizationSmokeResource
+        introduces a fresh @Serdeable record (ActiveOrganizationView) of its own - unlike this
+        leaf's existing production DTOs, which only reuse already-serde-processed generated
+        OpenAPI model types and therefore never needed this leaf to declare the processor itself.
+        -->
+        <executions>
+          <execution>
+            <id>default-testCompile</id>
+            <configuration>
+              <annotationProcessorPaths>
+                <path>
+                  <groupId>io.micronaut</groupId>
+                  <artifactId>micronaut-inject-java</artifactId>
+                </path>
+                <path>
+                  <groupId>io.micronaut.jaxrs</groupId>
+                  <artifactId>micronaut-jaxrs-processor</artifactId>
+                </path>
+                <path>
+                  <groupId>io.micronaut.serde</groupId>
+                  <artifactId>micronaut-serde-processor</artifactId>
+                </path>
+              </annotationProcessorPaths>
+            </configuration>
+          </execution>
+        </executions>
       </plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

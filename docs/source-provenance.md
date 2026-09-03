@@ -46,8 +46,8 @@ substantive changes, and passing focused test to the adoption log at the end of 
 | `oks-run/**` | Refactor | Later WP8 run semantics behind common plan/engine contracts. | Run adapter tests. |
 | `oks-identity-spi/**` | Discard | Trusted Keycloak Organization tenant/actor context replaces the duplicate identity model. | Tests inform negative-context cases only. |
 | `oks-security-spi/**` | Discard | Mandatory Keycloak AuthZEN adapter; no embedded RBAC or fallback. | Action vocabulary may inform WP2 policy tests. |
-| `oks-human-task/oks-human-task-api/**` | Refactor | Later normative/adopted human-task common contract. | API fixtures. |
-| `oks-human-task/oks-human-task-core/**` | Refactor | Later portable human-task application behavior. | Core unit tests. |
+| `oks-human-task/oks-human-task-api/**` | Refactor | `openworkflow-human-task/openworkflow-human-task-domain`; retain identifiers, ordered review-policy concepts, outcomes, and presentation requirements while replacing the legacy generic action command and Kafka/runtime types with explicit commands, sealed states, and immutable events. | New state-machine legality, lease, revision, multi-stage, rework, expiry, and replay fixtures. |
+| `oks-human-task/oks-human-task-core/**` | Refactor | `openworkflow-human-task/openworkflow-human-task-domain`; retain pure decision/replay intent while replacing role-based authorization and the Kafka durable-processing contract with an engine/framework-neutral aggregate. | `HumanTaskStateMachineTest`; further exhaustive serialization fixtures remain required. |
 | `oks-human-task/oks-human-task-kafka-streams/**` | Refactor | Kafka-specific human-task adapter only. | Kafka behavior tests. |
 | `oks-human-task/oks-human-task-management/**` | Refactor | One later contract-first API and portable application/JAX-RS adapter. | Application, JAX-RS, Kafka, and generated-client tests. |
 | `oks-human-task/oks-human-task-presentation/**` | Refactor | One shared Studio webapp. | Presentation tests. |

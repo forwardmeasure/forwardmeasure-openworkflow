@@ -1,0 +1,628 @@
+openapi: 3.1.0
+info:
+  title: ForwardMeasure OpenWorkflow Human Task Management API
+  version: 1.0.0
+  description: |
+    Tenant-scoped Human-in-the-Loop work queue, review sessions, immutable
+    correction revisions, decisions, and administrative lifecycle operations.
+
+    Tenant and actor identity come only from the authenticated security context.
+    Every mutation is optimistic, idempotent, and audited.
+  license:
+    name: Apache License, Version 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.txt
+servers:
+  - url: /
+security:
+  - BearerAuth: []
+tags:
+  - name: HumanTasks
+  - name: HumanTaskReviews
+  - name: HumanTaskAdministration
+paths:
+  /v1/human-tasks:
+    get:
+      tags: [HumanTasks]
+      operationId: listHumanTasks
+      summary: List Human Tasks visible to the authenticated actor
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/HumanTaskStatus' }
+          style: form
+          explode: false
+        - { name: taskType, in: query, schema: { type: string } }
+        - { name: assignment, in: query, schema: { type: string } }
+        - { name: reviewer, in: query, schema: { type: string } }
+        - { name: overdue, in: query, schema: { type: boolean } }
+        - { name: cursor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+        - { name: sort, in: query, schema: { type: string, default: receivedAt } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc], default: asc } }
+      responses:
+        '200':
+          description: Authorized Human Task page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HumanTaskPage' }
+        '400': { $ref: './common-definitions.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [HumanTasks]
+      operationId: getHumanTask
+      summary: Retrieve the canonical Human Task
+      responses:
+        '200':
+          description: Canonical Human Task
+          headers:
+            ETag: { $ref: './common-definitions.yaml#/components/headers/ETag' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HumanTask' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/history:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [HumanTasks]
+      operationId: getHumanTaskHistory
+      summary: Retrieve ordered immutable Human Task history
+      parameters:
+        - { name: afterSequence, in: query, schema: { type: integer, format: int64, minimum: -1, default: -1 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 500, default: 100 } }
+      responses:
+        '200':
+          description: Ordered history page
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HumanTaskHistoryPage' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/revisions:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [HumanTasks]
+      operationId: listHumanTaskRevisions
+      summary: List immutable content revisions
+      responses:
+        '200':
+          description: Content revisions in ascending revision order
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/HumanTaskContentRevision' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/presentation:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    get:
+      tags: [HumanTasks]
+      operationId: getHumanTaskPresentation
+      summary: Retrieve the validated immutable presentation descriptor
+      responses:
+        '200':
+          description: Presentation descriptor
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HumanTaskPresentation' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/review-sessions:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [HumanTaskReviews]
+      operationId: beginHumanTaskReview
+      summary: Acquire an exclusive finite review lease
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BeginReviewRequest' }
+      responses:
+        '201':
+          description: Review session acquired; the token is returned only in this response
+          headers:
+            Location: { $ref: './common-definitions.yaml#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewSession' }
+        '400': { $ref: './common-definitions.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/review-sessions/{reviewSessionId}/lease:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/ReviewSessionId'
+    put:
+      tags: [HumanTaskReviews]
+      operationId: renewHumanTaskReviewLease
+      summary: Renew the active review lease
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ReviewToken'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RenewLeaseRequest' }
+      responses:
+        '200':
+          description: Renewed review session
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ReviewSession' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/review-sessions/{reviewSessionId}/revisions:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/ReviewSessionId'
+    post:
+      tags: [HumanTaskReviews]
+      operationId: saveHumanTaskRevision
+      summary: Append an immutable corrected-content revision
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ReviewToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SaveRevisionRequest' }
+      responses:
+        '201':
+          description: Immutable revision appended
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HumanTaskContentRevision' }
+        '400': { $ref: './common-definitions.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/review-sessions/{reviewSessionId}/comments:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/ReviewSessionId'
+    post:
+      tags: [HumanTaskReviews]
+      operationId: addHumanTaskComment
+      summary: Append an immutable reviewer comment
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ReviewToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CommentRequest' }
+      responses:
+        '204': { description: Comment appended }
+        '400': { $ref: './common-definitions.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/review-sessions/{reviewSessionId}/release:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/ReviewSessionId'
+    post:
+      tags: [HumanTaskReviews]
+      operationId: releaseHumanTaskReview
+      summary: Release the task without deciding it
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ReviewToken'
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '204': { description: Review lease released }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/review-sessions/{reviewSessionId}/decision:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+      - $ref: '#/components/parameters/ReviewSessionId'
+    post:
+      tags: [HumanTaskReviews]
+      operationId: submitHumanTaskDecision
+      summary: Submit an immutable configured decision
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/ReviewToken'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DecisionRequest' }
+      responses:
+        '200':
+          description: Decision recorded and transition completed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/HumanTask' }
+        '400': { $ref: './common-definitions.yaml#/components/responses/BadRequest' }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '422': { $ref: './common-definitions.yaml#/components/responses/UnprocessableEntity' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/assignment:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    put:
+      tags: [HumanTaskAdministration]
+      operationId: assignHumanTask
+      summary: Assign an available task
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AssignmentRequest' }
+      responses:
+        '200': { description: Task assigned, content: { application/json: { schema: { $ref: '#/components/schemas/HumanTask' } } } }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+    delete:
+      tags: [HumanTaskAdministration]
+      operationId: unassignHumanTask
+      summary: Remove a durable task assignment
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '204': { description: Task unassigned }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/reassignment:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [HumanTaskAdministration]
+      operationId: reassignHumanTask
+      summary: Release any active lease and assign the task to another principal
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReassignmentRequest' }
+      responses:
+        '200': { description: Task reassigned, content: { application/json: { schema: { $ref: '#/components/schemas/HumanTask' } } } }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/cancellation:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [HumanTaskAdministration]
+      operationId: cancelHumanTask
+      summary: Cancel a non-terminal Human Task
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { description: Task cancelled, content: { application/json: { schema: { $ref: '#/components/schemas/HumanTask' } } } }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+  /v1/human-tasks/{taskId}/expiry:
+    parameters:
+      - $ref: '#/components/parameters/TaskId'
+    post:
+      tags: [HumanTaskAdministration]
+      operationId: expireHumanTask
+      summary: Apply a due task-expiry policy
+      parameters:
+        - $ref: './common-definitions.yaml#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReasonRequest' }
+      responses:
+        '200': { description: Task expired, content: { application/json: { schema: { $ref: '#/components/schemas/HumanTask' } } } }
+        '401': { $ref: './common-definitions.yaml#/components/responses/Unauthorized' }
+        '403': { $ref: './common-definitions.yaml#/components/responses/Forbidden' }
+        '404': { $ref: './common-definitions.yaml#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '412': { $ref: '#/components/responses/PreconditionFailed' }
+        '500': { $ref: './common-definitions.yaml#/components/responses/InternalServerError' }
+        '503': { $ref: './common-definitions.yaml#/components/responses/ServiceUnavailable' }
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    TaskId:
+      name: taskId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    ReviewSessionId:
+      name: reviewSessionId
+      in: path
+      required: true
+      schema: { type: string, minLength: 1 }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 1, maxLength: 200 }
+    ReviewToken:
+      name: X-Review-Token
+      in: header
+      required: true
+      schema: { type: string, minLength: 32 }
+  responses:
+    Conflict:
+      description: Idempotency, lease, assignment, or state-transition conflict
+      content:
+        application/problem+json:
+          schema: { $ref: './common-definitions.yaml#/components/schemas/Problem' }
+    PreconditionFailed:
+      description: The If-Match aggregate revision is stale
+      content:
+        application/problem+json:
+          schema: { $ref: './common-definitions.yaml#/components/schemas/Problem' }
+  schemas:
+    HumanTaskStatus:
+      type: string
+      enum: [OPEN, ASSIGNED, CLAIMED, AWAITING_NEXT_STAGE, REWORK_REQUESTED, APPROVED, REJECTED, RESOLVED, CANCELLED, EXPIRED]
+    DispositionKind:
+      type: string
+      enum: [APPROVE, DECLINE, OTHER]
+    DataReference:
+      type: object
+      required: [storage, mediaType, sizeBytes, sha256]
+      properties:
+        storage: { type: string, enum: [INLINE, ARTIFACT] }
+        inlineValue: {}
+        artifactUri: { type: string, format: uri }
+        mediaType: { type: string, minLength: 1 }
+        sizeBytes: { type: integer, format: int64, minimum: 0 }
+        sha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    Assignment:
+      type: object
+      required: [kind, principal]
+      properties:
+        kind: { type: string, enum: [ACTOR, GROUP, ROLE] }
+        principal: { type: string, minLength: 1 }
+    HumanTaskSource:
+      type: object
+      required: [kind, sourceId]
+      properties:
+        kind: { type: string, enum: [WORKFLOW, API, AGENT, SYSTEM] }
+        sourceId: { type: string }
+        executionId: { type: string }
+        workflowTaskPath: { type: string }
+        correlationId: { type: string }
+    HumanTask:
+      type: object
+      required: [taskId, taskType, title, priority, status, source, originalContent, currentContent, stageId, reviewRound, contentRevision, revision, receivedAt, updatedAt, blotterFields]
+      properties:
+        taskId: { type: string }
+        taskType: { type: string }
+        title: { type: string }
+        description: { type: string }
+        priority: { type: integer, minimum: 0 }
+        status: { $ref: '#/components/schemas/HumanTaskStatus' }
+        source: { $ref: '#/components/schemas/HumanTaskSource' }
+        originalContent: { $ref: '#/components/schemas/DataReference' }
+        currentContent: { $ref: '#/components/schemas/DataReference' }
+        stageId: { type: string }
+        stageName: { type: string }
+        reviewRound: { type: integer, minimum: 1 }
+        contentRevision: { type: integer, format: int64, minimum: 0 }
+        revision: { type: integer, format: int64, minimum: 1 }
+        assignment: { $ref: '#/components/schemas/Assignment' }
+        activeReview: { $ref: '#/components/schemas/ReviewSessionSummary' }
+        dueAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+        receivedAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        blotterFields: { type: object, additionalProperties: true }
+    HumanTaskPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/HumanTask' } }
+        nextCursor: { type: string }
+    ReviewSessionSummary:
+      type: object
+      required: [reviewSessionId, stageId, heldBy, acquiredAt, lastRenewedAt, expiresAt]
+      properties:
+        reviewSessionId: { type: string }
+        stageId: { type: string }
+        heldBy: { type: string }
+        acquiredAt: { type: string, format: date-time }
+        lastRenewedAt: { type: string, format: date-time }
+        expiresAt: { type: string, format: date-time }
+    ReviewSession:
+      allOf:
+        - $ref: '#/components/schemas/ReviewSessionSummary'
+        - type: object
+          required: [taskRevision]
+          properties:
+            reviewToken: { type: string, writeOnly: true }
+            taskRevision: { type: integer, format: int64, minimum: 1 }
+    HumanTaskHistoryEvent:
+      type: object
+      required: [sequence, eventType, actorId, occurredAt, taskRevision, data]
+      properties:
+        sequence: { type: integer, format: int64, minimum: 0 }
+        eventType: { type: string }
+        actorId: { type: string }
+        occurredAt: { type: string, format: date-time }
+        taskRevision: { type: integer, format: int64, minimum: 1 }
+        data: { type: object, additionalProperties: true }
+    HumanTaskHistoryPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/HumanTaskHistoryEvent' } }
+        nextAfterSequence: { type: integer, format: int64 }
+    HumanTaskContentRevision:
+      type: object
+      required: [taskId, contentRevision, basedOnRevision, createdBy, createdAt, afterSha256, resultContent]
+      properties:
+        taskId: { type: string }
+        contentRevision: { type: integer, format: int64, minimum: 0 }
+        basedOnRevision: { type: integer, format: int64, minimum: 0 }
+        createdBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        reviewSessionId: { type: string }
+        beforeSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        afterSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+        jsonPatch: { $ref: '#/components/schemas/DataReference' }
+        resultContent: { $ref: '#/components/schemas/DataReference' }
+        comment: { type: string }
+    HumanTaskPresentation:
+      type: object
+      required: [kind]
+      properties:
+        kind: { type: string, enum: [RAW_JSON, JSON_SCHEMA, A2UI] }
+        inputSchema: { type: object, additionalProperties: true }
+        uiSchema: { type: object, additionalProperties: true }
+        resourceUri: { type: string, format: uri }
+        resourceSha256: { type: string, pattern: '^[0-9a-f]{64}$' }
+    BeginReviewRequest:
+      type: object
+      properties:
+        requestedLeaseSeconds: { type: integer, minimum: 30, maximum: 3600 }
+    RenewLeaseRequest:
+      type: object
+      properties:
+        requestedLeaseSeconds: { type: integer, minimum: 30, maximum: 3600 }
+    SaveRevisionRequest:
+      type: object
+      required: [basedOnContentRevision, content]
+      properties:
+        basedOnContentRevision: { type: integer, format: int64, minimum: 0 }
+        content: { $ref: '#/components/schemas/DataReference' }
+        jsonPatch: { $ref: '#/components/schemas/DataReference' }
+        comment: { type: string }
+    CommentRequest:
+      type: object
+      required: [comment]
+      properties:
+        comment: { type: string, minLength: 1 }
+    DecisionRequest:
+      type: object
+      required: [contentRevision, actionCode]
+      properties:
+        contentRevision: { type: integer, format: int64, minimum: 0 }
+        actionCode: { type: string, minLength: 1 }
+        comment: { type: string }
+    AssignmentRequest:
+      type: object
+      required: [assignment]
+      properties:
+        assignment: { $ref: '#/components/schemas/Assignment' }
+    ReassignmentRequest:
+      allOf:
+        - $ref: '#/components/schemas/AssignmentRequest'
+        - type: object
+          required: [reason]
+          properties:
+            reason: { type: string, minLength: 1 }
+    ReasonRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 1 }

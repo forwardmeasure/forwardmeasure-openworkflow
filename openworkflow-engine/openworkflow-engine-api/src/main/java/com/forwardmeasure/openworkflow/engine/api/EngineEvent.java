@@ -85,6 +85,8 @@ public sealed interface EngineEvent
         EngineEvent.ProtocolCallIterationStarted,
         EngineEvent.ProtocolCallIterationAdvanced,
         EngineEvent.CorrelatedWorkerRequested,
+        EngineEvent.HumanTaskRequested,
+        EngineEvent.HumanTaskCompleted,
         EngineEvent.CorrelatedWorkerCommandPublished,
         EngineEvent.CorrelatedWorkerProgressObserved,
         EngineEvent.CorrelatedWorkerCompleted,
@@ -142,6 +144,13 @@ public sealed interface EngineEvent
       input = Objects.requireNonNull(input, "input").deepCopy();
       if (nextStep < 0) throw new IllegalArgumentException("nextStep must not be negative");
       Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+
+    private static void requireText(String value, String name) {
+      Objects.requireNonNull(value, name);
+      if (value.isBlank()) {
+        throw new IllegalArgumentException(name + " must not be blank");
+      }
     }
   }
 
@@ -1421,6 +1430,68 @@ public sealed interface EngineEvent
       Objects.requireNonNull(commandOperation, "commandOperation");
       Objects.requireNonNull(eventsOperation, "eventsOperation");
       Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+  }
+
+  /** A Human Task call entered its durable waiting frame. */
+  record HumanTaskRequested(
+      UUID commandId,
+      String taskPath,
+      String humanTaskId,
+      String workflowCorrelation,
+      JsonNode rawInput,
+      JsonNode input,
+      JsonNode descriptor,
+      int nextStep,
+      Instant occurredAt)
+      implements EngineEvent {
+    public HumanTaskRequested {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      requireText(humanTaskId, "humanTaskId");
+      requireText(workflowCorrelation, "workflowCorrelation");
+      rawInput = Objects.requireNonNull(rawInput, "rawInput").deepCopy();
+      input = Objects.requireNonNull(input, "input").deepCopy();
+      descriptor = Objects.requireNonNull(descriptor, "descriptor").deepCopy();
+      if (nextStep < 0) throw new IllegalArgumentException("nextStep must not be negative");
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+
+    private static void requireText(String value, String name) {
+      Objects.requireNonNull(value, name);
+      if (value.isBlank()) {
+        throw new IllegalArgumentException(name + " must not be blank");
+      }
+    }
+  }
+
+  /** A Human Task outcome completed the waiting workflow task. */
+  record HumanTaskCompleted(
+      UUID commandId,
+      String taskPath,
+      String humanTaskId,
+      String outcomeId,
+      JsonNode output,
+      JsonNode context,
+      int nextStep,
+      Instant occurredAt)
+      implements EngineEvent {
+    public HumanTaskCompleted {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(taskPath, "taskPath");
+      requireText(humanTaskId, "humanTaskId");
+      requireText(outcomeId, "outcomeId");
+      output = Objects.requireNonNull(output, "output").deepCopy();
+      context = Objects.requireNonNull(context, "context").deepCopy();
+      if (nextStep < 0) throw new IllegalArgumentException("nextStep must not be negative");
+      Objects.requireNonNull(occurredAt, "occurredAt");
+    }
+
+    private static void requireText(String value, String name) {
+      Objects.requireNonNull(value, name);
+      if (value.isBlank()) {
+        throw new IllegalArgumentException(name + " must not be blank");
+      }
     }
   }
 

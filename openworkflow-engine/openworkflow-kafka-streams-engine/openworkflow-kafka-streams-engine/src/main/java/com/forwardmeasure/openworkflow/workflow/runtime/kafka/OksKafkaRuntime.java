@@ -6,6 +6,7 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.kafka;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.forwardmeasure.openworkflow.data.DataReference;
 import com.forwardmeasure.openworkflow.definition.CallPlan;
 import com.forwardmeasure.openworkflow.engine.api.BlockingConstructs;
 import com.forwardmeasure.openworkflow.engine.api.EngineId;
@@ -117,9 +118,7 @@ public final class OksKafkaRuntime implements AutoCloseable {
     data.put("sourceEventType", source.type().name());
     if (source.taskPath() != null) data.put("taskPath", source.taskPath());
     if (source.taskName() != null) data.put("taskName", source.taskName());
-    if (source.output() != null
-        && source.output().storage()
-            == com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference.Storage.INLINE) {
+    if (source.output() != null && source.output().storage() == DataReference.Storage.INLINE) {
       if (mapping.type() == ExecutionEvent.EventType.COMPLETED)
         return event(source, id, mapping, source.output().inlineValue());
       data.set("output", source.output().inlineValue());
@@ -235,6 +234,7 @@ public final class OksKafkaRuntime implements AutoCloseable {
           OPERATION_CANCELLATION_REQUESTED,
           OPERATION_CANCELLED,
           HUMAN_TASK_APPROVED,
+          HUMAN_TASK_RESOLVED,
           HUMAN_TASK_REJECTED,
           HUMAN_TASK_REWORK_REQUESTED,
           HUMAN_TASK_EXPIRED,

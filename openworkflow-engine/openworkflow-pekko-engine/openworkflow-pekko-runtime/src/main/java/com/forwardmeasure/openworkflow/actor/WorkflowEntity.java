@@ -296,6 +296,7 @@ public final class WorkflowEntity
         .onCommand(WorkflowCommand.TimerElapsed.class, this::completeWait)
         .onCommand(WorkflowCommand.RetryElapsed.class, this::beginRetry)
         .onCommand(WorkflowCommand.EffectAcknowledged.class, this::acknowledgeEffect)
+        .onCommand(WorkflowCommand.HumanTaskOutcomeObserved.class, this::completeHumanTaskOutcome)
         .onCommand(WorkflowCommand.HttpCallCompleted.class, this::completeHttpCall)
         .onCommand(WorkflowCommand.ProtocolCallObserved.class, this::observeProtocolCall)
         .onCommand(WorkflowCommand.SubworkflowCompleted.class, this::completeSubworkflow)
@@ -347,7 +348,9 @@ public final class WorkflowEntity
         .onCommand(WorkflowCommand.HttpCallCompleted.class, this::acceptLateHttpCallCompletion)
         .onCommand(WorkflowCommand.ProtocolCallObserved.class, this::acceptLateProtocolObservation)
         .onCommand(
-            WorkflowCommand.SubworkflowCompleted.class, this::acceptLateSubworkflowCompletion);
+            WorkflowCommand.SubworkflowCompleted.class, this::acceptLateSubworkflowCompletion)
+        .onCommand(
+            WorkflowCommand.HumanTaskOutcomeObserved.class, this::acceptLateHumanTaskOutcome);
     builder
         .forStateType(WorkflowState.Completed.class)
         .onCommand(WorkflowCommand.Start.class, this::completedStart)
@@ -361,7 +364,9 @@ public final class WorkflowEntity
         .onCommand(WorkflowCommand.HttpCallCompleted.class, this::acceptLateHttpCallCompletion)
         .onCommand(WorkflowCommand.ProtocolCallObserved.class, this::acceptLateProtocolObservation)
         .onCommand(
-            WorkflowCommand.SubworkflowCompleted.class, this::acceptLateSubworkflowCompletion);
+            WorkflowCommand.SubworkflowCompleted.class, this::acceptLateSubworkflowCompletion)
+        .onCommand(
+            WorkflowCommand.HumanTaskOutcomeObserved.class, this::acceptLateHumanTaskOutcome);
     builder
         .forStateType(WorkflowState.Failed.class)
         .onCommand(WorkflowCommand.Start.class, this::rejectAlreadyStarted)
@@ -375,7 +380,9 @@ public final class WorkflowEntity
         .onCommand(WorkflowCommand.HttpCallCompleted.class, this::acceptLateHttpCallCompletion)
         .onCommand(WorkflowCommand.ProtocolCallObserved.class, this::acceptLateProtocolObservation)
         .onCommand(
-            WorkflowCommand.SubworkflowCompleted.class, this::acceptLateSubworkflowCompletion);
+            WorkflowCommand.SubworkflowCompleted.class, this::acceptLateSubworkflowCompletion)
+        .onCommand(
+            WorkflowCommand.HumanTaskOutcomeObserved.class, this::acceptLateHumanTaskOutcome);
     builder
         .forStateType(WorkflowState.New.class)
         .onCommand(WorkflowCommand.Pause.class, this::rejectNotRunning)
@@ -388,6 +395,8 @@ public final class WorkflowEntity
         .onCommand(WorkflowCommand.DeadlineElapsed.class, (state, ignored) -> Effect().noReply())
         .onCommand(WorkflowCommand.RecheckTimers.class, (state, ignored) -> Effect().noReply())
         .onCommand(WorkflowCommand.EffectAcknowledged.class, (state, ignored) -> Effect().noReply())
+        .onCommand(
+            WorkflowCommand.HumanTaskOutcomeObserved.class, this::rejectHumanTaskNotSupported)
         .onCommand(WorkflowCommand.HttpCallCompleted.class, this::rejectHttpCallNotPending)
         .onCommand(WorkflowCommand.ProtocolCallObserved.class, this::rejectProtocolCallNotPending)
         .onCommand(WorkflowCommand.SubworkflowCompleted.class, this::rejectSubworkflowNotPending)
@@ -537,6 +546,7 @@ public final class WorkflowEntity
         case MilestoneOneProgram.ExecuteSubworkflow subworkflow ->
             executeSubworkflow(state, command, subworkflow);
         case MilestoneOneProgram.ExecuteHttpCall call -> executeHttpCall(state, command, call);
+        case MilestoneOneProgram.ExecuteHumanTask task -> executeHumanTask(state, command, task);
         case MilestoneOneProgram.ExecuteProtocolCall call ->
             executeProtocolCall(state, command, call);
         case MilestoneOneProgram.ExecuteCorrelatedWorkerCall call ->
@@ -3047,6 +3057,39 @@ public final class WorkflowEntity
     return Effect()
         .persist(events)
         .thenRun(this::scheduleDeadlines)
+        .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> executeHumanTask(
+      WorkflowState.Running state,
+      WorkflowCommand.RunNext command,
+      MilestoneOneProgram.ExecuteHumanTask instruction) {
+    PlanStep step = instruction.step();
+    JsonNode rawInput = state.data();
+    JsonNode input = condition(state, step, rawInput) ? taskInput(state, step, rawInput) : rawInput;
+    String humanTaskId =
+        UUID.nameUUIDFromBytes(
+                (state.executionId().entityId()
+                        + "|human-task|"
+                        + step.path()
+                        + "|"
+                        + state.revision())
+                    .getBytes(java.nio.charset.StandardCharsets.UTF_8))
+            .toString();
+    JsonNode descriptor = step.callPlan().humanTask().arguments();
+    EngineEvent.HumanTaskRequested requested =
+        new EngineEvent.HumanTaskRequested(
+            command.commandId(),
+            step.path(),
+            humanTaskId,
+            state.executionId().canonicalValue(),
+            rawInput,
+            input,
+            descriptor,
+            instruction.next(),
+            command.requestedAt());
+    return Effect()
+        .persist(requested)
         .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
   }
 
@@ -7049,6 +7092,45 @@ public final class WorkflowEntity
         commandId, state.executionId(), state.revision(), state.status());
   }
 
+  private ReplyEffect<EngineEvent, WorkflowState> rejectHumanTaskNotSupported(
+      WorkflowState state, WorkflowCommand.HumanTaskOutcomeObserved command) {
+    return Effect()
+        .reply(
+            command.replyTo(),
+            new WorkflowReply.Rejected(
+                command.commandId(),
+                state.executionId(),
+                state.revision(),
+                state.status(),
+                "human_task_not_supported",
+                "Pekko Human Task outcome handling is not enabled yet"));
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> rejectHumanTaskOutcome(
+      WorkflowState state,
+      WorkflowCommand.HumanTaskOutcomeObserved command,
+      String code,
+      String message) {
+    return Effect()
+        .reply(
+            command.replyTo(),
+            new WorkflowReply.Rejected(
+                command.commandId(),
+                state.executionId(),
+                state.revision(),
+                state.status(),
+                code,
+                message));
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> acceptLateHumanTaskOutcome(
+      WorkflowState state, WorkflowCommand.HumanTaskOutcomeObserved command) {
+    if (command.replyTo() == null) {
+      return Effect().noReply();
+    }
+    return Effect().reply(command.replyTo(), accepted(command.commandId(), state));
+  }
+
   private ReplyEffect<EngineEvent, WorkflowState> reject(
       WorkflowCommand.Pause command, WorkflowState state, String code, String message) {
     return Effect()
@@ -7114,6 +7196,20 @@ public final class WorkflowEntity
 
   private ReplyEffect<EngineEvent, WorkflowState> reject(
       WorkflowCommand.Start command, WorkflowState state, String code, String message) {
+    return Effect()
+        .reply(
+            command.replyTo(),
+            new WorkflowReply.Rejected(
+                command.commandId(),
+                state.executionId(),
+                state.revision(),
+                state.status(),
+                code,
+                message));
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> reject(
+      WorkflowCommand.RunNext command, WorkflowState state, String code, String message) {
     return Effect()
         .reply(
             command.replyTo(),
@@ -7203,6 +7299,7 @@ public final class WorkflowEntity
         .onEvent(EngineEvent.HttpCallRequested.class, this::onHttpCallRequested)
         .onEvent(EngineEvent.ProtocolCallRequested.class, this::onProtocolCallRequested)
         .onEvent(EngineEvent.CorrelatedWorkerRequested.class, this::onCorrelatedWorkerRequested)
+        .onEvent(EngineEvent.HumanTaskRequested.class, this::onHumanTaskRequested)
         .onEvent(EngineEvent.ListenStarted.class, this::onListenStarted)
         .onEvent(EngineEvent.ListenIterationAdvanced.class, this::onListenIterationAdvanced)
         .onEvent(
@@ -7257,6 +7354,7 @@ public final class WorkflowEntity
             EngineEvent.CorrelatedWorkerProgressObserved.class,
             this::onCorrelatedWorkerProgressObserved)
         .onEvent(EngineEvent.CorrelatedWorkerCompleted.class, this::onCorrelatedWorkerCompleted)
+        .onEvent(EngineEvent.HumanTaskCompleted.class, this::onHumanTaskCompleted)
         .onEvent(
             EngineEvent.ProtocolCallIterationStarted.class, this::onProtocolCallIterationStarted)
         .onEvent(EngineEvent.SubworkflowCompleted.class, this::onSubworkflowCompleted)
@@ -7668,6 +7766,155 @@ public final class WorkflowEntity
         state.rawWorkflowInput(),
         stack,
         state.workflowDeadline());
+  }
+
+  private WorkflowState onHumanTaskRequested(
+      WorkflowState.Running state, EngineEvent.HumanTaskRequested event) {
+    var stack = new java.util.ArrayList<>(state.taskStack());
+    stack.add(
+        TaskExecutionFrame.eventing(
+            event.taskPath(),
+            event.rawInput(),
+            event.input(),
+            EventExecutionFrame.humanTask(event.humanTaskId())));
+    return new WorkflowState.Waiting(
+        state.executionId(),
+        state.plan(),
+        event.input(),
+        event.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        "human-task:" + event.humanTaskId(),
+        null,
+        state.context(),
+        state.rawWorkflowInput(),
+        stack,
+        state.workflowDeadline());
+  }
+
+  private WorkflowState onHumanTaskCompleted(
+      WorkflowState.Waiting state, EngineEvent.HumanTaskCompleted event) {
+    var stack = new java.util.ArrayList<>(state.taskStack());
+    if (stack.isEmpty()
+        || !stack.getLast().eventing()
+        || stack.getLast().event().kind() != EventExecutionFrame.Kind.HUMAN_TASK
+        || !stack.getLast().taskPath().equals(event.taskPath())
+        || !stack.getLast().event().operationId().equals(event.humanTaskId())) {
+      throw new IllegalStateException(
+          "Persisted Human Task completion does not match its task frame");
+    }
+    stack.removeLast();
+    return new WorkflowState.Running(
+        state.executionId(),
+        state.plan(),
+        event.output(),
+        event.nextStep(),
+        state.revision() + 1,
+        receipts(state.processedCommands(), event.commandId()),
+        event.context(),
+        state.rawWorkflowInput(),
+        stack,
+        state.workflowDeadline());
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> completeHumanTaskOutcome(
+      WorkflowState.Waiting state, WorkflowCommand.HumanTaskOutcomeObserved command) {
+    PekkoHumanTaskOutcome outcome = command.outcome();
+    if (!state.executionId().equals(outcome.executionId()) || state.taskStack().isEmpty()) {
+      return rejectHumanTaskOutcome(
+          state,
+          command,
+          "human_task_not_pending",
+          "The Human Task outcome does not target this execution");
+    }
+    TaskExecutionFrame frame = state.taskStack().getLast();
+    if (!frame.eventing()
+        || frame.event().kind() != EventExecutionFrame.Kind.HUMAN_TASK
+        || !frame.event().operationId().equals(outcome.taskId().value())
+        || !frame.taskPath().equals(outcome.taskPath())
+        || !state.reason().equals("human-task:" + outcome.taskId())) {
+      return rejectHumanTaskOutcome(
+          state,
+          command,
+          "human_task_not_pending",
+          "The Human Task outcome does not match the active wait");
+    }
+    if (outcome.decision().kind().name().equals("DECLINE")) {
+      return routeHumanTaskError(state, command, frame, outcome);
+    }
+    JsonNode output = outcome.decision().content().inlineValue();
+    if (output == null) {
+      output = JsonNodeFactory.instance.nullNode();
+    }
+    EngineEvent.HumanTaskCompleted completed =
+        new EngineEvent.HumanTaskCompleted(
+            command.commandId(),
+            frame.taskPath(),
+            outcome.taskId().value(),
+            outcome.outcomeId(),
+            output,
+            state.context(),
+            state.nextStep(),
+            command.requestedAt());
+    return Effect()
+        .persist(completed)
+        .thenRun(this::continueIfRunning)
+        .thenReply(command.replyTo(), persisted -> accepted(command.commandId(), persisted));
+  }
+
+  private ReplyEffect<EngineEvent, WorkflowState> routeHumanTaskError(
+      WorkflowState.Waiting state,
+      WorkflowCommand.HumanTaskOutcomeObserved command,
+      TaskExecutionFrame frame,
+      PekkoHumanTaskOutcome outcome) {
+    WorkflowState.Running runningState = running(state);
+    ObjectNode error = JsonNodeFactory.instance.objectNode();
+    error.put("type", "urn:openworkflow:human-task:outcome");
+    error.put("status", 409);
+    error.put("title", "Human Task outcome declined");
+    error.put("detail", "Human Task decision " + outcome.decision().actionCode() + " was declined");
+    error.put("instance", "urn:openworkflow:human-task:" + outcome.taskId());
+    error.put("outcomeId", outcome.outcomeId());
+    var events = new java.util.ArrayList<EngineEvent>();
+    events.add(
+        new EngineEvent.ErrorRaised(
+            command.commandId(), frame.taskPath(), error, command.requestedAt()));
+    ErrorTarget target = matchingCatch(runningState, error);
+    if (target == null) {
+      events.add(
+          new EngineEvent.Failed(
+              command.commandId(),
+              error.path("detail").asText("Human Task outcome declined"),
+              command.requestedAt()));
+    } else {
+      RetryDecision retry = retryDecision(runningState, target, error, command.requestedAt());
+      if (retry == null) {
+        events.add(
+            new EngineEvent.ErrorCaught(
+                command.commandId(),
+                target.frame().taskPath(),
+                error,
+                target.instruction().catchEntry(),
+                command.requestedAt()));
+      } else {
+        events.add(
+            new EngineEvent.RetryScheduled(
+                command.commandId(),
+                target.frame().taskPath(),
+                error,
+                target.frame().attempt() + 1,
+                target.instruction().next(),
+                retry.deadline(),
+                target.frame().retryStartedAt(),
+                command.requestedAt()));
+      }
+    }
+    var effect =
+        Effect().persist(events).thenRun(this::scheduleDeadlines).thenRun(this::continueIfRunning);
+    return command.replyTo() == null
+        ? effect.thenNoReply()
+        : effect.thenReply(
+            command.replyTo(), persisted -> accepted(command.commandId(), persisted));
   }
 
   private WorkflowState onCorrelatedWorkerCommandPublished(

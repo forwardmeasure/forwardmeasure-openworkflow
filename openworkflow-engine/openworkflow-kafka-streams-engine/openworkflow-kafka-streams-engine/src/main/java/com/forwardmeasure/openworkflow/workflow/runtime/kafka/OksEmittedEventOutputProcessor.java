@@ -1,7 +1,7 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.kafka;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReference;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.WorkflowEffect;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.WorkflowEffectType;
 import org.apache.kafka.streams.processor.api.ContextualProcessor;

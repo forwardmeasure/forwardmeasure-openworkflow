@@ -23,7 +23,7 @@ not inferred from schema validation alone.
 | run/await and detached execution | Implemented | immutable `RunPlan` and pinned script resource | local-process and OCI runner policy/cancellation suites |
 | authentication, secrets and runtime expressions | Implemented | credential-free durable authentication plan and jq expression contract | mounted secret resolution, credential wiping, fail-closed AuthZEN and tenant egress tests |
 | cancellation, compensation and recovery interaction | Implemented | common cancellation/compensation plan semantics | both-engine cancellation/recovery fixtures and K5 owner-relocation matrix |
-| human tasks (ForwardMeasure extension) | Implemented | explicit extension validation and immutable descriptor | durable assignment/approval behavior, query projection and Studio controls |
+| human tasks (ForwardMeasure extension) | In progress | compiler extension recognition plus `openworkflow-human-task-domain` sealed states, commands, events, formal transition authority, and focused tests | Kafka path remains unreachable, Pekko remains capability-rejected, and persistence/API/Studio/deployment evidence is pending |
 | canonical execution query, history and Studio visualization | Implemented | engine-neutral projection contract | PostgreSQL query adapter, three Studio hosts and browser acceptance suite |
 
 The executable gates are the affected module-family tests, the shared engine contracts, the real

@@ -1,6 +1,6 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.core;
 
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReference;
 import java.util.Objects;
 
 /** Independently recoverable execution lane belonging to one fork branch. */

@@ -993,7 +993,14 @@ public final class OpenWorkflowCompiler {
       }
       case HUMAN_TASK -> {
         validateHumanTaskCall(safeArguments, path + "/with");
-        yield new CallPlan(CallPlan.Kind.HUMAN_TASK, null, null, safeArguments);
+        yield new CallPlan(
+            CallPlan.Kind.HUMAN_TASK,
+            null,
+            null,
+            safeArguments,
+            null,
+            null,
+            HumanTaskCallPlan.fromValidated(safeArguments));
       }
       case CORRELATED_WORKER -> {
         validateCorrelatedWorkerCall(safeArguments, path + "/with");
@@ -1166,6 +1173,9 @@ public final class OpenWorkflowCompiler {
     }
     if (arguments.has("dueAt") && arguments.has("dueAfter")) {
       throw unsupported(path, "human-task may declare dueAt or dueAfter, not both");
+    }
+    if (arguments.has("expiresAt") && arguments.has("expiresAfter")) {
+      throw unsupported(path, "human-task may declare expiresAt or expiresAfter, not both");
     }
     JsonNode presentation = arguments.get("presentation");
     if (presentation != null && presentation.isObject() && !presentation.has("kind")) {

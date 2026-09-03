@@ -69,5 +69,12 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-oidc</artifactId>
     </dependency>
+    <dependency>
+      <!-- QuarkusTenantScopeFilter is a JAX-RS ContainerRequestFilter/ContainerResponseFilter -
+           this top-level binding carries no REST layer of its own so nothing else here pulls in
+           the JAX-RS API transitively. -->
+      <groupId>jakarta.ws.rs</groupId>
+      <artifactId>jakarta.ws.rs-api</artifactId>
+    </dependency>
   </dependencies>
 </project>

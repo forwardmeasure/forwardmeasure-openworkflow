@@ -8,6 +8,9 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.forwardmeasure.durableprocessing.api.DurableProcess;
 import com.forwardmeasure.durableprocessing.api.DurableProcessContext;
 import com.forwardmeasure.durableprocessing.api.DurableTransition;
+import com.forwardmeasure.openworkflow.data.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReferenceJson;
+import com.forwardmeasure.openworkflow.data.RuntimeDataLimitException;
 import com.forwardmeasure.openworkflow.definition.AsyncApiSubscriptionPlan;
 import com.forwardmeasure.openworkflow.definition.AuthenticationPlan;
 import com.forwardmeasure.openworkflow.definition.CallPlan;
@@ -39,8 +42,6 @@ import com.forwardmeasure.openworkflow.workflow.runtime.api.Actors;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.AdvanceExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.BusinessCorrelationId;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ControlExecutionCommand;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferenceJson;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionControlAction;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionEventType;
@@ -62,7 +63,6 @@ import com.forwardmeasure.openworkflow.workflow.runtime.api.PurgeExecutionComman
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ReapplyExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ReceiveAsyncApiMessageCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ReceiveEventCommand;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.RuntimeDataLimitException;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.StartExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.SwitchCaseEvaluation;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.SwitchDecision;
@@ -2722,6 +2722,7 @@ public final class WorkflowExecutionEngine
     ExecutionEventType type =
         switch (observation.status()) {
           case APPROVED -> ExecutionEventType.HUMAN_TASK_APPROVED;
+          case RESOLVED -> ExecutionEventType.HUMAN_TASK_RESOLVED;
           case REJECTED -> ExecutionEventType.HUMAN_TASK_REJECTED;
           case REWORK_REQUESTED -> ExecutionEventType.HUMAN_TASK_REWORK_REQUESTED;
           case EXPIRED -> ExecutionEventType.HUMAN_TASK_EXPIRED;
@@ -2755,7 +2756,8 @@ public final class WorkflowExecutionEngine
             outcome,
             sequence,
             null);
-    if (observation.status() == HumanTaskObservationStatus.APPROVED) {
+    if (observation.status() == HumanTaskObservationStatus.APPROVED
+        || observation.status() == HumanTaskObservationStatus.RESOLVED) {
       List<PlanStep> siblings = childrenForFrame(resumed, humanTask.resumeCursor().current());
       return withOutbox(
           completeTask(
@@ -2817,7 +2819,7 @@ public final class WorkflowExecutionEngine
           case REJECTED, REWORK_REQUESTED -> 409;
           case EXPIRED -> 408;
           case CANCELLED -> 499;
-          case APPROVED ->
+          case APPROVED, RESOLVED ->
               throw new IllegalArgumentException("An approved human task is not an error");
         };
     String outcome =

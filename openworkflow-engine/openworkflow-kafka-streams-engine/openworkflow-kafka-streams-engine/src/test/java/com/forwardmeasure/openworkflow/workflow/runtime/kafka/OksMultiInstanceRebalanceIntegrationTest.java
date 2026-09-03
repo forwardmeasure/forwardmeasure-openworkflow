@@ -4,12 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.forwardmeasure.openworkflow.data.DataReferences;
 import com.forwardmeasure.openworkflow.definition.OpenWorkflowCompiler;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorContext;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorId;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorType;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.AdmitWorkflowDefinitionCommand;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferences;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionCommand;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.OksTenantId;

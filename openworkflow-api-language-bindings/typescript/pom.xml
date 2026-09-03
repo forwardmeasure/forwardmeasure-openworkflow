@@ -24,5 +24,6 @@
     <modules>
         <module>workflow-definition-management-service/openworkflow-definition-management-client-typescript</module>
         <module>workflow-execution-management-service/openworkflow-execution-client-typescript</module>
+        <module>human-task-management-service/openworkflow-human-task-client-typescript</module>
     </modules>
 </project>

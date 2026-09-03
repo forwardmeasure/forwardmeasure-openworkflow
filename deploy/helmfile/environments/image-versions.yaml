@@ -16,7 +16,7 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-definition-management-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:f2dc8991fa17a4187643e34105f7f068e8dac06cab9e570fb0732f283e774796
+      quarkus: sha256:85555b68719824113e58edf1e61ad85aafc062d9a2189e0ba96e76b26b955fe9
       spring: ""
       micronaut: ""
   executionManagement:
@@ -26,7 +26,7 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-execution-management-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:5f6703748736a70facf6a98b92c7fce12d5ced6fd7b457244221540abdb29582
+      quarkus: sha256:04f8819ea87a14c37ac3fd929955c908600aa1ea14faafaa1e075ffbcfd546fd
       spring: ""
       micronaut: ""
   engines:
@@ -37,7 +37,7 @@ imageVersions:
         micronaut: forwardmeasure/openworkflow-engine-kafka-streams-micronaut
       tag: "1.0.0-SNAPSHOT"
       digests:
-        quarkus: sha256:0e7321a2a76687688993182d41aa656907308d0fcf90f2fcc15608a570536aa0
+        quarkus: sha256:06ba7b2bb39116404dd74d3063fc03b85c02eeb407b36ccb944f03257c4e1801
         spring: ""
         micronaut: ""
     pekko:
@@ -47,7 +47,7 @@ imageVersions:
         micronaut: forwardmeasure/openworkflow-engine-pekko-micronaut
       tag: "1.0.0-SNAPSHOT"
       digests:
-        quarkus: sha256:6a76665c66603da96aa24a1b494cd97ebeb3a209d3f9f9a570d94ff86655ad6b
+        quarkus: sha256:0924a53a49d6ce19e277c7c6bfad5e736165d1035e6d0302607de6016ce2814b
         spring: ""
         micronaut: ""
   operationAdapter:
@@ -57,7 +57,7 @@ imageVersions:
       micronaut: forwardmeasure/openworkflow-operation-adapter-micronaut
     tag: "1.0.0-SNAPSHOT"
     digests:
-      quarkus: sha256:e5540e916662b141c82261c44bb9704aa16071c21bc1d011edc06f5b6c065a8b
+      quarkus: sha256:a4c0b1027e727f57e769543c5b6e360f0cab82a7604e63d6ffcd32db3f659209
       spring: ""
       micronaut: ""
   studio:
@@ -75,17 +75,17 @@ imageVersions:
       # deploys either way (it ignores tag whenever digest is non-empty) -
       # the git-sha tag is for traceability/rollback, not required for this
       # to deploy correctly.
-      quarkus: sha256:f440e89a76700f8c72546dfaafc7bac06594767c78b5b0537274bad1f911b3e6
+      quarkus: sha256:da5b7b996a72961732a291dc89b19fc23ad9a1c5cc112593638404c115da0bff
       spring: ""
       micronaut: ""
   tenantProvisioning:
     repository: forwardmeasure/openworkflow-tenant-provisioning
     tag: "1.0.0-SNAPSHOT"
-    digest: sha256:d7a846f488d4e5b1cc37e25d4a30422f55b9517f2310c26d435036c7b6eab1ca
+    digest: sha256:e451c1dba09b41c9dd267527f58ea7fefb3c3efdb3876915d40cde9f51e8f4d4
   migrations:
     repository: forwardmeasure/openworkflow-migrations
     tag: "1.0.0-SNAPSHOT"
-    digest: sha256:3b2c781884f1fe64e00566f266ffbf7f859a0f085ff25fc750da14907b4e73c9
+    digest: sha256:66fb5bf8f27b048863b60c1ade08e8ae30d50dc119baddcb3ad80fe564af1ed6
   postgresql:
     repository: postgres
     tag: "18.0"

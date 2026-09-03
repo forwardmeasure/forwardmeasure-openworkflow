@@ -33,6 +33,7 @@ public sealed interface WorkflowCommand
         WorkflowCommand.DeadlineElapsed,
         WorkflowCommand.RecheckTimers,
         WorkflowCommand.EffectAcknowledged,
+        WorkflowCommand.HumanTaskOutcomeObserved,
         WorkflowCommand.HttpCallCompleted,
         WorkflowCommand.ProtocolCallObserved,
         WorkflowCommand.SubworkflowCompleted,
@@ -179,6 +180,30 @@ public sealed interface WorkflowCommand
       Objects.requireNonNull(executionId, "executionId");
       Objects.requireNonNull(operationId, "operationId");
       Objects.requireNonNull(acknowledgedAt, "acknowledgedAt");
+    }
+  }
+
+  /** Adapter observation reserved for the Pekko Human Task integration path. */
+  record HumanTaskOutcomeObserved(
+      UUID commandId,
+      PekkoHumanTaskOutcome outcome,
+      ActorIdentity actor,
+      Instant requestedAt,
+      ActorRef<WorkflowReply> replyTo)
+      implements WorkflowCommand {
+    public HumanTaskOutcomeObserved {
+      Objects.requireNonNull(commandId, "commandId");
+      Objects.requireNonNull(outcome, "outcome");
+      Objects.requireNonNull(actor, "actor");
+      Objects.requireNonNull(requestedAt, "requestedAt");
+      if (!outcome.executionId().tenantId().equals(actor.tenantId())) {
+        throw new IllegalArgumentException("Human-task outcome and actor tenants must match");
+      }
+    }
+
+    @Override
+    public ExecutionId executionId() {
+      return outcome.executionId();
     }
   }
 

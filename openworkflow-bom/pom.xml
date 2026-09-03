@@ -28,6 +28,7 @@
     <name>ForwardMeasure OpenWorkflow BOM</name>
     <dependencyManagement>
         <dependencies>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-data</artifactId><version>${project.version}</version></dependency>
             <dependency>
                 <groupId>com.forwardmeasure.jpa</groupId>
                 <artifactId>forwardmeasure-jpa-bom</artifactId>
@@ -122,6 +123,11 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-identity-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-engine-contract-tests</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -145,6 +151,11 @@
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-models</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-apachehttp</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-server-jaxrs</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-models</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-client-apachehttp</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-server-jaxrs</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-client-typescript</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-client-python</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-jaxrs</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-typescript</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-execution-client-python</artifactId><version>${project.version}</version></dependency>
@@ -153,6 +164,7 @@
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-postgresql</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-cassandra</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-agent-protocols</artifactId><version>${project.version}</version></dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-domain</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-amqp</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-cloud</artifactId><version>${project.version}</version></dependency>
             <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-operation-adapter-asyncapi-jms</artifactId><version>${project.version}</version></dependency>

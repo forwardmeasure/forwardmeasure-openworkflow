@@ -85,6 +85,47 @@
       <groupId>io.quarkus</groupId>
       <artifactId>quarkus-container-image-docker</artifactId>
     </dependency>
+    <dependency>
+      <groupId>${project.groupId}</groupId>
+      <artifactId>openworkflow-authorization-testkit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>rest-assured</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+    quarkus-junit's own exclusion below strips the old, colliding transitive plexus-utils copies -
+    quarkus-bom itself excludes plexus-utils from several of its own managed dependencies for the
+    same reason. This module's new @QuarkusTest + @QuarkusTestResource(KeycloakResource) test
+    (AuthorizationSmokeQuarkusTest) actually exercises Quarkus's real Maven-resolver-based "curated
+    application" bootstrap, exactly like openworkflow-operation-adapter-quarkus's own
+    OperationAdapterQuarkusBindingTest - that bootstrap needs
+    org.apache.maven.graph.DefaultGraphBuilder, which needs
+    org.codehaus.plexus.util.dag.CycleDetectedException, a real plexus-utils class. Without this
+    explicit re-add, plexus-utils is excluded from every path and the bootstrap fails with
+    NoClassDefFoundError instead of ever starting the test. Pinned to 4.0.3, NOT the
+    quarkus-bom-managed 3.6.1, for the same duplicate-finder-vs-plexus-xml reason documented on the
+    operation-adapter-quarkus module's identical dependency.
+    -->
+    <dependency>
+      <groupId>io.quarkus</groupId>
+      <artifactId>quarkus-junit</artifactId>
+      <scope>test</scope>
+      <exclusions>
+        <exclusion>
+          <groupId>org.codehaus.plexus</groupId>
+          <artifactId>plexus-utils</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.codehaus.plexus</groupId>
+      <artifactId>plexus-utils</artifactId>
+      <version>4.0.3</version>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

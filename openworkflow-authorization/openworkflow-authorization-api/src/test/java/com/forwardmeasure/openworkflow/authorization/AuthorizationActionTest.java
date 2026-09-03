@@ -36,7 +36,7 @@ class AuthorizationActionTest {
   void eventScopesFollowTheSameDomainColonVerbConventionAsEveryOtherAction() {
     for (AuthorizationAction action : AuthorizationAction.values()) {
       assertTrue(
-          action.scope().matches("[a-z]+:[a-z]+"),
+          action.scope().matches("[a-z][a-z-]*:[a-z][a-z-]*"),
           () -> action + " scope \"" + action.scope() + "\" must be \"domain:verb\"");
     }
   }

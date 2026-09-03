@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+  agreements. See the NOTICE file distributed with this work for additional information regarding
+  copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0
+  (the "License"); you may not use this file except in compliance with the License. You may obtain a
+  copy of the License at https://www.apache.org/licenses/LICENSE-2.0 Unless required by applicable
+  law or agreed to in writing, software distributed under the License is distributed on an "AS IS"
+  BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License
+  for the specific language governing permissions and limitations under the License.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-rest-api-human-task-management-java-bindings</artifactId><version>${revision}</version><relativePath>../pom.xml</relativePath></parent>
+  <artifactId>openworkflow-human-task-server-jaxrs</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Human Task :: Generated JAX-RS Contract</name>
+  <dependencies>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-api-specifications</artifactId><version>${project.version}</version>
+                                    <classifier>early</classifier><scope>provided</scope></dependency>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-human-task-models</artifactId></dependency>
+    <dependency><groupId>jakarta.annotation</groupId><artifactId>jakarta.annotation-api</artifactId></dependency>
+    <dependency><groupId>jakarta.validation</groupId><artifactId>jakarta.validation-api</artifactId></dependency>
+    <dependency><groupId>jakarta.ws.rs</groupId><artifactId>jakarta.ws.rs-api</artifactId></dependency>
+  </dependencies>
+  <build><plugins>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-dependency-plugin</artifactId><executions><execution><id>unpack-openapi-spec</id><phase>generate-resources</phase><goals><goal>unpack</goal></goals><configuration><artifactItems><artifactItem><groupId>${project.groupId}</groupId><artifactId>openworkflow-api-specifications</artifactId><version>${project.version}</version>
+                                    <classifier>early</classifier><type>jar</type><includes>META-INF/openapi/**</includes><outputDirectory>${project.build.directory}/unpacked-openapi-spec</outputDirectory></artifactItem></artifactItems></configuration></execution></executions></plugin>
+    <plugin><groupId>org.openapitools</groupId><artifactId>openapi-generator-maven-plugin</artifactId><executions><execution><id>generate-jaxrs</id><phase>process-resources</phase><goals><goal>generate</goal></goals><configuration><inputSpec>${project.build.directory}/unpacked-openapi-spec/META-INF/openapi/human-task-management.openapi.yaml</inputSpec><generatorName>jaxrs-spec</generatorName><apiPackage>com.forwardmeasure.openworkflow.humantask.api</apiPackage><modelPackage>com.forwardmeasure.openworkflow.humantask.api.model</modelPackage><invokerPackage>com.forwardmeasure.openworkflow.humantask.api</invokerPackage><generateApis>true</generateApis><generateModels>false</generateModels><generateSupportingFiles>false</generateSupportingFiles><generateApiTests>false</generateApiTests><generateApiDocumentation>false</generateApiDocumentation><skipValidateSpec>false</skipValidateSpec><configOptions><hideGenerationTimestamp>true</hideGenerationTimestamp><interfaceOnly>true</interfaceOnly><returnResponse>true</returnResponse><sourceFolder>src/main/java</sourceFolder><useBeanValidation>true</useBeanValidation><useJakartaEe>true</useJakartaEe><useSwaggerAnnotations>false</useSwaggerAnnotations><useTags>true</useTags></configOptions></configuration></execution></executions></plugin>
+  </plugins></build>
+</project>

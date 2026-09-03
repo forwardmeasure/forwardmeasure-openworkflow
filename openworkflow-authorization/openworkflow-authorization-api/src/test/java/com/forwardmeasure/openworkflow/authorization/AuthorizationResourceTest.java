@@ -62,4 +62,13 @@ class AuthorizationResourceTest {
     assertNotEquals(
         AuthorizationResource.schedule("sched-a"), AuthorizationResource.schedule("sched-b"));
   }
+
+  @Test
+  void humanTaskIdentifiesOneTaskById() {
+    AuthorizationResource task = AuthorizationResource.humanTask("task-123");
+
+    assertEquals("openworkflow-human-task", task.type());
+    assertEquals("human-tasks", task.id());
+    assertEquals(Map.of("task_id", "task-123"), task.properties());
+  }
 }

@@ -1,9 +1,9 @@
 package com.forwardmeasure.openworkflow.workflow.runtime.core;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.forwardmeasure.openworkflow.data.DataReference;
 import com.forwardmeasure.openworkflow.definition.WorkflowPlan;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ActorContext;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionFailure;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ExecutionKey;
 import com.forwardmeasure.openworkflow.workflow.runtime.api.ForkPosition;

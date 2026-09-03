@@ -97,7 +97,8 @@ public record EventExecutionFrame(
     SUBWORKFLOW,
     HTTP_CALL,
     PROTOCOL_CALL,
-    CORRELATED_WORKER
+    CORRELATED_WORKER,
+    HUMAN_TASK
   }
 
   public EventExecutionFrame {
@@ -258,6 +259,16 @@ public record EventExecutionFrame(
         Objects.requireNonNull(eventsOperation, "eventsOperation"),
         cancellationOperation,
         false);
+  }
+
+  public static EventExecutionFrame humanTask(String humanTaskId) {
+    return new EventExecutionFrame(
+        Kind.HUMAN_TASK,
+        Objects.requireNonNull(humanTaskId, "humanTaskId"),
+        null,
+        List.of(),
+        Map.of(),
+        java.util.Set.of());
   }
 
   public EventExecutionFrame withCommandPublished() {

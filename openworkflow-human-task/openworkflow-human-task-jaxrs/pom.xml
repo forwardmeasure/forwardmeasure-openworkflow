@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+  agreements. See the NOTICE file distributed with this work for additional information regarding
+  copyright ownership. The ASF licenses this file to You under the Apache License, Version 2.0.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task</artifactId><version>${revision}</version><relativePath>../pom.xml</relativePath></parent>
+  <artifactId>openworkflow-human-task-jaxrs</artifactId>
+  <name>ForwardMeasure OpenWorkflow :: Human Task :: Portable JAX-RS</name>
+  <dependencies>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-human-task-domain</artifactId></dependency>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-human-task-server-jaxrs</artifactId></dependency>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-common-models</artifactId></dependency>
+    <dependency><groupId>${project.groupId}</groupId><artifactId>openworkflow-authorization-api</artifactId></dependency>
+    <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
+    <dependency><groupId>jakarta.enterprise</groupId><artifactId>jakarta.enterprise.cdi-api</artifactId><scope>provided</scope></dependency>
+    <dependency><groupId>jakarta.ws.rs</groupId><artifactId>jakarta.ws.rs-api</artifactId></dependency>
+    <dependency><groupId>org.glassfish.jersey.core</groupId><artifactId>jersey-common</artifactId><scope>test</scope></dependency>
+    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><scope>test</scope></dependency>
+  </dependencies>
+</project>

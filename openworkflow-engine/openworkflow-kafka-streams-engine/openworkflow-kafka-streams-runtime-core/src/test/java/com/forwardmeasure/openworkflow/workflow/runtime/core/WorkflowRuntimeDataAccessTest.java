@@ -7,9 +7,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReference;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.DataReferences;
-import com.forwardmeasure.openworkflow.workflow.runtime.api.RuntimeDataLimitException;
+import com.forwardmeasure.openworkflow.data.DataReference;
+import com.forwardmeasure.openworkflow.data.DataReferences;
+import com.forwardmeasure.openworkflow.data.RuntimeDataLimitException;
 import java.net.URI;
 import org.junit.jupiter.api.Test;
 

@@ -79,6 +79,7 @@
     <!-- The product reactor aggregates capabilities; each capability owns its leaf modules. -->
     <modules>
         <module>openworkflow-bom</module>
+        <module>openworkflow-data</module>
         <module>openworkflow-model</module>
         <module>openworkflow-expression-jq</module>
         <module>openworkflow-definition</module>
@@ -89,6 +90,7 @@
         <module>openworkflow-engine</module>
         <module>openworkflow-execution-management</module>
         <module>openworkflow-operation-adapter</module>
+        <module>openworkflow-human-task</module>
         <module>openworkflow-studio</module>
         <module>openworkflow-framework-bindings</module>
         <module>openworkflow-deployments</module>
@@ -258,12 +260,22 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-data</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-definition</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-engine-api</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-identity-api</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -403,6 +415,31 @@
             </dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-human-task-models</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-human-task-client-apachehttp</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-human-task-server-jaxrs</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-human-task-client-typescript</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
+                <artifactId>openworkflow-human-task-client-python</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-execution-jaxrs</artifactId>
                 <version>${project.version}</version>
             </dependency>
@@ -441,6 +478,7 @@
                 <artifactId>openworkflow-operation-adapter-agent-protocols</artifactId>
                 <version>${project.version}</version>
             </dependency>
+            <dependency><groupId>com.forwardmeasure.openworkflow</groupId><artifactId>openworkflow-human-task-domain</artifactId><version>${project.version}</version></dependency>
             <dependency>
                 <groupId>com.forwardmeasure.openworkflow</groupId>
                 <artifactId>openworkflow-operation-adapter-asyncapi-amqp</artifactId>

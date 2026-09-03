@@ -1,0 +1,69 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more contributor license
+ * agreements. See the NOTICE file distributed with this work for additional information
+ * regarding copyright ownership. The ASF licenses this file to You under the Apache License,
+ * Version 2.0 (the "License"); you may not use this file except in compliance with the License.
+ */
+package com.forwardmeasure.openworkflow.actor;
+
+import com.forwardmeasure.openworkflow.engine.api.ExecutionId;
+import com.forwardmeasure.openworkflow.humantask.application.HumanTaskRequest;
+import com.forwardmeasure.openworkflow.humantask.domain.HumanTaskDefinition;
+import com.forwardmeasure.openworkflow.humantask.domain.HumanTaskId;
+import java.time.Instant;
+import java.util.Objects;
+
+/** Pekko adapter envelope for a correlated, idempotent Human Task request. */
+public record PekkoHumanTaskRequest(
+    String requestId,
+    String requestSha256,
+    ExecutionId executionId,
+    HumanTaskId taskId,
+    String workflowCorrelation,
+    String taskPath,
+    HumanTaskDefinition definition,
+    HumanTaskDefinition.Actor actor,
+    Instant requestedAt) {
+  public PekkoHumanTaskRequest {
+    requireText(requestId, "requestId");
+    requireDigest(requestSha256, "requestSha256");
+    Objects.requireNonNull(executionId, "executionId");
+    Objects.requireNonNull(taskId, "taskId");
+    requireText(workflowCorrelation, "workflowCorrelation");
+    requireText(taskPath, "taskPath");
+    Objects.requireNonNull(definition, "definition");
+    Objects.requireNonNull(actor, "actor");
+    Objects.requireNonNull(requestedAt, "requestedAt");
+    if (!taskId.equals(definition.taskId())) {
+      throw new IllegalArgumentException("Request and definition task identifiers differ");
+    }
+  }
+
+  public static PekkoHumanTaskRequest from(ExecutionId executionId, HumanTaskRequest request) {
+    Objects.requireNonNull(executionId, "executionId");
+    Objects.requireNonNull(request, "request");
+    return new PekkoHumanTaskRequest(
+        request.requestId(),
+        request.requestSha256(),
+        executionId,
+        request.taskId(),
+        request.workflowCorrelation(),
+        request.taskPath(),
+        request.definition(),
+        request.actor(),
+        request.requestedAt());
+  }
+
+  private static void requireText(String value, String name) {
+    Objects.requireNonNull(value, name);
+    if (value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+  }
+
+  private static void requireDigest(String value, String name) {
+    if (value == null || !value.matches("[0-9a-f]{64}")) {
+      throw new IllegalArgumentException(name + " must be lowercase SHA-256");
+    }
+  }
+}

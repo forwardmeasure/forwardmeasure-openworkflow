@@ -387,4 +387,116 @@
         <dropNotNullConstraint tableName="workflow_definition" columnName="resolved_digest" columnDataType="VARCHAR(64)"/>
     </changeSet>
 
+    <changeSet id="openworkflow-290-human-task-management" author="forwardmeasure" dbms="postgresql">
+        <comment>Tenant-scoped Human Task aggregate, append-only audit evidence, immutable content
+            revisions, finite review leases, idempotent command receipts, and transactional outbox.</comment>
+        <createSequence sequenceName="human_task_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="human_task_event_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="human_task_content_revision_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="human_task_review_session_id_seq" startValue="1" incrementBy="50"/>
+        <createSequence sequenceName="human_task_outbox_id_seq" startValue="1" incrementBy="50"/>
+
+        <createTable tableName="human_task">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="human_task_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="task_id" type="VARCHAR(255)"><constraints nullable="false" unique="true"/></column>
+            <column name="version" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+            <column name="domain_revision" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="status" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="task_type" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="title" type="VARCHAR(1024)"><constraints nullable="false"/></column>
+            <column name="priority" type="INTEGER"><constraints nullable="false"/></column>
+            <column name="source_kind" type="VARCHAR(32)"><constraints nullable="false"/></column>
+            <column name="source_id" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="stage_id" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="assignment_kind" type="VARCHAR(32)"/>
+            <column name="assignment_principal" type="VARCHAR(512)"/>
+            <column name="reviewer_id" type="VARCHAR(512)"/>
+            <column name="received_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="due_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="updated_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="snapshot" type="JSONB"><constraints nullable="false"/></column>
+            <column name="blotter_fields" type="JSONB"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="human_task" indexName="ix_human_task_queue"><column name="status"/><column name="priority"/><column name="received_at"/></createIndex>
+        <createIndex tableName="human_task" indexName="ix_human_task_assignment"><column name="assignment_principal"/><column name="status"/></createIndex>
+        <createIndex tableName="human_task" indexName="ix_human_task_due"><column name="due_at"/><column name="status"/></createIndex>
+
+        <createTable tableName="human_task_event">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="human_task_event_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="task_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_human_task_event_task" references="human_task(id)"/></column>
+            <column name="sequence_number" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="command_id" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="event_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="actor_id" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="occurred_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="event_data" type="JSONB"><constraints nullable="false"/></column>
+        </createTable>
+        <addUniqueConstraint tableName="human_task_event" columnNames="task_id,sequence_number" constraintName="uk_human_task_event_sequence"/>
+        <createIndex tableName="human_task_event" indexName="ix_human_task_event_timeline"><column name="task_id"/><column name="occurred_at"/></createIndex>
+
+        <createTable tableName="human_task_content_revision">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="human_task_content_revision_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="task_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_human_task_revision_task" references="human_task(id)"/></column>
+            <column name="content_revision" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="based_on_revision" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="created_by" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="review_session_id" type="VARCHAR(255)"/>
+            <column name="before_sha256" type="VARCHAR(64)"/>
+            <column name="after_sha256" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="json_patch_reference" type="JSONB"/>
+            <column name="result_content_reference" type="JSONB"><constraints nullable="false"/></column>
+            <column name="comment" type="TEXT"/>
+        </createTable>
+        <addUniqueConstraint tableName="human_task_content_revision" columnNames="task_id,content_revision" constraintName="uk_human_task_content_revision"/>
+
+        <createTable tableName="human_task_review_session">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="human_task_review_session_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="review_session_id" type="VARCHAR(255)"><constraints nullable="false" unique="true"/></column>
+            <column name="task_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_human_task_session_task" references="human_task(id)"/></column>
+            <column name="stage_id" type="VARCHAR(255)"><constraints nullable="false"/></column>
+            <column name="held_by" type="VARCHAR(512)"><constraints nullable="false"/></column>
+            <column name="acquired_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="last_renewed_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="expires_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="released_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="lease_token_digest" type="VARCHAR(64)"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="human_task_review_session" indexName="ix_human_task_session_active"><column name="task_id"/><column name="released_at"/><column name="expires_at"/></createIndex>
+
+        <createTable tableName="human_task_command_receipt">
+            <column name="command_id" type="VARCHAR(255)"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="task_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_human_task_receipt_task" references="human_task(id)"/></column>
+            <column name="command_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="request_sha256" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="result_revision" type="BIGINT"><constraints nullable="false"/></column>
+            <column name="resulting_state" type="JSONB"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+        </createTable>
+
+        <createTable tableName="human_task_outbox">
+            <column name="id" type="BIGINT" defaultValueSequenceNext="human_task_outbox_id_seq"><constraints primaryKey="true" nullable="false"/></column>
+            <column name="message_id" type="VARCHAR(255)"><constraints nullable="false" unique="true"/></column>
+            <column name="task_id" type="BIGINT"><constraints nullable="false" foreignKeyName="fk_human_task_outbox_task" references="human_task(id)"/></column>
+            <column name="message_type" type="VARCHAR(64)"><constraints nullable="false"/></column>
+            <column name="payload" type="JSONB"><constraints nullable="false"/></column>
+            <column name="created_at" type="TIMESTAMP WITH TIME ZONE"><constraints nullable="false"/></column>
+            <column name="published_at" type="TIMESTAMP WITH TIME ZONE"/>
+            <column name="attempt_count" type="INTEGER" defaultValueNumeric="0"><constraints nullable="false"/></column>
+        </createTable>
+        <createIndex tableName="human_task_outbox" indexName="ix_human_task_outbox_pending"><column name="published_at"/><column name="created_at"/></createIndex>
+    </changeSet>
+
+    <changeSet id="openworkflow-300-human-task-outbox-correlation" author="forwardmeasure" dbms="postgresql">
+        <addColumn tableName="human_task_outbox">
+            <column name="workflow_correlation" type="VARCHAR(512)"/>
+            <column name="task_path" type="VARCHAR(1024)"/>
+        </addColumn>
+        <createIndex tableName="human_task_outbox" indexName="ix_human_task_outbox_correlation">
+            <column name="workflow_correlation"/>
+            <column name="task_path"/>
+        </createIndex>
+    </changeSet>
+
 </databaseChangeLog>

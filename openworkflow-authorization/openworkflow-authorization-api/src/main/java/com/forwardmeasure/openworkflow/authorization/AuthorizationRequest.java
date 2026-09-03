@@ -34,4 +34,18 @@ public record AuthorizationRequest(
     }
     context = Map.copyOf(Objects.requireNonNull(context, "context"));
   }
+
+  /** Resolves the AuthZEN wire action, including a reviewed Human Task disposition code. */
+  public String resolvedActionScope() {
+    if (action != AuthorizationAction.HUMAN_TASK_DECIDE) {
+      return action.scope();
+    }
+    Object value = context.get("action_code");
+    if (!(value instanceof String actionCode)
+        || !actionCode.matches("[A-Za-z0-9][A-Za-z0-9._-]{0,199}")) {
+      throw new IllegalArgumentException(
+          "Human Task decision authorization requires a valid action_code context value");
+    }
+    return action.scope() + ":" + actionCode;
+  }
 }

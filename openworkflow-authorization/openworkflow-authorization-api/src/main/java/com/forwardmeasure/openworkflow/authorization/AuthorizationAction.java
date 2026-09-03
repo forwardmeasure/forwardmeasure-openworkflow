@@ -39,7 +39,20 @@ public enum AuthorizationAction {
   EVENT_ROUTE("event:route"),
   EVENT_DELIVER("event:deliver"),
   AUDIT_READ("audit:read"),
-  AUDIT_QUERY("audit:query");
+  AUDIT_QUERY("audit:query"),
+  HUMAN_TASK_LIST("human-task:list"),
+  HUMAN_TASK_READ("human-task:read"),
+  HUMAN_TASK_READ_HISTORY("human-task:read-history"),
+  HUMAN_TASK_BEGIN_REVIEW("human-task:begin-review"),
+  HUMAN_TASK_RENEW_REVIEW("human-task:renew-review"),
+  HUMAN_TASK_EDIT("human-task:edit"),
+  HUMAN_TASK_COMMENT("human-task:comment"),
+  HUMAN_TASK_RELEASE_REVIEW("human-task:release-review"),
+  HUMAN_TASK_DECIDE("human-task:decide"),
+  HUMAN_TASK_ASSIGN("human-task:assign"),
+  HUMAN_TASK_REASSIGN("human-task:reassign"),
+  HUMAN_TASK_CANCEL("human-task:cancel"),
+  HUMAN_TASK_EXPIRE("human-task:expire");
 
   private final String scope;
 

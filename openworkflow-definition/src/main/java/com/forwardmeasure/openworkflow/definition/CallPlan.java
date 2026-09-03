@@ -10,6 +10,7 @@
  */
 package com.forwardmeasure.openworkflow.definition;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import java.util.Objects;
@@ -21,7 +22,8 @@ public record CallPlan(
     WorkflowResourceReference resource,
     JsonNode arguments,
     AsyncApiSubscriptionPlan asyncApiSubscription,
-    AuthenticationPlan authentication) {
+    AuthenticationPlan authentication,
+    @JsonIgnore HumanTaskCallPlan humanTask) {
 
   /**
    * Reserved custom-function name for the governed human-task extension.
@@ -51,7 +53,7 @@ public record CallPlan(
 
   public CallPlan(
       Kind kind, String functionName, WorkflowResourceReference resource, JsonNode arguments) {
-    this(kind, functionName, resource, arguments, null, null);
+    this(kind, functionName, resource, arguments, null, null, null);
   }
 
   public CallPlan(
@@ -60,7 +62,17 @@ public record CallPlan(
       WorkflowResourceReference resource,
       JsonNode arguments,
       AsyncApiSubscriptionPlan asyncApiSubscription) {
-    this(kind, functionName, resource, arguments, asyncApiSubscription, null);
+    this(kind, functionName, resource, arguments, asyncApiSubscription, null, null);
+  }
+
+  public CallPlan(
+      Kind kind,
+      String functionName,
+      WorkflowResourceReference resource,
+      JsonNode arguments,
+      AsyncApiSubscriptionPlan asyncApiSubscription,
+      AuthenticationPlan authentication) {
+    this(kind, functionName, resource, arguments, asyncApiSubscription, authentication, null);
   }
 
   public enum Kind {
@@ -124,6 +136,17 @@ public record CallPlan(
     }
     if (kind == Kind.FUNCTION && authentication != null) {
       throw new IllegalArgumentException("Reusable functions cannot carry adapter authentication");
+    }
+    if (kind == Kind.HUMAN_TASK && humanTask == null) {
+      humanTask = HumanTaskCallPlan.fromValidated(arguments);
+    }
+    if ((humanTask != null) != (kind == Kind.HUMAN_TASK)) {
+      throw new IllegalArgumentException(
+          "A compiled Human Task plan must exactly match a Human Task call");
+    }
+    if (humanTask != null && !humanTask.arguments().equals(arguments)) {
+      throw new IllegalArgumentException(
+          "Human Task plan and generic call arguments must describe the same call");
     }
   }
 

@@ -35,6 +35,7 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>openworkflow-api-specifications</artifactId>
             <version>${project.version}</version>
+                                    <classifier>early</classifier>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -62,7 +63,7 @@
                 <executions>
                     <execution>
                         <id>unpack-openapi-spec</id>
-                        <phase>initialize</phase>
+                        <phase>generate-resources</phase>
                         <goals>
                             <goal>unpack</goal>
                         </goals>
@@ -72,6 +73,7 @@
                                     <groupId>${project.groupId}</groupId>
                                     <artifactId>openworkflow-api-specifications</artifactId>
                                     <version>${project.version}</version>
+                                    <classifier>early</classifier>
                                     <type>jar</type>
                                     <includes>META-INF/openapi/**</includes>
                                     <outputDirectory>${project.build.directory}/unpacked-openapi-spec</outputDirectory>
@@ -87,7 +89,7 @@
                 <executions>
                     <execution>
                         <id>generate-jaxrs</id>
-                        <phase>generate-sources</phase>
+                        <phase>process-resources</phase>
                         <goals>
                             <goal>generate</goal>
                         </goals>
